@@ -26,11 +26,11 @@ release-snapshot:
 
 .PHONY: install # Build and install the binary to $GOPATH/bin.
 install: build
-	cp ./dist/admiral_$(shell go env GOOS)_$(shell go env GOARCH)*/admiral $(shell go env GOPATH)/bin/admiral
+	cp ./dist/admctl_$(shell go env GOOS)_$(shell go env GOARCH)*/admctl $(shell go env GOPATH)/bin/admctl
 
 .PHONY: run # Run the application locally.
 run: build
-	./dist/admiral_$(shell go env GOOS)_$(shell go env GOARCH)*/admiral
+	./dist/admctl_$(shell go env GOOS)_$(shell go env GOARCH)*/admctl
 
 .PHONY: test # Run unit tests.
 test:

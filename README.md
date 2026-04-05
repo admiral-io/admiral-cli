@@ -1,0 +1,98 @@
+> :warning: This project is currently **under heavy development and is not considered stable yet**. This means that there may be bugs or unexpected behavior, and we don't recommend using it in production.
+
+# Admiral CLI
+
+[![Release](https://img.shields.io/github/v/release/admiral-io/admiral-cli)](https://github.com/admiral-io/admiral-cli/releases/latest)
+[![GitHub License](https://img.shields.io/github/license/admiral-io/admiral-cli)](https://github.com/admiral-io/admiral-cli/blob/master/LICENSE)
+[![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/admiral-io/admiral-cli?label=openssf%20scorecard)](https://scorecard.dev/viewer/?uri=github.com/admiral-io/admiral-cli)
+[![Go Report Card](https://goreportcard.com/badge/github.com/admiral-io/admiral-cli)](https://goreportcard.com/report/github.com/admiral-io/admiral-cli)
+
+The official command-line interface for [Admiral](https://admiral.io), the platform orchestrator by [Admiral](https://github.com/admiral-io).
+
+Admiral unifies infrastructure provisioning and application deployment into a single, dependency-aware control plane. It connects the tools you already use — Terraform, Helm, Kustomize, and any CI/CD system — while maintaining the dependency graph across your full stack. No proprietary formats, no lock-in. If you stop using Admiral, you keep all your manifests and modules.
+
+The CLI provides direct access to the Admiral API for managing clusters, runners, service accounts, and deployments from your terminal or CI/CD pipelines.
+
+## Installation
+
+### Homebrew (macOS/Linux)
+
+```bash
+brew install admiral-io/tap/admctl
+```
+
+### Scoop (Windows)
+
+```powershell
+scoop bucket add admiral https://github.com/admiral-io/scoop-bucket
+scoop install admctl
+```
+
+### Go
+
+```bash
+go install go.admiral.io/cli@latest
+```
+
+### Docker
+
+```bash
+docker run --rm ghcr.io/admiral-io/admctl:latest
+```
+
+Pre-built binaries for Linux, macOS, and Windows are available on the [Releases](https://github.com/admiral-io/admiral-cli/releases) page.
+
+## Quick Start
+
+### Authentication
+
+Create a Personal Access Token in the Admiral UI, then configure the CLI:
+
+```bash
+# Set your API server
+admctl config set server https://admiral.example.com
+
+# Set your token (prompted securely, not echoed)
+admctl config set token
+
+# Or pass it directly (visible in shell history)
+admctl config set token <your-token>
+
+# Or use an environment variable (useful for CI/CD)
+export ADMIRAL_TOKEN=<your-token>
+```
+
+### Configuration
+
+```bash
+# List all configuration values
+admctl config list
+
+# Get a specific value
+admctl config get server
+
+# Set a value (omit value to be prompted interactively)
+admctl config set <key> [value]
+
+# Remove a value
+admctl config unset <key>
+```
+
+Available keys: `server`, `token`, `output`, `insecure`, `plaintext`
+
+### Usage
+
+```bash
+# List your applications
+admctl app list
+```
+
+## Documentation
+
+Full documentation is available at [admiral.io/docs](https://admiral.io/docs).
+
+## Community & Feedback
+
+- [GitHub Issues](https://github.com/admiral-io/admiral-cli/issues) — Bug reports and feature requests
+- [GitHub Discussions](https://github.com/admiral-io/admiral-cli/discussions) — Questions and community conversation
+- [Admiral Community](https://github.com/admiral-io/admiral-community) — Join the broader Admiral community
