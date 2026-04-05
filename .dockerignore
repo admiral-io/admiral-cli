@@ -1,0 +1,35 @@
+# IDE
+.idea/
+.vscode/
+.DS_Store
+
+# Git
+.git/
+.github/
+**/.gitattributes
+**/.gitignore
+
+# Source code (binary is pre-built by GoReleaser)
+cmd/
+internal/
+
+# Build artifacts
+build/
+
+# Deploy
+deploy/
+
+# Tools
+tools/
+
+# Web frontend
+web/
+
+# Docs
+docs/
+
+# Config/secrets
+.env*
+.claude/
+*.md
+docker-compose*.yml
