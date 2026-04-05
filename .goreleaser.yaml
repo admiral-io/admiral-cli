@@ -72,7 +72,7 @@ changelog:
   filters:
     exclude:
       - "^test:"
-      - '^chore(?!\(deps\))'
+      - "^chore:"
       - "merge conflict"
       - Merge pull request
       - Merge remote-tracking branch
