@@ -5,13 +5,15 @@
 [![Release](https://img.shields.io/github/v/release/admiral-io/admiral-cli)](https://github.com/admiral-io/admiral-cli/releases/latest)
 [![GitHub License](https://img.shields.io/github/license/admiral-io/admiral-cli)](https://github.com/admiral-io/admiral-cli/blob/master/LICENSE)
 [![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/admiral-io/admiral-cli?label=openssf%20scorecard)](https://scorecard.dev/viewer/?uri=github.com/admiral-io/admiral-cli)
-[![Go Report Card](https://goreportcard.com/badge/github.com/admiral-io/admiral-cli)](https://goreportcard.com/report/github.com/admiral-io/admiral-cli)
+[![Go Report Card](https://goreportcard.com/badge/go.admiral.io/cli)](https://goreportcard.com/report/go.admiral.io/cli)
 
-The official command-line interface for [Admiral](https://admiral.io), the platform orchestrator by [Admiral](https://github.com/admiral-io).
+The official command-line interface for [Admiral](https://admiral.io), the deployment orchestrator by [Admiral](https://github.com/admiral-io).
 
-Admiral unifies infrastructure provisioning and application deployment into a single, dependency-aware control plane. It connects the tools you already use — Terraform, Helm, Kustomize, and any CI/CD system — while maintaining the dependency graph across your full stack. No proprietary formats, no lock-in. If you stop using Admiral, you keep all your manifests and modules.
+Admiral manages infrastructure provisioning and application deployment as a single, dependency-aware control plane. It orchestrates the tools you already use (Terraform, Helm, Kustomize, any CI/CD system) and maintains the dependency graph across your full stack so changes happen in the right order.
 
-The CLI provides direct access to the Admiral API for managing clusters, runners, service accounts, and deployments from your terminal or CI/CD pipelines.
+No proprietary formats, no lock-in. If you stop using Admiral, you keep all your manifests and modules.
+
+The CLI gives you direct access to the Admiral API for managing clusters, runners, and deployments from your terminal or CI/CD pipelines.
 
 ## Installation
 
