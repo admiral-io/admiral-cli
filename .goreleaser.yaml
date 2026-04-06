@@ -121,22 +121,22 @@ archives:
       - LICENSE
       - completions/*
 
-homebrew_casks:
+brews:
   - name: admctl
     repository:
       owner: admiral-io
       name: homebrew-tap
-    directory: Casks
+    directory: Formula
     homepage: https://admiral.io/
     description: Admiral CLI - Platform Orchestrator
-    binaries:
-      - admctl
-    completions:
-      bash: completions/admctl.bash
-      zsh: completions/admctl.zsh
-      fish: completions/admctl.fish
+    license: Apache-2.0
+    install: |
+      bin.install "admctl"
+      bash_completion.install "completions/admctl.bash" => "admctl"
+      zsh_completion.install "completions/admctl.zsh" => "_admctl"
+      fish_completion.install "completions/admctl.fish"
     dependencies:
-      - formula: git
+      - name: git
     commit_author:
       name: admiral-ci
       email: support@admiral.io

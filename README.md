@@ -31,12 +31,6 @@ scoop bucket add admiral https://github.com/admiral-io/scoop-bucket
 scoop install admctl
 ```
 
-### Go
-
-```bash
-go install go.admiral.io/cli@latest
-```
-
 ### Docker
 
 ```bash
