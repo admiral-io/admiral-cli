@@ -14,4 +14,4 @@ COPY scripts/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 ARG TARGETARCH
-COPY linux/${TARGETARCH}/admiral /usr/bin/admiral
+COPY linux/${TARGETARCH}/admctl /usr/bin/admctl
