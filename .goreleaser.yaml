@@ -1,0 +1,233 @@
+version: 2
+
+project_name: admiral
+
+env:
+  - CGO_ENABLED=0
+
+dist: dist
+
+git:
+  tag_sort: -version:refname
+
+gomod:
+  proxy: false
+
+report_sizes: true
+
+before:
+  hooks:
+    - go mod download
+    - ./scripts/completions.sh
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-dev"
+
+builds:
+  - id: admiral
+    binary: admiral
+    main: .
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.FullCommit}}
+      - -X main.date={{.Date}}
+      - -X main.builtBy=Admiral
+
+universal_binaries:
+  - replace: false
+
+archives:
+  - id: admiral
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}-v{{ .Version }}_{{ .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    wrap_in_directory: true
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    builds_info:
+      group: root
+      owner: root
+      mtime: "{{ .CommitDate }}"
+    files:
+      - README.md
+      - LICENSE
+      - completions/*
+
+nfpms:
+  - id: admiral
+    file_name_template: "{{ .ConventionalFileName }}"
+    maintainer: Admiral <support@admiral.io>
+    description: Admiral CLI - Platform Orchestrator
+    homepage: https://admiral.io
+    license: Apache-2.0
+    vendor: Admiral
+    bindir: /usr/bin
+    section: utils
+    contents:
+      - src: ./completions/admiral.bash
+        dst: /usr/share/bash-completion/completions/admiral
+        file_info:
+          mode: 0644
+      - src: ./completions/admiral.fish
+        dst: /usr/share/fish/vendor_completions.d/admiral.fish
+        file_info:
+          mode: 0644
+      - src: ./completions/admiral.zsh
+        dst: /usr/share/zsh/vendor-completions/_admiral
+        file_info:
+          mode: 0644
+      - src: ./LICENSE
+        dst: /usr/share/doc/admiral/copyright
+        file_info:
+          mode: 0644
+    formats:
+      - apk
+      - deb
+      - rpm
+      - archlinux
+    dependencies:
+      - git
+    deb:
+      lintian_overrides:
+        - statically-linked-binary
+        - changelog-file-missing-in-native-package
+
+dockers_v2:
+  - images:
+      - "ghcr.io/admiral-io/admiral"
+    dockerfile: Dockerfile
+    tags:
+      - "{{ .Tag }}"
+      - "latest"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    flags:
+      - "--pull"
+    labels:
+      io.artifacthub.package.maintainers: '[{"name":"Admiral","email":"support@admiral.io"}]'
+      io.artifacthub.package.license: "Apache-2.0"
+      org.opencontainers.image.title: "{{.ProjectName}}"
+      org.opencontainers.image.description: "Admiral - Platform Orchestrator CLI"
+      org.opencontainers.image.licenses: "Apache-2.0"
+      org.opencontainers.image.created: "{{.Date}}"
+      org.opencontainers.image.name: "{{.ProjectName}}"
+      org.opencontainers.image.revision: "{{.FullCommit}}"
+      org.opencontainers.image.version: "{{.Version}}"
+      org.opencontainers.image.source: "{{.GitURL}}"
+
+brews:
+  - name: admiral
+    repository:
+      owner: admiral-io
+      name: homebrew-tap
+    directory: Formula
+    homepage: https://admiral.io/
+    description: Admiral CLI - Platform Orchestrator
+    license: Apache-2.0
+    install: |
+      bin.install "admiral"
+      bash_completion.install "completions/admiral.bash" => "admiral"
+      zsh_completion.install "completions/admiral.zsh" => "_admiral"
+      fish_completion.install "completions/admiral.fish"
+    commit_author:
+      name: admiral-ci
+      email: support@admiral.io
+
+scoops:
+  - name: admiral
+    repository:
+      owner: admiral-io
+      name: scoop-bucket
+    directory: bucket
+    homepage: https://admiral.io
+    description: Admiral - Platform Orchestrator CLI for managing clusters, runners, and service accounts.
+    license: Apache-2.0
+    commit_author:
+      name: admiral-ci
+      email: support@admiral.io
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+sboms:
+  - artifacts: archive
+
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    output: true
+    signature: "${artifact}.sigstore.json"
+    args:
+      - sign-blob
+      - --yes
+      - --bundle=${signature}
+      - ${artifact}
+
+docker_signs:
+  - cmd: cosign
+    artifacts: images
+    output: true
+    args:
+      - sign
+      - --yes
+      - ${artifact}@${digest}
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^test:"
+      - "^chore:"
+      - "merge conflict"
+      - Merge pull request
+      - Merge remote-tracking branch
+      - Merge branch
+      - go mod tidy
+  groups:
+    - title: "Features"
+      regexp: '^feat(\([[:word:]]+\))?!?:.+$'
+      order: 100
+    - title: "Security Updates"
+      regexp: '^sec(\([[:word:]]+\))?!?:.+$'
+      order: 200
+    - title: "Bug Fixes"
+      regexp: '^fix(\([[:word:]]+\))?!?:.+$'
+      order: 300
+    - title: "Dependency Updates"
+      regexp: '^(feat|fix)\(deps\)!?:.+$'
+      order: 400
+    - title: "Documentation Updates"
+      regexp: '^doc(\([[:word:]]+\))?!?:.+$'
+      order: 500
+    - title: "Build Process Updates"
+      regexp: '^build(\([[:word:]]+\))?!?:.+$'
+      order: 600
+    - title: "Other Changes"
+      order: 9999
+
+release:
+  prerelease: auto
+  footer: |
+    **Full Changelog**: https://github.com/admiral-io/admiral-cli/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+    ## Helping out
+    This release ({{ .Version }}) was built on {{ .Date }}{{ if .Env.GITHUB_ACTOR }} by {{ .Env.GITHUB_ACTOR }}{{ end }}.
+    Thanks to **all** the awesome people who made it possible!
