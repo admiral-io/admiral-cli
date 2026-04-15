@@ -1,15 +1,13 @@
 package config
 
 import (
-	"bufio"
 	"fmt"
-	"strings"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 
 	admiralclient "go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/config"
+	"go.admiral.io/cli/internal/input"
 	"go.admiral.io/cli/internal/output"
 )
 
@@ -32,7 +30,7 @@ func newSetCmd(opts *admiralclient.Options) *cobra.Command {
 			if len(args) == 2 {
 				value = args[1]
 			} else {
-				v, err := readInput(cmd, config.IsSensitive(key))
+				v, err := input.PromptLine(cmd, config.IsSensitive(key))
 				if err != nil {
 					return err
 				}
@@ -49,41 +47,3 @@ func newSetCmd(opts *admiralclient.Options) *cobra.Command {
 	}
 }
 
-func readInput(cmd *cobra.Command, sensitive bool) (string, error) {
-	in := cmd.InOrStdin()
-
-	f, ok := in.(interface{ Fd() uintptr })
-	isTTY := ok && term.IsTerminal(int(f.Fd()))
-
-	if isTTY {
-		fmt.Fprint(cmd.ErrOrStderr(), "Enter value: ")
-		if sensitive {
-			b, err := term.ReadPassword(int(f.Fd()))
-			fmt.Fprintln(cmd.ErrOrStderr()) // newline after hidden input
-			if err != nil {
-				return "", fmt.Errorf("failed to read input: %w", err)
-			}
-			return requireNonEmpty(string(b))
-		}
-		scanner := bufio.NewScanner(in)
-		if scanner.Scan() {
-			return requireNonEmpty(scanner.Text())
-		}
-		return "", fmt.Errorf("no input provided")
-	}
-
-	// Piped input: read first line.
-	scanner := bufio.NewScanner(in)
-	if scanner.Scan() {
-		return requireNonEmpty(scanner.Text())
-	}
-	return "", fmt.Errorf("no input provided")
-}
-
-func requireNonEmpty(s string) (string, error) {
-	v := strings.TrimSpace(s)
-	if v == "" {
-		return "", fmt.Errorf("value cannot be empty")
-	}
-	return v, nil
-}

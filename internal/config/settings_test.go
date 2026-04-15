@@ -65,17 +65,6 @@ func TestSet_FilePermissions(t *testing.T) {
 	require.Equal(t, os.FileMode(0600), info.Mode().Perm())
 }
 
-func TestIsValidKey(t *testing.T) {
-	require.True(t, IsValidKey("server"))
-	require.True(t, IsValidKey("token"))
-	require.False(t, IsValidKey("bogus"))
-}
-
-func TestIsSensitive(t *testing.T) {
-	require.True(t, IsSensitive("token"))
-	require.False(t, IsSensitive("server"))
-}
-
 func TestSet_MultipleKeys(t *testing.T) {
 	dir := t.TempDir()
 

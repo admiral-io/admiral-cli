@@ -26,10 +26,10 @@ func newDeleteCmd(opts *client.Options) *cobra.Command {
 The app can be provided as a positional argument (name) or looked up by UUID with --id.
 Requires --confirm to prevent accidental deletion.`,
 		Example: `  # Delete an application by name
-  admctl app delete billing-api --confirm
+  admiral app delete billing-api --confirm
 
   # Delete by UUID
-  admctl app delete --id 550e8400-e29b-41d4-a716-446655440000 --confirm`,
+  admiral app delete --id 550e8400-e29b-41d4-a716-446655440000 --confirm`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var appArg string

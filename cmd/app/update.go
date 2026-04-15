@@ -28,13 +28,13 @@ func newUpdateCmd(opts *client.Options) *cobra.Command {
 
 The app can be provided as a positional argument (name) or looked up by UUID with --id.`,
 		Example: `  # Update labels by name (default)
-  admctl app update billing-api --label team=payments
+  admiral app update billing-api --label team=payments
 
   # Update by UUID
-  admctl app update --id 550e8400-e29b-41d4-a716-446655440000 --label team=payments
+  admiral app update --id 550e8400-e29b-41d4-a716-446655440000 --label team=payments
 
   # Update description
-  admctl app update billing-api --description "New description"`,
+  admiral app update billing-api --description "New description"`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var appArg string
@@ -48,27 +48,15 @@ The app can be provided as a positional argument (name) or looked up by UUID wit
 			}
 
 			var paths []string
-			application := &applicationv1.Application{}
-
 			if cmd.Flags().Changed("name") {
-				application.Name = newName
 				paths = append(paths, "name")
 			}
-
 			if cmd.Flags().Changed("label") {
-				labels, err := util.ParseLabels(labelStrs)
-				if err != nil {
-					return err
-				}
-				application.Labels = labels
 				paths = append(paths, "labels")
 			}
-
 			if cmd.Flags().Changed("description") {
-				application.Description = description
 				paths = append(paths, "description")
 			}
-
 			if len(paths) == 0 {
 				return fmt.Errorf("at least one of --name, --label, or --description must be specified")
 			}
@@ -84,7 +72,28 @@ The app can be provided as a positional argument (name) or looked up by UUID wit
 				return err
 			}
 
-			application.Id = id
+			// Read-modify-write so untouched fields keep their values.
+			current, err := c.Application().GetApplication(cmd.Context(), &applicationv1.GetApplicationRequest{
+				ApplicationId: id,
+			})
+			if err != nil {
+				return err
+			}
+			application := current.Application
+
+			if cmd.Flags().Changed("name") {
+				application.Name = newName
+			}
+			if cmd.Flags().Changed("label") {
+				labels, err := util.ParseLabels(labelStrs)
+				if err != nil {
+					return err
+				}
+				application.Labels = labels
+			}
+			if cmd.Flags().Changed("description") {
+				application.Description = description
+			}
 
 			resp, err := c.Application().UpdateApplication(cmd.Context(), &applicationv1.UpdateApplicationRequest{
 				Application: application,

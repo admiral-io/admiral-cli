@@ -21,10 +21,10 @@ func newGetCmd(opts *client.Options) *cobra.Command {
 
 The app can be provided as a positional argument (name) or looked up by UUID with --id.`,
 		Example: `  # Get app by name
-  admctl app get billing-api
+  admiral app get billing-api
 
   # Get app by UUID
-  admctl app get --id 550e8400-e29b-41d4-a716-446655440000`,
+  admiral app get --id 550e8400-e29b-41d4-a716-446655440000`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var appArg string
@@ -66,9 +66,7 @@ The app can be provided as a positional argument (name) or looked up by UUID wit
 						{Key: "Description", Value: app.Description},
 						{Key: "Labels", Value: output.FormatLabels(app.Labels)},
 						{Key: "Created", Value: output.FormatTimestamp(app.CreatedAt)},
-						{Key: "Created By", Value: app.CreatedBy.DisplayName},
 						{Key: "Updated", Value: output.FormatTimestamp(app.UpdatedAt)},
-						{Key: "Updated By", Value: app.UpdatedBy.DisplayName},
 						{Key: "Age", Value: output.FormatAge(app.CreatedAt)},
 					},
 				},

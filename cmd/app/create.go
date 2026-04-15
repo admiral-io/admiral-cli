@@ -22,13 +22,13 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 		Short: "Create an application",
 		Long:  `Create a new application with the given name.`,
 		Example: `  # Create an application
-  admctl app create billing-api
+  admiral app create billing-api
 
   # Create with labels
-  admctl app create billing-api --label team=platform
+  admiral app create billing-api --label team=platform
 
   # Create with description
-  admctl app create billing-api --description "Handles billing"`,
+  admiral app create billing-api --description "Handles billing"`,
 		Args: util.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			labels, err := util.ParseLabels(labelStrs)

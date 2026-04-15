@@ -1,4 +1,4 @@
-package app
+package credential
 
 import (
 	"text/tabwriter"
@@ -8,7 +8,7 @@ import (
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/output"
 	"go.admiral.io/cli/internal/util"
-	applicationv1 "go.admiral.io/sdk/proto/admiral/application/v1"
+	credentialv1 "go.admiral.io/sdk/proto/admiral/credential/v1"
 )
 
 func newListCmd(opts *client.Options) *cobra.Command {
@@ -20,16 +20,16 @@ func newListCmd(opts *client.Options) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List applications",
-		Long:  `List all applications visible to the current user.`,
-		Example: `  # List all applications
-  admiral app list
+		Short: "List credentials",
+		Long:  `List all credentials visible to the current user.`,
+		Example: `  # List all credentials
+  admiral credential list
 
   # List with label filter
-  admiral app list --label team=platform
+  admiral credential list --label team=platform
 
   # Paginated listing
-  admiral app list --page-size 10`,
+  admiral credential list --page-size 10`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			filter, err := util.BuildLabelFilter(labelStrs)
@@ -41,9 +41,9 @@ func newListCmd(opts *client.Options) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			defer c.Close() //nolint:errcheck // best-effort cleanup
+			defer c.Close() //nolint:errcheck
 
-			resp, err := c.Application().ListApplications(cmd.Context(), &applicationv1.ListApplicationsRequest{
+			resp, err := c.Credential().ListCredentials(cmd.Context(), &credentialv1.ListCredentialsRequest{
 				PageSize:  pageSize,
 				PageToken: pageToken,
 				Filter:    filter,
@@ -52,33 +52,29 @@ func newListCmd(opts *client.Options) *cobra.Command {
 				return err
 			}
 
-			if len(resp.Applications) == 0 && (opts.OutputFormat == output.FormatTable || opts.OutputFormat == output.FormatWide) {
-				output.PrintEmpty(cmd.ErrOrStderr(), "applications")
+			if len(resp.Credentials) == 0 && (opts.OutputFormat == output.FormatTable || opts.OutputFormat == output.FormatWide) {
+				output.PrintEmpty(cmd.ErrOrStderr(), "credentials")
 				return nil
 			}
 
 			p := output.NewPrinter(opts.OutputFormat)
 			if err := p.PrintResource(resp, func(w *tabwriter.Writer) {
 				if opts.OutputFormat == output.FormatWide {
-					output.Writeln(w, "ID\tNAME\tDESCRIPTION\tLABELS\tCREATED\tUPDATED\tAGE")
-					for _, app := range resp.Applications {
+					output.Writeln(w, "ID\tNAME\tTYPE\tDESCRIPTION\tLABELS\tCREATED\tAGE")
+					for _, c := range resp.Credentials {
 						output.Writef(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-							app.Id,
-							app.Name,
-							app.Description,
-							output.FormatLabels(app.Labels),
-							output.FormatTimestamp(app.CreatedAt),
-							output.FormatTimestamp(app.UpdatedAt),
-							output.FormatAge(app.CreatedAt),
+							c.Id, c.Name, formatCredentialType(c.Type), c.Description,
+							output.FormatLabels(c.Labels),
+							output.FormatTimestamp(c.CreatedAt),
+							output.FormatAge(c.CreatedAt),
 						)
 					}
 				} else {
-					output.Writeln(w, "NAME\tDESCRIPTION\tAGE")
-					for _, app := range resp.Applications {
-						output.Writef(w, "%s\t%s\t%s\n",
-							app.Name,
-							app.Description,
-							output.FormatAge(app.CreatedAt),
+					output.Writeln(w, "NAME\tTYPE\tDESCRIPTION\tAGE")
+					for _, c := range resp.Credentials {
+						output.Writef(w, "%s\t%s\t%s\t%s\n",
+							c.Name, formatCredentialType(c.Type), c.Description,
+							output.FormatAge(c.CreatedAt),
 						)
 					}
 				}
@@ -89,7 +85,6 @@ func newListCmd(opts *client.Options) *cobra.Command {
 			if resp.NextPageToken != "" && opts.OutputFormat != output.FormatJSON && opts.OutputFormat != output.FormatYAML {
 				output.Writef(cmd.ErrOrStderr(), "\nNEXT PAGE TOKEN: %s\n", resp.NextPageToken)
 			}
-
 			return nil
 		},
 	}

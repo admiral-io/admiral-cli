@@ -65,7 +65,7 @@ func TestResolveAppID(t *testing.T) {
 		client := &mockAppClient{
 			resp: &applicationv1.ListApplicationsResponse{
 				Applications: []*applicationv1.Application{
-					{Id: "a1"}, {Id: "a2"},
+					{Id: "a1", Name: "dup"}, {Id: "a2", Name: "dup"},
 				},
 			},
 		}

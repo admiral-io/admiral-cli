@@ -116,6 +116,11 @@ func (p *Printer) printDetail(sections []Section) error {
 	return w.Flush()
 }
 
+// PrintEmpty writes a kubectl-style "No <resource> found." message to stderr.
+func PrintEmpty(stderr io.Writer, resource string) {
+	Writef(stderr, "No %s found.\n", resource)
+}
+
 // PrintToken prints a one-time token with a warning that it won't be shown again.
 func PrintToken(stderr io.Writer, token string) {
 	Writeln(stderr)

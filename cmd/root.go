@@ -9,6 +9,8 @@ import (
 
 	appcmd "go.admiral.io/cli/cmd/app"
 	configcmd "go.admiral.io/cli/cmd/config"
+	credentialcmd "go.admiral.io/cli/cmd/credential"
+	sourcecmd "go.admiral.io/cli/cmd/source"
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/config"
 	"go.admiral.io/cli/internal/output"
@@ -128,6 +130,8 @@ func newRootCmd(ver version.Version, exit func(int)) *rootCmd {
 	// Resource commands
 	cmd.AddCommand(
 		appcmd.NewAppCmd(&clientOpts).Cmd,
+		credentialcmd.NewCredentialCmd(&clientOpts).Cmd,
+		sourcecmd.NewSourceCmd(&clientOpts).Cmd,
 	)
 
 	// Configuration
