@@ -20,7 +20,7 @@ func DisplayValue(key, raw string) string {
 	return "(not set)"
 }
 
-// maskSecret preserves a recognised prefix (e.g. "admp_") and masks the
+// maskSecret preserves a recognized prefix (e.g. "admp_") and masks the
 // remainder with asterisks of matching length so the redacted form hints at
 // the original length without leaking the secret.
 func maskSecret(raw string) string {

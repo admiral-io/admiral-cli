@@ -14,7 +14,7 @@ Admiral manages infrastructure provisioning and application deployment as a sing
 
 No proprietary formats, no lock-in. If you stop using Admiral, you keep all your manifests and modules.
 
-The CLI gives you direct access to the Admiral API for managing clusters, runners, and deployments from your terminal or CI/CD pipelines.
+The CLI gives you direct access to the Admiral API from your terminal or CI/CD pipelines. This release covers authentication, applications, and environments; more of the platform lands in each release.
 
 ## Installation
 
@@ -43,20 +43,35 @@ Pre-built binaries for Linux, macOS, and Windows are available on the [Releases]
 
 ### Authentication
 
-Create a Personal Access Token in the Admiral UI, then configure the CLI:
+Sign in:
 
 ```bash
-# Set your API server
-admiral config set server https://admiral.example.com
+# Interactive: opens your browser and stores a session that refreshes itself
+admiral auth login
 
-# Set your token (prompted securely, not echoed)
-admiral config set token
+# Same, but limit the session to read-only scopes (e.g. on a shared machine)
+admiral auth login --scope app:read,env:read
 
-# Or pass it directly (visible in shell history)
-admiral config set token <your-token>
+# No browser handy? Store an API key instead (prompted, not echoed).
+# Create one in the Admiral UI.
+admiral auth login --with-token
 
-# Or use an environment variable (useful for CI/CD)
-export ADMIRAL_TOKEN=<your-token>
+# Or store a 1Password reference; the key is fetched via `op` on each run
+echo "op://Engineering/admiral/api-key" | admiral auth login --with-token
+
+# Check what the CLI will use, or verify it against the server
+admiral auth status
+admiral whoami
+
+# Remove the stored credential (and revoke the session, if any)
+admiral auth logout
+```
+
+For CI and automation, pass an API key through the environment. It takes
+precedence over anything stored by `auth login`:
+
+```bash
+export ADMIRAL_API_KEY=<key>
 ```
 
 ### Configuration
@@ -75,14 +90,41 @@ admiral config set <key> [value]
 admiral config unset <key>
 ```
 
-Available keys: `server`, `token`, `output`, `insecure`, `plaintext`
+Available keys: `server`, `output`, `insecure`, `plaintext`
 
 ### Usage
 
+Every resource has the same verbs: `list`, `get`, `describe`, `create`,
+`update`, `delete`. Commands take the resource name or ID; `--app` scopes
+environment commands to an application (or set `ADMIRAL_APP`).
+
 ```bash
-# List your applications
+# Applications
 admiral app list
+admiral app create billing-api --description "Handles billing" --label team=platform
+admiral app describe billing-api
+
+# Environments of an application
+admiral env create staging --app billing-api
+admiral env list --app billing-api
+admiral env describe staging --app billing-api
+
+# Machine-readable output for scripts
+admiral app list -o json
+admiral env list --app billing-api -o name
+
+# Skip confirmation prompts in automation
+admiral env delete staging --app billing-api --force
 ```
+
+Run `admiral <command> --help` for every flag and more examples.
+
+### Proxies
+
+The CLI honors the standard `HTTPS_PROXY`, `HTTP_PROXY`, and `NO_PROXY`
+environment variables for both API calls and browser login. No extra
+configuration is needed. If your proxy intercepts TLS, install its CA
+certificate in the operating system trust store, as you would for a browser.
 
 ## Documentation
 

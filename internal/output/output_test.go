@@ -10,9 +10,12 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"go.admiral.io/cli/internal/iostreams"
 )
 
 // ---------------------------------------------------------------------------
@@ -106,19 +109,35 @@ func TestWriteln_Empty(t *testing.T) {
 // printer.go
 // ---------------------------------------------------------------------------
 
+// testPrinter builds a Printer whose stdout is buf and whose stderr is a
+// separate buffer, both non-TTY, with a pinned empty environment.
+func testPrinter(format Format, out *bytes.Buffer) *Printer {
+	return &Printer{
+		Format: format,
+		IO:     iostreams.New(strings.NewReader(""), out, &bytes.Buffer{}, func(string) string { return "" }),
+	}
+}
+
+func testPrinterErr(format Format, out, errOut *bytes.Buffer) *Printer {
+	return &Printer{
+		Format: format,
+		IO:     iostreams.New(strings.NewReader(""), out, errOut, func(string) string { return "" }),
+	}
+}
+
 func TestNewPrinter(t *testing.T) {
-	p := NewPrinter(FormatJSON)
+	p := NewPrinter(&cobra.Command{}, FormatJSON)
 	if p.Format != FormatJSON {
 		t.Fatalf("want format %q, got %q", FormatJSON, p.Format)
 	}
-	if p.Out == nil {
+	if p.Out() == nil {
 		t.Fatal("expected non-nil writer")
 	}
 }
 
 func TestPrintResource_Table(t *testing.T) {
 	var buf bytes.Buffer
-	p := &Printer{Format: FormatTable, Out: &buf}
+	p := testPrinter(FormatTable, &buf)
 
 	err := p.PrintResource(structpb.NewStringValue("test"), func(w *tabwriter.Writer) {
 		fmt.Fprintln(w, "NAME\tAGE")
@@ -136,7 +155,7 @@ func TestPrintResource_Table(t *testing.T) {
 
 func TestPrintResource_JSON(t *testing.T) {
 	var buf bytes.Buffer
-	p := &Printer{Format: FormatJSON, Out: &buf}
+	p := testPrinter(FormatJSON, &buf)
 
 	msg := structpb.NewStringValue("hello")
 	err := p.PrintResource(msg, nil)
@@ -154,7 +173,7 @@ func TestPrintResource_JSON(t *testing.T) {
 
 func TestPrintResource_YAML(t *testing.T) {
 	var buf bytes.Buffer
-	p := &Printer{Format: FormatYAML, Out: &buf}
+	p := testPrinter(FormatYAML, &buf)
 
 	msg := structpb.NewStringValue("world")
 	err := p.PrintResource(msg, nil)
@@ -169,7 +188,7 @@ func TestPrintResource_YAML(t *testing.T) {
 
 func TestPrintResource_UnsupportedFormat(t *testing.T) {
 	var buf bytes.Buffer
-	p := &Printer{Format: "xml", Out: &buf}
+	p := testPrinter("xml", &buf)
 
 	err := p.PrintResource(structpb.NewStringValue("test"), nil)
 	if err == nil {
@@ -180,107 +199,14 @@ func TestPrintResource_UnsupportedFormat(t *testing.T) {
 	}
 }
 
-func TestPrintDetail_Table(t *testing.T) {
-	var buf bytes.Buffer
-	p := &Printer{Format: FormatTable, Out: &buf}
-
-	sections := []Section{
-		{
-			Details: []Detail{
-				{Key: "Name", Value: "prod-cluster"},
-				{Key: "ID", Value: "abc-123"},
-			},
-		},
-		{
-			Name: "Labels",
-			Details: []Detail{
-				{Key: "env", Value: "production"},
-			},
-		},
-	}
-
-	err := p.PrintDetail(structpb.NewStringValue("test"), sections)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	out := buf.String()
-	if !strings.Contains(out, "Name:") || !strings.Contains(out, "prod-cluster") {
-		t.Fatalf("expected Name detail in output: %q", out)
-	}
-	if !strings.Contains(out, "Labels:") {
-		t.Fatalf("expected Labels section header in output: %q", out)
-	}
-	if !strings.Contains(out, "  env:") {
-		t.Fatalf("expected indented detail under section: %q", out)
-	}
-}
-
-func TestPrintDetail_JSON(t *testing.T) {
-	var buf bytes.Buffer
-	p := &Printer{Format: FormatJSON, Out: &buf}
-
-	msg := structpb.NewStringValue("detail-test")
-	err := p.PrintDetail(msg, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if !json.Valid(buf.Bytes()) {
-		t.Fatalf("output is not valid JSON: %q", buf.String())
-	}
-}
-
-func TestPrintDetail_UnsupportedFormat(t *testing.T) {
-	var buf bytes.Buffer
-	p := &Printer{Format: "xml", Out: &buf}
-
-	err := p.PrintDetail(structpb.NewStringValue("test"), nil)
-	if err == nil {
-		t.Fatal("expected error for unsupported format")
-	}
-}
-
-func TestPrintToken(t *testing.T) {
-	var buf bytes.Buffer
-	PrintToken(&buf, "secret-token-xyz")
-
-	out := buf.String()
-	if !strings.Contains(out, "WARNING") {
-		t.Fatalf("expected WARNING in output: %q", out)
-	}
-	if !strings.Contains(out, "secret-token-xyz") {
-		t.Fatalf("expected token in output: %q", out)
-	}
-}
-
-func TestFormatScopes(t *testing.T) {
-	t.Run("empty", func(t *testing.T) {
-		if got := FormatScopes(nil); got != "<none>" {
-			t.Fatalf("want <none>, got %q", got)
-		}
-	})
-	t.Run("single", func(t *testing.T) {
-		if got := FormatScopes([]string{"read"}); got != "read" {
-			t.Fatalf("want %q, got %q", "read", got)
-		}
-	})
-	t.Run("multiple", func(t *testing.T) {
-		got := FormatScopes([]string{"read", "write", "admin"})
-		if got != "read, write, admin" {
-			t.Fatalf("want %q, got %q", "read, write, admin", got)
-		}
-	})
-}
-
 // ---------------------------------------------------------------------------
 // table.go
 // ---------------------------------------------------------------------------
 
 func TestFormatAge(t *testing.T) {
 	t.Run("nil", func(t *testing.T) {
-		if got := FormatAge(nil); got != "<unknown>" {
-			t.Fatalf("want <unknown>, got %q", got)
+		if got := FormatAge(nil); got != None {
+			t.Fatalf("want %q, got %q", None, got)
 		}
 	})
 	t.Run("seconds", func(t *testing.T) {
@@ -315,8 +241,8 @@ func TestFormatAge(t *testing.T) {
 
 func TestFormatTimestamp(t *testing.T) {
 	t.Run("nil", func(t *testing.T) {
-		if got := FormatTimestamp(nil); got != "<none>" {
-			t.Fatalf("want <none>, got %q", got)
+		if got := FormatTimestamp(nil); got != None {
+			t.Fatalf("want %q, got %q", None, got)
 		}
 	})
 	t.Run("valid", func(t *testing.T) {
@@ -332,13 +258,13 @@ func TestFormatTimestamp(t *testing.T) {
 
 func TestFormatLabels(t *testing.T) {
 	t.Run("nil", func(t *testing.T) {
-		if got := FormatLabels(nil); got != "<none>" {
-			t.Fatalf("want <none>, got %q", got)
+		if got := FormatLabels(nil); got != None {
+			t.Fatalf("want %q, got %q", None, got)
 		}
 	})
 	t.Run("empty", func(t *testing.T) {
-		if got := FormatLabels(map[string]string{}); got != "<none>" {
-			t.Fatalf("want <none>, got %q", got)
+		if got := FormatLabels(map[string]string{}); got != None {
+			t.Fatalf("want %q, got %q", None, got)
 		}
 	})
 	t.Run("single", func(t *testing.T) {
@@ -347,63 +273,45 @@ func TestFormatLabels(t *testing.T) {
 			t.Fatalf("want %q, got %q", "env=prod", got)
 		}
 	})
-	t.Run("multiple", func(t *testing.T) {
-		got := FormatLabels(map[string]string{"a": "1", "b": "2"})
-		// Map iteration order is non-deterministic; check both labels are present.
-		if !strings.Contains(got, "a=1") || !strings.Contains(got, "b=2") {
-			t.Fatalf("expected both labels, got %q", got)
-		}
-		if !strings.Contains(got, ",") {
-			t.Fatalf("expected comma separator, got %q", got)
+	t.Run("multiple are sorted by key", func(t *testing.T) {
+		got := FormatLabels(map[string]string{"team": "core", "env": "prod", "app": "web"})
+		if want := "app=web,env=prod,team=core"; got != want {
+			t.Fatalf("want %q, got %q", want, got)
 		}
 	})
 }
 
-func TestFormatEnum(t *testing.T) {
+func TestHumanDuration(t *testing.T) {
+	// Values from kubectl's duration_test.go.
 	tests := []struct {
-		name   string
-		enum   string
-		prefix string
-		want   string
+		d    time.Duration
+		want string
 	}{
-		{"healthy", "CLUSTER_HEALTH_STATUS_HEALTHY", "CLUSTER_HEALTH_STATUS_", "Healthy"},
-		{"degraded", "CLUSTER_HEALTH_STATUS_DEGRADED", "CLUSTER_HEALTH_STATUS_", "Degraded"},
-		{"unspecified", "CLUSTER_HEALTH_STATUS_UNSPECIFIED", "CLUSTER_HEALTH_STATUS_", "Unknown"},
-		{"empty after prefix", "SOME_PREFIX_", "SOME_PREFIX_", "Unknown"},
-		{"no prefix match", "HEALTHY", "NONEXISTENT_", "Healthy"},
+		{-2 * time.Second, "<invalid>"},
+		{-1 * time.Second, "0s"},
+		{0, "0s"},
+		{30 * time.Second, "30s"},
+		{119 * time.Second, "119s"},
+		{2 * time.Minute, "2m"},
+		{5*time.Minute + 12*time.Second, "5m12s"},
+		{10 * time.Minute, "10m"},
+		{10*time.Minute + 30*time.Second, "10m"},
+		{2*time.Hour + 59*time.Minute, "179m"},
+		{3 * time.Hour, "3h"},
+		{3*time.Hour + 4*time.Minute, "3h4m"},
+		{8 * time.Hour, "8h"},
+		{47 * time.Hour, "47h"},
+		{48 * time.Hour, "2d"},
+		{5*24*time.Hour + 3*time.Hour, "5d3h"},
+		{8 * 24 * time.Hour, "8d"},
+		{9*24*time.Hour + 3*time.Hour, "9d"},
+		{365 * 24 * time.Hour, "365d"},
+		{2 * 365 * 24 * time.Hour, "2y"},
+		{2*365*24*time.Hour + 24*time.Hour, "2y1d"},
+		{8 * 365 * 24 * time.Hour, "8y"},
 	}
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := FormatEnum(tc.enum, tc.prefix)
-			if got != tc.want {
-				t.Fatalf("want %q, got %q", tc.want, got)
-			}
-		})
-	}
-}
-
-func TestFormatDuration(t *testing.T) {
-	tests := []struct {
-		name     string
-		duration time.Duration
-		want     string
-	}{
-		{"zero", 0, "0s"},
-		{"seconds", 45 * time.Second, "45s"},
-		{"minutes", 5 * time.Minute, "5m"},
-		{"hours", 3 * time.Hour, "3h"},
-		{"days", 48 * time.Hour, "2d"},
-		{"just under minute", 59 * time.Second, "59s"},
-		{"just under hour", 59 * time.Minute, "59m"},
-		{"just under day", 23 * time.Hour, "23h"},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := formatDuration(tc.duration)
-			if got != tc.want {
-				t.Fatalf("want %q, got %q", tc.want, got)
-			}
-		})
+		require.Equal(t, tc.want, HumanDuration(tc.d), "%v", tc.d)
 	}
 }
 
@@ -412,14 +320,14 @@ func TestFormatDuration(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestNewPrinter_DefaultsToStdout(t *testing.T) {
-	p := NewPrinter(FormatTable)
+	p := NewPrinter(&cobra.Command{}, FormatTable)
 	require.Equal(t, FormatTable, p.Format)
-	require.Equal(t, os.Stdout, p.Out)
+	require.Equal(t, os.Stdout, p.Out())
 }
 
 func TestPrintResource_Wide(t *testing.T) {
 	var buf bytes.Buffer
-	p := &Printer{Format: FormatWide, Out: &buf}
+	p := testPrinter(FormatWide, &buf)
 
 	err := p.PrintResource(structpb.NewStringValue("test"), func(w *tabwriter.Writer) {
 		fmt.Fprintln(w, "NAME\tAGE\tLABELS")
@@ -435,7 +343,7 @@ func TestPrintResource_Wide(t *testing.T) {
 
 func TestPrintResource_JSON_ValidStructure(t *testing.T) {
 	var buf bytes.Buffer
-	p := &Printer{Format: FormatJSON, Out: &buf}
+	p := testPrinter(FormatJSON, &buf)
 
 	val, err := structpb.NewStruct(map[string]any{
 		"name": "test-cluster",
@@ -454,18 +362,18 @@ func TestPrintResource_JSON_ValidStructure(t *testing.T) {
 
 func TestPrintResource_JSON_Multiline(t *testing.T) {
 	var buf bytes.Buffer
-	p := &Printer{Format: FormatJSON, Out: &buf}
+	p := testPrinter(FormatJSON, &buf)
 
 	err := p.PrintResource(structpb.NewStringValue("test"), nil)
 	require.NoError(t, err)
 
-	// JSON output should be indented (multiline)
-	require.Contains(t, buf.String(), "\n")
+	// Piped stdout is compact: exactly one line.
+	require.Equal(t, 1, strings.Count(buf.String(), "\n"))
 }
 
 func TestPrintResource_YAML_Structure(t *testing.T) {
 	var buf bytes.Buffer
-	p := &Printer{Format: FormatYAML, Out: &buf}
+	p := testPrinter(FormatYAML, &buf)
 
 	val, err := structpb.NewStruct(map[string]any{
 		"name": "test-runner",
@@ -482,7 +390,7 @@ func TestPrintResource_YAML_Structure(t *testing.T) {
 
 func TestPrintResource_NilMessage_JSON(t *testing.T) {
 	var buf bytes.Buffer
-	p := &Printer{Format: FormatJSON, Out: &buf}
+	p := testPrinter(FormatJSON, &buf)
 
 	// nil proto.Message should marshal as empty JSON object
 	err := p.PrintResource(nil, nil)
@@ -492,109 +400,11 @@ func TestPrintResource_NilMessage_JSON(t *testing.T) {
 
 func TestPrintResource_NilMessage_YAML(t *testing.T) {
 	var buf bytes.Buffer
-	p := &Printer{Format: FormatYAML, Out: &buf}
+	p := testPrinter(FormatYAML, &buf)
 
 	err := p.PrintResource(nil, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, buf.String())
-}
-
-func TestPrintDetail_YAML(t *testing.T) {
-	var buf bytes.Buffer
-	p := &Printer{Format: FormatYAML, Out: &buf}
-
-	msg := structpb.NewStringValue("detail-yaml-test")
-	sections := []Section{
-		{Details: []Detail{{Key: "Name", Value: "test"}}},
-	}
-
-	err := p.PrintDetail(msg, sections)
-	require.NoError(t, err)
-	require.Contains(t, buf.String(), "detail-yaml-test")
-}
-
-func TestPrintDetail_Wide(t *testing.T) {
-	var buf bytes.Buffer
-	p := &Printer{Format: FormatWide, Out: &buf}
-
-	sections := []Section{
-		{
-			Details: []Detail{
-				{Key: "Name", Value: "wide-cluster"},
-				{Key: "ID", Value: "xyz-789"},
-			},
-		},
-	}
-
-	err := p.PrintDetail(structpb.NewStringValue("test"), sections)
-	require.NoError(t, err)
-
-	out := buf.String()
-	require.Contains(t, out, "Name:")
-	require.Contains(t, out, "wide-cluster")
-	require.Contains(t, out, "ID:")
-	require.Contains(t, out, "xyz-789")
-}
-
-func TestPrintDetail_EmptySections(t *testing.T) {
-	var buf bytes.Buffer
-	p := &Printer{Format: FormatTable, Out: &buf}
-
-	err := p.PrintDetail(structpb.NewStringValue("test"), nil)
-	require.NoError(t, err)
-	require.Empty(t, buf.String())
-}
-
-func TestPrintDetail_MultipleSectionsSpacing(t *testing.T) {
-	var buf bytes.Buffer
-	p := &Printer{Format: FormatTable, Out: &buf}
-
-	sections := []Section{
-		{
-			Details: []Detail{{Key: "Name", Value: "test"}},
-		},
-		{
-			Name:    "Metadata",
-			Details: []Detail{{Key: "env", Value: "prod"}},
-		},
-		{
-			Name:    "Status",
-			Details: []Detail{{Key: "health", Value: "ok"}},
-		},
-	}
-
-	err := p.PrintDetail(structpb.NewStringValue("test"), sections)
-	require.NoError(t, err)
-
-	out := buf.String()
-	// Sections should be separated by blank lines
-	require.Contains(t, out, "Name:")
-	require.Contains(t, out, "Metadata:")
-	require.Contains(t, out, "Status:")
-	require.Contains(t, out, "  env:")
-	require.Contains(t, out, "  health:")
-}
-
-func TestPrintDetail_UnsupportedFormat_Message(t *testing.T) {
-	var buf bytes.Buffer
-	p := &Printer{Format: "csv", Out: &buf}
-
-	err := p.PrintDetail(structpb.NewStringValue("test"), nil)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "unsupported format")
-	require.Contains(t, err.Error(), "csv")
-}
-
-func TestPrintToken_ExactFormat(t *testing.T) {
-	var buf bytes.Buffer
-	PrintToken(&buf, "adm_pat_abc123")
-
-	out := buf.String()
-	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
-	require.Len(t, lines, 3)
-	require.Empty(t, lines[0]) // leading blank line
-	require.Equal(t, "WARNING: Save this token — it will not be shown again.", lines[1])
-	require.Equal(t, "Token: adm_pat_abc123", lines[2])
 }
 
 func TestWritef_NoArgs(t *testing.T) {
@@ -646,12 +456,12 @@ func TestFormatAge_ExactBoundaries(t *testing.T) {
 		age    time.Duration
 		suffix string
 	}{
-		{"59 seconds", 59 * time.Second, "s"},
-		{"60 seconds", 60 * time.Second, "m"},
-		{"59 minutes", 59 * time.Minute, "m"},
-		{"60 minutes", 60 * time.Minute, "h"},
-		{"23 hours", 23 * time.Hour, "h"},
-		{"24 hours", 24 * time.Hour, "d"},
+		{"119 seconds", 119 * time.Second, "s"},
+		{"120 seconds", 120 * time.Second, "m"},
+		{"179 minutes", 179 * time.Minute, "m"},
+		{"180 minutes", 180 * time.Minute, "h"},
+		{"47 hours", 47 * time.Hour, "h"},
+		{"48 hours", 48 * time.Hour, "d"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -682,39 +492,12 @@ func TestFormatLabels_SpecialCharacters(t *testing.T) {
 	require.Equal(t, "app.kubernetes.io/name=admiral", got)
 }
 
-func TestFormatEnum_MultiWordValue(t *testing.T) {
-	// e.g., "RUNNER_KIND_TERRAFORM" → "Terraform"
-	got := FormatEnum("RUNNER_KIND_TERRAFORM", "RUNNER_KIND_")
-	require.Equal(t, "Terraform", got)
-}
-
-func TestFormatEnum_SingleChar(t *testing.T) {
-	got := FormatEnum("PREFIX_X", "PREFIX_")
-	require.Equal(t, "X", got)
-}
-
-func TestFormatEnum_EmptyInput(t *testing.T) {
-	got := FormatEnum("", "")
-	require.Equal(t, "Unknown", got)
-}
-
-func TestFormatScopes_SingleScope(t *testing.T) {
-	got := FormatScopes([]string{"admin"})
-	require.Equal(t, "admin", got)
-}
-
-func TestFormatScopes_EmptySlice(t *testing.T) {
-	got := FormatScopes([]string{})
-	require.Equal(t, "<none>", got)
-}
-
-func TestFormatDuration_Negative(t *testing.T) {
-	// Negative duration should still produce a result (0s or negative)
-	got := formatDuration(-5 * time.Second)
-	require.NotEmpty(t, got)
-}
-
-func TestFormatDuration_LargeDuration(t *testing.T) {
-	got := formatDuration(365 * 24 * time.Hour)
-	require.Equal(t, "365d", got)
+func TestTruncate_SmallWidths(t *testing.T) {
+	require.Equal(t, "abcdefgh", Truncate("abcdefgh", 8))
+	require.Equal(t, "abcdef…", Truncate("abcdefgh", 7))
+	require.Equal(t, "ab…", Truncate("abcdefgh", 3))
+	require.Equal(t, "a", Truncate("abcdefgh", 1), "no room for an ellipsis: plain cut")
+	require.Equal(t, "héll…", Truncate("héllo wörld", 5), "counts runes, not bytes")
+	require.Equal(t, "", Truncate("abcdefgh", 0))
+	require.Equal(t, "", Truncate("abcdefgh", -5), "negative width does not panic")
 }

@@ -6,14 +6,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestDisplayValue_SensitiveKeyMasked(t *testing.T) {
+func TestMaskSecret_PrefixPreserved(t *testing.T) {
 	// admp_-prefixed token: prefix preserved, rest replaced with asterisks of matching length.
-	got := DisplayValue("token", "admp_bhMKmSDgBX4o8IBzDFlDszNg7kEIR7DZ2b-YpcjEB4I3iBZmt")
+	got := maskSecret("admp_bhMKmSDgBX4o8IBzDFlDszNg7kEIR7DZ2b-YpcjEB4I3iBZmt")
 	require.Equal(t, "admp_"+repeat("*", len("bhMKmSDgBX4o8IBzDFlDszNg7kEIR7DZ2b-YpcjEB4I3iBZmt")), got)
-}
-
-func TestDisplayValue_SensitiveKeyNotSet(t *testing.T) {
-	require.Equal(t, "(not set)", DisplayValue("token", ""))
 }
 
 func TestDisplayValue_NonSensitiveReturnsRaw(t *testing.T) {
@@ -26,7 +22,11 @@ func TestDisplayValue_FallsBackToDefault(t *testing.T) {
 }
 
 func TestDisplayValue_NoValueNoDefault(t *testing.T) {
-	require.Equal(t, "(not set)", DisplayValue("server", ""))
+	require.Equal(t, "(not set)", DisplayValue("no-such-key", ""))
+}
+
+func TestDisplayValue_ServerDefault(t *testing.T) {
+	require.Equal(t, "api.admiral.io:443", DisplayValue("server", ""))
 }
 
 func TestMaskSecret_NoPrefix(t *testing.T) {

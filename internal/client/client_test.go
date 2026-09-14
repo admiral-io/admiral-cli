@@ -13,7 +13,7 @@ import (
 const testToken = "admp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopq1ZqpkG"
 
 func TestCreateClient_NotLoggedIn(t *testing.T) {
-	os.Unsetenv(credentials.EnvToken)
+	os.Unsetenv(credentials.EnvAPIKey)
 
 	opts := &Options{
 		ServerAddr: "localhost:9999",
@@ -24,13 +24,13 @@ func TestCreateClient_NotLoggedIn(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when not logged in")
 	}
-	if want := "no token configured"; !contains(err.Error(), want) {
+	if want := "not signed in"; !contains(err.Error(), want) {
 		t.Fatalf("error should contain %q, got %q", want, err.Error())
 	}
 }
 
 func TestCreateClient_WithEnvToken(t *testing.T) {
-	t.Setenv(credentials.EnvToken, testToken)
+	t.Setenv(credentials.EnvAPIKey, testToken)
 
 	opts := &Options{
 		ServerAddr: "localhost:9999",
@@ -48,7 +48,7 @@ func TestCreateClient_WithEnvToken(t *testing.T) {
 }
 
 func TestCreateClient_InsecureFlag(t *testing.T) {
-	t.Setenv(credentials.EnvToken, testToken)
+	t.Setenv(credentials.EnvAPIKey, testToken)
 
 	opts := &Options{
 		ServerAddr: "localhost:9999",
@@ -64,7 +64,7 @@ func TestCreateClient_InsecureFlag(t *testing.T) {
 }
 
 func TestCreateClient_WithVerbose(t *testing.T) {
-	t.Setenv(credentials.EnvToken, testToken)
+	t.Setenv(credentials.EnvAPIKey, testToken)
 
 	opts := &Options{
 		ServerAddr: "localhost:9999",

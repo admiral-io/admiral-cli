@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -15,22 +16,32 @@ func newSetCmd(opts *admiralclient.Options) *cobra.Command {
 	return &cobra.Command{
 		Use:   "set <key> [value]",
 		Short: "Set a configuration value",
-		Long: fmt.Sprintf(
-			"Set a configuration value.\n\nValid keys: %v\n\nOmit the value to be prompted interactively. Sensitive keys (e.g. token) are read without echoing.",
-			config.ValidKeys,
+		Long: fmt.Sprintf(`Store a value in the config file. Omit the value to be prompted for it.
+
+Valid keys: %s.
+See 'admiral config --help' for what each key does.`,
+			strings.Join(config.ValidKeys, ", "),
 		),
+		Example: `  # Point the CLI at a different server
+  admiral config set server admiral.example.com:443
+
+  # Make JSON the default output format
+  admiral config set output json
+
+  # Prompt for the value
+  admiral config set server`,
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			key := args[0]
 			if !config.IsValidKey(key) {
-				return fmt.Errorf("unknown config key %q (valid keys: %v)", key, config.ValidKeys)
+				return fmt.Errorf("unknown config key %q (valid keys: %s)", key, strings.Join(config.ValidKeys, ", "))
 			}
 
 			var value string
 			if len(args) == 2 {
 				value = args[1]
 			} else {
-				v, err := input.PromptLine(cmd, config.IsSensitive(key))
+				v, err := input.PromptLine(cmd, key, config.IsSensitive(key))
 				if err != nil {
 					return err
 				}
@@ -46,4 +57,3 @@ func newSetCmd(opts *admiralclient.Options) *cobra.Command {
 		},
 	}
 }
-

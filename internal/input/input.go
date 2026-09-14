@@ -4,99 +4,79 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
+
+	"go.admiral.io/cli/internal/cmderr"
+	"go.admiral.io/cli/internal/iostreams"
 )
 
-// PromptLine reads a single line from cmd's stdin. On a TTY it first writes
-// "Enter value: " to stderr; when sensitive, the input is read without echo.
-// Piped (non-TTY) input is read as a single line. Empty values return an error.
-func PromptLine(cmd *cobra.Command, sensitive bool) (string, error) {
-	in := cmd.InOrStdin()
-	f, ok := in.(interface{ Fd() uintptr })
-	isTTY := ok && term.IsTerminal(int(f.Fd()))
+// IsTerminal reports whether fd refers to an interactive terminal.
+func IsTerminal(fd uintptr) bool {
+	return term.IsTerminal(int(fd))
+}
 
-	if isTTY {
-		fmt.Fprint(cmd.ErrOrStderr(), "Enter value: ")
-		if sensitive {
-			b, err := term.ReadPassword(int(f.Fd()))
-			fmt.Fprintln(cmd.ErrOrStderr())
-			if err != nil {
-				return "", fmt.Errorf("failed to read input: %w", err)
-			}
-			return requireNonEmpty(string(b))
-		}
+// ReaderIsTerminal reports whether r is backed by an interactive terminal.
+// Anything without a file descriptor (a bytes.Buffer in tests, a pipe
+// wrapper) is not.
+func ReaderIsTerminal(r io.Reader) (fd uintptr, ok bool) {
+	f, has := r.(interface{ Fd() uintptr })
+	if !has {
+		return 0, false
 	}
+	return f.Fd(), IsTerminal(f.Fd())
+}
 
-	scanner := bufio.NewScanner(in)
+// PromptLine asks for a single line on stderr and reads it from stdin. When
+// sensitive, the input is read without echo. It fails with a usage error
+// when the session is not interactive so scripts never hang.
+func PromptLine(cmd *cobra.Command, label string, sensitive bool) (string, error) {
+	io := iostreams.FromCommand(cmd)
+	if !io.Interactive() {
+		return "", cmderr.Usage("cannot prompt for %s when not running interactively", label)
+	}
+	fmt.Fprintf(io.Err, "Enter %s: ", label)
+	if sensitive {
+		fd, _ := ReaderIsTerminal(io.In)
+		b, err := term.ReadPassword(int(fd))
+		fmt.Fprintln(io.Err)
+		if err != nil {
+			return "", fmt.Errorf("read %s: %w", label, err)
+		}
+		return requireNonEmpty(string(b))
+	}
+	scanner := bufio.NewScanner(io.In)
 	if scanner.Scan() {
 		return requireNonEmpty(scanner.Text())
 	}
 	return "", fmt.Errorf("no input provided")
 }
 
-// ResolveSecret returns a single-line secret value
+// Secret obtains a secret value without ever taking it from a flag:
 //
-//  1. If both --<label> and --<label>-stdin are set, error (ambiguous).
-//  2. If --<label>-stdin is set, read all of stdin (trailing CR/LF trimmed).
-//  3. If --<label> is set, return that value.
-//  4. Otherwise, if stdin is a TTY, prompt for the value without echoing.
-//     If stdin is not a TTY, return an error — refuse to hang a script.
-//
-// Prefer this over FromFlagOrStdin for user-supplied secrets (passwords,
-// tokens) so humans get an interactive prompt and pipelines stay scriptable.
-func ResolveSecret(cmd *cobra.Command, label, value string, stdinFlag bool) (string, error) {
-	if stdinFlag && value != "" {
-		return "", fmt.Errorf("--%s and --%s-stdin are mutually exclusive", label, label)
-	}
-	if stdinFlag {
-		b, err := io.ReadAll(os.Stdin)
+//   - --<label>-stdin with a pipe: read all of stdin (trailing CR/LF trimmed,
+//     so multi-line material such as PEM keys stays intact);
+//   - --<label>-stdin on a terminal, or no flag in an interactive session:
+//     prompt with echo off;
+//   - otherwise: a usage error naming --<label>-stdin.
+func Secret(cmd *cobra.Command, label string, fromStdin bool) (string, error) {
+	io := iostreams.FromCommand(cmd)
+	if fromStdin && !io.IsStdinTTY() {
+		b, err := readAll(io.In)
 		if err != nil {
 			return "", fmt.Errorf("read %s from stdin: %w", label, err)
 		}
 		return strings.TrimRight(string(b), "\r\n"), nil
 	}
-	if value != "" {
-		return value, nil
+	if io.Interactive() {
+		return PromptLine(cmd, label, true)
 	}
-
-	in := cmd.InOrStdin()
-	f, ok := in.(interface{ Fd() uintptr })
-	if !ok || !term.IsTerminal(int(f.Fd())) {
-		return "", fmt.Errorf("--%s or --%s-stdin is required (no TTY for interactive prompt)", label, label)
-	}
-
-	fmt.Fprintf(cmd.ErrOrStderr(), "Enter %s: ", label)
-	b, err := term.ReadPassword(int(f.Fd()))
-	fmt.Fprintln(cmd.ErrOrStderr())
-	if err != nil {
-		return "", fmt.Errorf("read %s: %w", label, err)
-	}
-	return requireNonEmpty(string(b))
+	return "", cmderr.Usage("--%s-stdin required when not running interactively", label)
 }
 
-// FromFlagOrStdin returns value when stdinFlag is false, otherwise the full
-// contents of os.Stdin with trailing CR/LF trimmed. Passing both a value and
-// stdinFlag=true is rejected so callers can't silently prefer one source.
-//
-// Unlike PromptLine, this reads the entire stdin — multi-line secrets such as
-// SSH private keys must remain intact.
-func FromFlagOrStdin(label, value string, stdinFlag bool) (string, error) {
-	if stdinFlag && value != "" {
-		return "", fmt.Errorf("--%s and --%s-stdin are mutually exclusive", label, label)
-	}
-	if stdinFlag {
-		b, err := io.ReadAll(os.Stdin)
-		if err != nil {
-			return "", fmt.Errorf("read %s from stdin: %w", label, err)
-		}
-		return strings.TrimRight(string(b), "\r\n"), nil
-	}
-	return value, nil
-}
+func readAll(r io.Reader) ([]byte, error) { return io.ReadAll(r) }
 
 func requireNonEmpty(s string) (string, error) {
 	v := strings.TrimSpace(s)

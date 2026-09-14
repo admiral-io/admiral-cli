@@ -6,16 +6,28 @@ import (
 	"github.com/spf13/cobra"
 
 	"go.admiral.io/cli/internal/client"
+	"go.admiral.io/cli/internal/credentials"
+	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
-	userv1 "go.admiral.io/sdk/proto/admiral/user/v1"
+	userv1 "go.admiral.io/sdk/proto/admiral/api/user/v1"
 )
 
 func newWhoamiCmd(opts *client.Options) *cobra.Command {
 	return &cobra.Command{
 		Use:   "whoami",
-		Short: "Show current user, organization, and session",
-		Args:  cobra.NoArgs,
+		Short: "Show the identity the server sees",
+		Long: `Ask the server who the active credential belongs to and show that user.
+Use this to confirm a login worked. 'admiral auth status' shows the same
+credential without contacting the server.`,
+		Example: `  # Confirm the active credential against the server
+  admiral whoami`,
+		Args: flags.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			cred, err := credentials.ResolveToken(opts.ConfigDir)
+			if err != nil {
+				return err
+			}
+
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
 				return err
@@ -29,20 +41,31 @@ func newWhoamiCmd(opts *client.Options) *cobra.Command {
 
 			user := resp.GetUser()
 
-			details := []output.Detail{
-				{Key: "Email", Value: user.GetEmail()},
-				{Key: "Display Name", Value: user.GetDisplayName()},
-				{Key: "ID", Value: user.GetId()},
-				{Key: "Server", Value: opts.ServerAddr},
-			}
+			d := output.NewDescribe()
+			d.Field("Email", user.GetEmail())
+			d.Field("Display Name", user.GetDisplayName())
+			d.Field("ID", user.GetId())
+			d.Field("Server", opts.ServerAddr)
+			d.Field("Auth", authLabel(cred, opts.ConfigDir))
 
-			p := output.NewPrinter(opts.OutputFormat)
-
-			sections := []output.Section{
-				{Details: details},
-			}
-
-			return p.PrintDetail(resp, sections)
+			p := output.NewPrinter(cmd, opts.OutputFormat)
+			return p.PrintStatus(resp.GetUser(), d)
 		},
 	}
+}
+
+// authLabel describes the credential in use, e.g. "api-key (ADMIRAL_API_KEY)".
+func authLabel(cred *credentials.TokenResult, configDir string) string {
+	switch cred.Source {
+	case credentials.SourceEnv:
+		return "api-key (" + credentials.EnvAPIKey + ")"
+	case credentials.SourceAPIKey:
+		if c, err := credentials.Load(configDir); err == nil && c.Kind == credentials.KindAPIKeyRef {
+			return "api-key (" + c.Ref + ")"
+		}
+		return "api-key (auth login --with-token)"
+	case credentials.SourceSession:
+		return "session (auth login)"
+	}
+	return string(cred.Source)
 }

@@ -1,49 +1,41 @@
 package app
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 
 	"go.admiral.io/cli/internal/client"
+	"go.admiral.io/cli/internal/complete"
+	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
-	"go.admiral.io/cli/internal/util"
-	applicationv1 "go.admiral.io/sdk/proto/admiral/application/v1"
+	"go.admiral.io/cli/internal/resolve"
+	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
 )
 
 func newGetCmd(opts *client.Options) *cobra.Command {
-	var appID string
 
 	cmd := &cobra.Command{
-		Use:   "get [app]",
-		Short: "Get application details",
-		Long: `Get detailed information about an application.
-
-The app can be provided as a positional argument (name) or looked up by UUID with --id.`,
-		Example: `  # Get app by name
+		Use:   "get <name>",
+		Short: "Get an application",
+		Long: `Print the one-line summary of an application. Use 'describe' for the full
+view and '-o json' for the raw record.`,
+		Example: `  # Get an application by name
   admiral app get billing-api
 
-  # Get app by UUID
-  admiral app get --id 550e8400-e29b-41d4-a716-446655440000`,
-		Args: cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			var appArg string
-			if len(args) == 1 {
-				appArg = args[0]
-			}
-			if appArg == "" && appID == "" {
-				_ = cmd.Help()
-				_, _ = fmt.Fprintln(cmd.ErrOrStderr())
-				return fmt.Errorf("app name or --id is required")
-			}
+  # Get an application by ID
+  admiral app get 550e8400-e29b-41d4-a716-446655440000
 
+  # Raw record as JSON
+  admiral app get billing-api -o json`,
+		Args:              flags.ExactArgs(1),
+		ValidArgsFunction: complete.First(complete.Apps(opts)),
+		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
 				return err
 			}
 			defer c.Close() //nolint:errcheck // best-effort cleanup
 
-			id, err := util.ResolveAppID(cmd.Context(), c.Application(), appArg, appID)
+			id, err := resolve.App(cmd.Context(), c.Application(), args[0])
 			if err != nil {
 				return err
 			}
@@ -55,28 +47,10 @@ The app can be provided as a positional argument (name) or looked up by UUID wit
 				return err
 			}
 
-			app := resp.Application
-			p := output.NewPrinter(opts.OutputFormat)
-
-			sections := []output.Section{
-				{
-					Details: []output.Detail{
-						{Key: "ID", Value: app.Id},
-						{Key: "Name", Value: app.Name},
-						{Key: "Description", Value: app.Description},
-						{Key: "Labels", Value: output.FormatLabels(app.Labels)},
-						{Key: "Created", Value: output.FormatTimestamp(app.CreatedAt)},
-						{Key: "Updated", Value: output.FormatTimestamp(app.UpdatedAt)},
-						{Key: "Age", Value: output.FormatAge(app.CreatedAt)},
-					},
-				},
-			}
-
-			return p.PrintDetail(resp, sections)
+			p := output.NewPrinter(cmd, opts.OutputFormat)
+			return p.PrintOne(resp.Application, resp.Application.Name, appTable.Render(p, resp.Application))
 		},
 	}
-
-	cmd.Flags().StringVar(&appID, "id", "", "application ID (UUID)")
 
 	return cmd
 }

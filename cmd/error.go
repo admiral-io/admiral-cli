@@ -1,53 +1,58 @@
 package cmd
 
 import (
-	"regexp"
+	"errors"
 	"strings"
 
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"go.admiral.io/cli/internal/cmderr"
+	"go.admiral.io/cli/internal/credentials"
 )
 
-type exitError struct {
-	err  error
-	code int
-}
+// formatError returns the user-facing message for err. See cmderr.Format.
+func formatError(err error) string { return cmderr.Format(err) }
 
-func (e *exitError) Error() string {
-	return e.err.Error()
-}
-
-// rpcErrRe matches "rpc error: code = <Code> desc = <message>" fragments.
-var rpcErrRe = regexp.MustCompile(`rpc error: code = \w+ desc = `)
-
-// formatError returns a user-friendly error message. For gRPC status errors
-// it extracts the deepest description, stripping all "rpc error: ..." framing.
-func formatError(err error) string {
-	msg := err.Error()
-
-	// If it doesn't look like a gRPC error, return as-is.
+// isAuthError reports whether err means the user must sign in: a missing or
+// expired stored credential, or an RPC the server refused as unauthenticated.
+func isAuthError(err error) bool {
+	if errors.Is(err, credentials.ErrNotAuthenticated) || errors.Is(err, credentials.ErrSessionExpired) {
+		return true
+	}
 	s, ok := status.FromError(err)
-	if !ok {
-		return msg
+	return ok && s.Code() == codes.Unauthenticated
+}
+
+// isRequiredFlagError recognizes cobra's own "required flag(s) ... not set",
+// which does not pass through the flag error func.
+func isRequiredFlagError(err error) bool {
+	return strings.HasPrefix(err.Error(), "required flag(s)")
+}
+
+// exitCode maps err to the process exit status: cmderr codes when present,
+// 4 for anything that needs a sign-in, 2 for a missing required flag,
+// otherwise 1.
+func exitCode(err error) int {
+	if isAuthError(err) {
+		return cmderr.ExitAuth
 	}
-
-	// Strip all "rpc error: code = Xxx desc = " prefixes, keeping only the
-	// final human-readable message.
-	cleaned := rpcErrRe.ReplaceAllString(msg, "")
-
-	// When errors are chained (e.g. "failed to create application: <rpc>"),
-	// we may end up with "failed to create application: Application ...".
-	// Find the last colon-separated segment that isn't just whitespace.
-	parts := strings.Split(cleaned, ": ")
-	if len(parts) > 1 {
-		cleaned = strings.TrimSpace(parts[len(parts)-1])
-	} else {
-		cleaned = strings.TrimSpace(cleaned)
+	if isRequiredFlagError(err) {
+		return cmderr.ExitUsage
 	}
+	return cmderr.Code(err)
+}
 
-	// If the description was empty, fall back to the gRPC status code.
-	if cleaned == "" {
-		return s.Code().String()
+// errorHint returns the remedy line printed after the error, or "".
+func errorHint(err error) string {
+	if h := cmderr.Hint(err); h != "" {
+		return h
 	}
-
-	return cleaned
+	if isAuthError(err) {
+		return "Run 'admiral auth login' to sign in, or set " + credentials.EnvAPIKey + "."
+	}
+	if status.Code(err) == codes.PermissionDenied {
+		return cmderr.ScopeHint
+	}
+	return ""
 }
