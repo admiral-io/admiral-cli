@@ -255,6 +255,9 @@ func describeEnv(e *environmentv1.Environment, app *applicationv1.Application, s
 		d.Table("Recent Runs", []string{"ID", "Status", "Change Set", "Triggered By", "Age"}, rows)
 	}
 
+	if len(runs) > 0 {
+		d.Hint("To see the last run's transcript, run: admiral run logs " + runDisplay(runs[0]))
+	}
 	if sec.permissionDenied() {
 		d.Hint(cmderr.ScopeHint)
 	}

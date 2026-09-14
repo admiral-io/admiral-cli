@@ -12,10 +12,17 @@ import (
 
 	"github.com/spf13/cobra"
 
+	agentcmd "go.admiral.io/cli/cmd/agent"
 	appcmd "go.admiral.io/cli/cmd/app"
 	authcmd "go.admiral.io/cli/cmd/auth"
+	catalogcmd "go.admiral.io/cli/cmd/catalog"
+	changesetcmd "go.admiral.io/cli/cmd/changeset"
 	configcmd "go.admiral.io/cli/cmd/config"
+	credentialcmd "go.admiral.io/cli/cmd/credential"
 	envcmd "go.admiral.io/cli/cmd/env"
+	runcmd "go.admiral.io/cli/cmd/run"
+	sourcecmd "go.admiral.io/cli/cmd/source"
+	statecmd "go.admiral.io/cli/cmd/state"
 	internalauth "go.admiral.io/cli/internal/auth"
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
@@ -244,18 +251,40 @@ Documentation: https://admiral.io/docs`,
 	cmd.PersistentFlags().BoolVarP(&root.verbose, "verbose", "v", false, "enable verbose output")
 	cmd.PersistentFlags().BoolVar(&root.noInput, "no-input", false, "never prompt; fail instead (also ADMIRAL_NO_INPUT=1)")
 
-	cmd.AddCommand(
+	// Two groups on the root help screen: the resources the platform
+	// manages, and everything about the CLI itself. Every command belongs
+	// to a group; cobra panics on an unregistered GroupID.
+	addGroup(cmd, "resources", "Resources:",
 		appcmd.NewAppCmd(&clientOpts).Cmd,
 		envcmd.NewEnvCmd(&clientOpts).Cmd,
+		changesetcmd.NewChangeSetCmd(&clientOpts).Cmd,
+		runcmd.NewRunCmd(&clientOpts).Cmd,
+		agentcmd.NewAgentCmd(&clientOpts).Cmd,
+		catalogcmd.NewCatalogCmd(&clientOpts).Cmd,
+		sourcecmd.NewSourceCmd(&clientOpts).Cmd,
+		credentialcmd.NewCredentialCmd(&clientOpts).Cmd,
+		statecmd.NewStateCmd(&clientOpts).Cmd,
+	)
+	addGroup(cmd, "other", "Other:",
 		authcmd.NewAuthCmd(&clientOpts).Cmd,
 		configcmd.NewConfigCmd(&clientOpts).Cmd,
 		newWhoamiCmd(&clientOpts),
 		newCompletionCmd(),
 		newVersionCmd(ver),
 	)
+	cmd.SetHelpCommandGroupID("other")
 
 	root.cmd = cmd
 	root.clientOpts = &clientOpts
 
 	return root
+}
+
+// addGroup registers a help-screen group on root and adds cmds to it.
+func addGroup(root *cobra.Command, id, title string, cmds ...*cobra.Command) {
+	root.AddGroup(&cobra.Group{ID: id, Title: title})
+	for _, c := range cmds {
+		c.GroupID = id
+	}
+	root.AddCommand(cmds...)
 }
