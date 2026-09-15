@@ -7,25 +7,17 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"slices"
 )
 
 const settingsFile = "config.json"
 
-// ValidKeys lists all recognised configuration keys.
-var ValidKeys = []string{"insecure", "output", "plaintext", "server", "token"}
-
-// DisplayKeys defines the display order for `config list`.
-var DisplayKeys = []string{"server", "insecure", "plaintext", "token", "output"}
-
-// SensitiveKeys are masked in display output.
-var SensitiveKeys = []string{"token"}
-
-// BoolKeys are keys that only accept "true" or "false".
-var BoolKeys = []string{"insecure", "plaintext"}
-
 // Settings holds persistent CLI configuration.
 type Settings map[string]string
+
+// Get returns the value for a key, or "" if not set.
+func (s Settings) Get(key string) string {
+	return s[key]
+}
 
 // LoadSettings reads the config file. Returns empty Settings if the file does
 // not exist.
@@ -46,11 +38,6 @@ func LoadSettings(configDir string) (Settings, error) {
 	}
 
 	return s, nil
-}
-
-// IsBool reports whether a key expects a boolean value.
-func IsBool(key string) bool {
-	return slices.Contains(BoolKeys, key)
 }
 
 // Set persists a key-value pair.
@@ -84,46 +71,6 @@ func Unset(configDir, key string) error {
 
 	delete(s, key)
 	return write(configDir, s)
-}
-
-// Get returns the value for a key, or "" if not set.
-func (s Settings) Get(key string) string {
-	return s[key]
-}
-
-// IsValidKey reports whether key is a recognised config key.
-func IsValidKey(key string) bool {
-	return slices.Contains(ValidKeys, key)
-}
-
-// IsSensitive reports whether a key should be masked in output.
-func IsSensitive(key string) bool {
-	return slices.Contains(SensitiveKeys, key)
-}
-
-// Defaults for keys that have a default value.
-var Defaults = map[string]string{
-	"insecure":  "false",
-	"output":    "table",
-	"plaintext": "false",
-}
-
-// DisplayValue returns the display string for a config key's raw value,
-// handling masking of sensitive keys and falling back to defaults.
-func DisplayValue(key, raw string) string {
-	if IsSensitive(key) {
-		if raw != "" {
-			return "****"
-		}
-		return "(not set)"
-	}
-	if raw != "" {
-		return raw
-	}
-	if d, ok := Defaults[key]; ok {
-		return d
-	}
-	return "(not set)"
 }
 
 func write(configDir string, s Settings) error {

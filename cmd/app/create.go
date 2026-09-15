@@ -1,14 +1,12 @@
 package app
 
 import (
-	"text/tabwriter"
-
 	"github.com/spf13/cobra"
 
 	"go.admiral.io/cli/internal/client"
+	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
-	"go.admiral.io/cli/internal/util"
-	applicationv1 "go.admiral.io/sdk/proto/admiral/application/v1"
+	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
 )
 
 func newCreateCmd(opts *client.Options) *cobra.Command {
@@ -20,29 +18,24 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create <name>",
 		Short: "Create an application",
-		Long:  `Create a new application with the given name.`,
+		Long: `Create an application with the given name. Add environments to it with
+'admiral env create'.`,
 		Example: `  # Create an application
-  admctl app create billing-api
+  admiral app create billing-api
 
-  # Create with labels
-  admctl app create billing-api --label team=platform
-
-  # Create with description
-  admctl app create billing-api --description "Handles billing"`,
-		Args: util.ExactArgs(1),
+  # Create with a description and labels
+  admiral app create billing-api --description "Handles billing" --label team=platform`,
+		Args: flags.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			labels, err := util.ParseLabels(labelStrs)
+			labels, err := flags.ParseLabels(labelStrs)
 			if err != nil {
 				return err
 			}
 
 			req := &applicationv1.CreateApplicationRequest{
-				Name:   args[0],
-				Labels: labels,
-			}
-
-			if cmd.Flags().Changed("description") {
-				req.Description = &description
+				Name:        args[0],
+				Description: description,
+				Labels:      labels,
 			}
 
 			c, err := client.CreateClient(cmd.Context(), opts)
@@ -56,20 +49,12 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 				return err
 			}
 
-			p := output.NewPrinter(opts.OutputFormat)
-			return p.PrintResource(resp, func(w *tabwriter.Writer) {
-				app := resp.Application
-				output.Writeln(w, "NAME\tLABELS\tAGE")
-				output.Writef(w, "%s\t%s\t%s\n",
-					app.Name,
-					output.FormatLabels(app.Labels),
-					output.FormatAge(app.CreatedAt),
-				)
-			})
+			p := output.NewPrinter(cmd, opts.OutputFormat)
+			return p.PrintOne(resp.Application, resp.Application.Name, appTable.Render(p, resp.Application))
 		},
 	}
 
-	util.AddLabelFlag(cmd, &labelStrs, "label to attach (key=value, repeatable)")
+	flags.Label(cmd, &labelStrs, "label to attach (key=value, repeatable)")
 	cmd.Flags().StringVar(&description, "description", "", "application description")
 
 	return cmd

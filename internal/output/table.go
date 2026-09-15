@@ -2,33 +2,130 @@ package output
 
 import (
 	"fmt"
+	"slices"
+	"sort"
 	"strings"
 	"time"
 
+	commonv1 "buf.build/gen/go/admiral/common/protocolbuffers/go/admiral/common/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// FormatAge returns a human-readable age string from a protobuf timestamp.
-// Example: "5d", "3h", "2m", "10s".
+// Placeholders for cells with nothing to show. Angle brackets make them
+// unambiguous (a description could legitimately be "-") while keeping the
+// cell non-blank so awk column counting still works (kubectl).
+const (
+	// None marks a field that is absent or empty.
+	None = "<none>"
+	// Unknown marks a field the server has not determined yet.
+	Unknown = "<unknown>"
+)
+
+// FormatAge returns the time since ts in kubectl's AGE form: "13s", "5m12s",
+// "2h", "5d3h", "41d", "2y". See HumanDuration.
 func FormatAge(ts *timestamppb.Timestamp) string {
 	if ts == nil {
-		return "<unknown>"
+		return None
 	}
-	return formatDuration(time.Since(ts.AsTime()))
+	return HumanDuration(time.Since(ts.AsTime()))
 }
 
-// FormatTimestamp returns a formatted timestamp string.
+// FormatTimestamp renders ts as RFC3339 in UTC, for -o wide columns and log
+// lines.
 func FormatTimestamp(ts *timestamppb.Timestamp) string {
 	if ts == nil {
-		return "<none>"
+		return None
 	}
-	return ts.AsTime().Format(time.RFC3339)
+	return ts.AsTime().UTC().Format(time.RFC3339)
 }
 
-// FormatLabels returns a comma-separated key=value string from a label map.
+// FormatDescribeTime renders ts as an absolute local time for describe
+// views, the way kubectl does: "Wed, 01 Jul 2026 18:13:49 -0400".
+func FormatDescribeTime(ts *timestamppb.Timestamp) string {
+	if ts == nil {
+		return None
+	}
+	return ts.AsTime().Local().Format(DescribeTimeLayout)
+}
+
+// DescribeTimeLayout is the absolute local timestamp format used in describe
+// and status output.
+const DescribeTimeLayout = "Mon, 02 Jan 2006 15:04:05 -0700"
+
+// FormatElapsed renders a duration between two timestamps as Go's
+// Duration.String() truncated to seconds: "2m13s", "47s", "1h4m2s".
+func FormatElapsed(start, end *timestamppb.Timestamp) string {
+	if start == nil {
+		return None
+	}
+	var e time.Time
+	if end == nil {
+		e = time.Now()
+	} else {
+		e = end.AsTime()
+	}
+	d := e.Sub(start.AsTime())
+	if d < 0 {
+		d = 0
+	}
+	return d.Truncate(time.Second).String()
+}
+
+// HumanDuration is kubectl's age formatter, verbatim from
+// k8s.io/apimachinery/pkg/util/duration: at most two units, and the second
+// unit is dropped once the first is large enough that it no longer matters.
+func HumanDuration(d time.Duration) string {
+	// Allow deviation no more than 2 seconds (excluded) to tolerate machine
+	// time inconsistence, it can be considered as almost now.
+	if seconds := int(d.Seconds()); seconds < -1 {
+		return "<invalid>"
+	} else if seconds < 0 {
+		return "0s"
+	} else if seconds < 60*2 {
+		return fmt.Sprintf("%ds", seconds)
+	}
+	minutes := int(d / time.Minute)
+	if minutes < 10 {
+		s := int(d/time.Second) % 60
+		if s == 0 {
+			return fmt.Sprintf("%dm", minutes)
+		}
+		return fmt.Sprintf("%dm%ds", minutes, s)
+	} else if minutes < 60*3 {
+		return fmt.Sprintf("%dm", minutes)
+	}
+	hours := int(d / time.Hour)
+	if hours < 8 {
+		m := int(d/time.Minute) % 60
+		if m == 0 {
+			return fmt.Sprintf("%dh", hours)
+		}
+		return fmt.Sprintf("%dh%dm", hours, m)
+	} else if hours < 48 {
+		return fmt.Sprintf("%dh", hours)
+	} else if hours < 24*8 {
+		h := hours % 24
+		if h == 0 {
+			return fmt.Sprintf("%dd", hours/24)
+		}
+		return fmt.Sprintf("%dd%dh", hours/24, h)
+	} else if hours < 24*365*2 {
+		return fmt.Sprintf("%dd", hours/24)
+	} else if hours < 24*365*8 {
+		dy := int(hours/24) % 365
+		if dy == 0 {
+			return fmt.Sprintf("%dy", hours/24/365)
+		}
+		return fmt.Sprintf("%dy%dd", hours/24/365, dy)
+	}
+	return fmt.Sprintf("%dy", int(hours/24/365))
+}
+
+// FormatLabels returns a comma-separated key=value string from a label map,
+// keys sorted so output is stable across runs.
 func FormatLabels(labels map[string]string) string {
 	if len(labels) == 0 {
-		return "<none>"
+		return None
 	}
 	parts := make([]string, 0, len(labels))
 	for k, v := range labels {
@@ -38,31 +135,66 @@ func FormatLabels(labels map[string]string) string {
 		parts = append(parts, fmt.Sprintf("%s=%s", k, v))
 	}
 	if len(parts) == 0 {
-		return "<none>"
+		return None
 	}
+	slices.Sort(parts)
 	return strings.Join(parts, ",")
 }
 
-// FormatEnum strips a common prefix from protobuf enum names for display.
-// Example: "CLUSTER_HEALTH_STATUS_HEALTHY" with the prefix "CLUSTER_HEALTH_STATUS_" → "Healthy".
-func FormatEnum(enumStr, prefix string) string {
-	s := strings.TrimPrefix(enumStr, prefix)
-	if s == "" || s == "UNSPECIFIED" {
-		return "Unknown"
+// LabelLines renders a label map as sorted "k=v" lines for Describe.Fields.
+func LabelLines(labels map[string]string) []string {
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		keys = append(keys, k)
 	}
-	// Title-case is the result: "HEALTHY" → "Healthy"
-	return strings.ToUpper(s[:1]) + strings.ToLower(s[1:])
+	sort.Strings(keys)
+	out := make([]string, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, k+"="+labels[k])
+	}
+	return out
 }
 
-func formatDuration(d time.Duration) string {
-	if d < time.Minute {
-		return fmt.Sprintf("%ds", int(d.Seconds()))
+// FormatActor renders an ActorRef for table/detail output, preferring
+// display name, then email, then ID.
+func FormatActor(a *commonv1.ActorRef) string {
+	if a == nil {
+		return None
 	}
-	if d < time.Hour {
-		return fmt.Sprintf("%dm", int(d.Minutes()))
+	if a.DisplayName != "" {
+		return a.DisplayName
 	}
-	if d < 24*time.Hour {
-		return fmt.Sprintf("%dh", int(d.Hours()))
+	if a.Email != "" {
+		return a.Email
 	}
-	return fmt.Sprintf("%dd", int(d.Hours()/24))
+	if a.Id != "" {
+		return a.Id
+	}
+	return None
+}
+
+// Truncate shortens s to width runes, ending in a single "…" when cut.
+// Widths too small to hold the ellipsis just cut the string.
+func Truncate(s string, width int) string {
+	if width < 0 {
+		width = 0
+	}
+	r := []rune(s)
+	if len(r) <= width {
+		return s
+	}
+	if width <= 1 {
+		return string(r[:width])
+	}
+	return string(r[:width-1]) + "…"
+}
+
+// OrEmpty returns None when s is empty (or whitespace), otherwise s.
+// Use for free-text fields (description, message) so empty cells render as
+// "-" instead of leaving blank space that misaligns columns.
+func OrEmpty(s string) string {
+	if strings.TrimSpace(s) == "" {
+		return None
+	}
+	return s
 }

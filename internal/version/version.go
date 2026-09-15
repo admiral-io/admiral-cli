@@ -24,6 +24,35 @@ type Version struct {
 	AsciiArt string `json:"-"`
 }
 
+func (v Version) String() string {
+	b := strings.Builder{}
+	w := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
+
+	if v.AsciiArt != "" {
+		_, _ = fmt.Fprint(w, v.AsciiArt)
+	}
+
+	_, _ = fmt.Fprintf(w, "GitVersion:\t%s\n", v.GitVersion)
+	_, _ = fmt.Fprintf(w, "GitCommit:\t%s\n", v.GitCommit)
+	_, _ = fmt.Fprintf(w, "BuildDate:\t%s\n", v.BuildDate)
+	_, _ = fmt.Fprintf(w, "BuiltBy:\t%s\n", v.BuiltBy)
+	_, _ = fmt.Fprintf(w, "GoVersion:\t%s\n", v.GoVersion)
+	_, _ = fmt.Fprintf(w, "Compiler:\t%s\n", v.Compiler)
+	_, _ = fmt.Fprintf(w, "Platform:\t%s\n", v.Platform)
+
+	_ = w.Flush()
+	return b.String()
+}
+
+func (v *Version) JSONString() (string, error) {
+	b, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return "", err
+	}
+
+	return string(b), nil
+}
+
 type Option func(v *Version)
 
 func WithAsciiArt(name string) Option {
@@ -36,6 +65,25 @@ func WithBuiltBy(name string) Option {
 	return func(v *Version) {
 		v.BuiltBy = name
 	}
+}
+
+func GetVersion(options ...Option) Version {
+	buildInfo := getBuildInfo()
+	v := Version{
+		GitVersion: firstNonEmpty(getGitVersion(buildInfo), "devel"),
+		GitCommit:  firstNonEmpty(getCommit(buildInfo), unknown),
+		BuildDate:  firstNonEmpty(getBuildDate(buildInfo), unknown),
+		BuiltBy:    unknown,
+		GoVersion:  runtime.Version(),
+		Compiler:   runtime.Compiler,
+		Platform:   fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH),
+	}
+
+	for _, opt := range options {
+		opt(&v)
+	}
+
+	return v
 }
 
 func getBuildInfo() *debug.BuildInfo {
@@ -51,7 +99,9 @@ func getGitVersion(bi *debug.BuildInfo) string {
 		return ""
 	}
 
-	// TODO: remove this when the issue https://github.com/golang/go/issues/29228 is fixed
+	// Go 1.24+ stamps a VCS-derived version here (golang/go#50603). It is still
+	// "(devel)" or empty for builds without VCS metadata (-buildvcs=false,
+	// tarballs, go run/test); treat those as unknown so ldflags can fill in.
 	if bi.Main.Version == "(devel)" || bi.Main.Version == "" {
 		return ""
 	}
@@ -91,52 +141,4 @@ func firstNonEmpty(ss ...string) string {
 		}
 	}
 	return ""
-}
-
-func GetVersion(options ...Option) Version {
-	buildInfo := getBuildInfo()
-	v := Version{
-		GitVersion: firstNonEmpty(getGitVersion(buildInfo), "devel"),
-		GitCommit:  firstNonEmpty(getCommit(buildInfo), unknown),
-		BuildDate:  firstNonEmpty(getBuildDate(buildInfo), unknown),
-		BuiltBy:    unknown,
-		GoVersion:  runtime.Version(),
-		Compiler:   runtime.Compiler,
-		Platform:   fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH),
-	}
-
-	for _, opt := range options {
-		opt(&v)
-	}
-
-	return v
-}
-
-func (v Version) String() string {
-	b := strings.Builder{}
-	w := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
-
-	if v.AsciiArt != "" {
-		_, _ = fmt.Fprint(w, v.AsciiArt)
-	}
-
-	_, _ = fmt.Fprintf(w, "GitVersion:\t%s\n", v.GitVersion)
-	_, _ = fmt.Fprintf(w, "GitCommit:\t%s\n", v.GitCommit)
-	_, _ = fmt.Fprintf(w, "BuildDate:\t%s\n", v.BuildDate)
-	_, _ = fmt.Fprintf(w, "BuiltBy:\t%s\n", v.BuiltBy)
-	_, _ = fmt.Fprintf(w, "GoVersion:\t%s\n", v.GoVersion)
-	_, _ = fmt.Fprintf(w, "Compiler:\t%s\n", v.Compiler)
-	_, _ = fmt.Fprintf(w, "Platform:\t%s\n", v.Platform)
-
-	_ = w.Flush()
-	return b.String()
-}
-
-func (v *Version) JSONString() (string, error) {
-	b, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
-		return "", err
-	}
-
-	return string(b), nil
 }

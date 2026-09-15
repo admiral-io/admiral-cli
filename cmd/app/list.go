@@ -1,14 +1,12 @@
 package app
 
 import (
-	"text/tabwriter"
-
 	"github.com/spf13/cobra"
 
 	"go.admiral.io/cli/internal/client"
+	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
-	"go.admiral.io/cli/internal/util"
-	applicationv1 "go.admiral.io/sdk/proto/admiral/application/v1"
+	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
 )
 
 func newListCmd(opts *client.Options) *cobra.Command {
@@ -23,16 +21,16 @@ func newListCmd(opts *client.Options) *cobra.Command {
 		Short: "List applications",
 		Long:  `List all applications visible to the current user.`,
 		Example: `  # List all applications
-  admctl app list
+  admiral app list
 
   # List with label filter
-  admctl app list --label team=platform
+  admiral app list --label team=platform
 
   # Paginated listing
-  admctl app list --page-size 10`,
-		Args: cobra.NoArgs,
+  admiral app list --page-size 10`,
+		Args: flags.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			filter, err := util.BuildLabelFilter(labelStrs)
+			filter, err := flags.LabelFilter(labelStrs)
 			if err != nil {
 				return err
 			}
@@ -52,48 +50,19 @@ func newListCmd(opts *client.Options) *cobra.Command {
 				return err
 			}
 
-			p := output.NewPrinter(opts.OutputFormat)
-			if err := p.PrintResource(resp, func(w *tabwriter.Writer) {
-				if opts.OutputFormat == output.FormatWide {
-					output.Writeln(w, "ID\tNAME\tDESCRIPTION\tLABELS\tCREATED BY\tUPDATED BY\tCREATED\tUPDATED\tAGE")
-					for _, app := range resp.Applications {
-						output.Writef(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-							app.Id,
-							app.Name,
-							app.Description,
-							output.FormatLabels(app.Labels),
-							app.CreatedBy,
-							app.UpdatedBy,
-							output.FormatTimestamp(app.CreatedAt),
-							output.FormatTimestamp(app.UpdatedAt),
-							output.FormatAge(app.CreatedAt),
-						)
-					}
-				} else {
-					output.Writeln(w, "NAME\tDESCRIPTION\tAGE")
-					for _, app := range resp.Applications {
-						output.Writef(w, "%s\t%s\t%s\n",
-							app.Name,
-							app.Description,
-							output.FormatAge(app.CreatedAt),
-						)
-					}
-				}
-			}); err != nil {
-				return err
-			}
-
-			if resp.NextPageToken != "" && opts.OutputFormat != output.FormatJSON && opts.OutputFormat != output.FormatYAML {
-				output.Writef(cmd.ErrOrStderr(), "\nNEXT PAGE TOKEN: %s\n", resp.NextPageToken)
-			}
-
-			return nil
+			p := output.NewPrinter(cmd, opts.OutputFormat)
+			return p.PrintList(output.List{
+				Kind:          "applications",
+				Items:         output.Messages(resp.Applications),
+				Name:          func(i int) string { return resp.Applications[i].Name },
+				NextPageToken: resp.NextPageToken,
+			}, appTable.Render(p, resp.Applications...))
 		},
 	}
 
 	cmd.Flags().Int32Var(&pageSize, "page-size", 50, "maximum number of results per page")
 	cmd.Flags().StringVar(&pageToken, "page-token", "", "pagination token from a previous response")
-	util.AddLabelFlag(cmd, &labelStrs, "filter by label (key=value, repeatable)")
+	flags.Label(cmd, &labelStrs, "filter by label (key=value, repeatable)")
 
 	return cmd
 }

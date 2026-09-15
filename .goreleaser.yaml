@@ -156,7 +156,7 @@ scoops:
       name: scoop-bucket
     directory: bucket
     homepage: https://admiral.io
-    description: Admiral - Platform Orchestrator CLI for managing clusters, runners, and service accounts.
+    description: Admiral CLI - Platform Orchestrator
     license: Apache-2.0
     commit_author:
       name: admiral-ci

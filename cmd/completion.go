@@ -15,27 +15,27 @@ func newCompletionCmd() *cobra.Command {
 To load completions:
 
 Bash:
-  $ source <(admctl completion bash)
+  $ source <(admiral completion bash)
   # To load completions for each session, execute once:
   # Linux:
-  $ admctl completion bash > /etc/bash_completion.d/admctl
+  $ admiral completion bash > /etc/bash_completion.d/admiral
   # macOS:
-  $ admctl completion bash > $(brew --prefix)/etc/bash_completion.d/admctl
+  $ admiral completion bash > $(brew --prefix)/etc/bash_completion.d/admiral
 
 Zsh:
-  $ source <(admctl completion zsh)
+  $ source <(admiral completion zsh)
   # To load completions for each session, execute once:
-  $ admctl completion zsh > "${fpath[1]}/_admctl"
+  $ admiral completion zsh > "${fpath[1]}/_admiral"
 
 Fish:
-  $ admctl completion fish | source
+  $ admiral completion fish | source
   # To load completions for each session, execute once:
-  $ admctl completion fish > ~/.config/fish/completions/admctl.fish
+  $ admiral completion fish > ~/.config/fish/completions/admiral.fish
 
 PowerShell:
-  PS> admctl completion powershell | Out-String | Invoke-Expression
+  PS> admiral completion powershell | Out-String | Invoke-Expression
   # To load completions for each session, execute once:
-  PS> admctl completion powershell > admctl.ps1
+  PS> admiral completion powershell > admiral.ps1
 `,
 		DisableFlagsInUseLine: true,
 		ValidArgs:             []string{"bash", "zsh", "fish", "powershell"},
