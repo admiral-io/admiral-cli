@@ -1,5 +1,3 @@
-> :warning: This project is currently **under heavy development and is not considered stable yet**. This means that there may be bugs or unexpected behavior, and we don't recommend using it in production.
-
 # Admiral CLI
 
 [![Release](https://img.shields.io/github/v/release/admiral-io/admiral-cli)](https://github.com/admiral-io/admiral-cli/releases/latest)
@@ -27,8 +25,8 @@ brew install admiral-io/tap/admiral
 ### Scoop (Windows)
 
 ```powershell
-scoop bucket add admiral https://github.com/admiral-io/scoop-bucket
-scoop install admiral
+scoop bucket add admiral-io https://github.com/admiral-io/scoop-bucket
+scoop install admiral-io/admiral
 ```
 
 ### Docker
