@@ -4,7 +4,6 @@
 [![build](https://github.com/admiral-io/admiral-cli/actions/workflows/release.yaml/badge.svg)](https://github.com/admiral-io/admiral-cli/actions/workflows/release.yaml)
 [![CodeQL](https://github.com/admiral-io/admiral-cli/actions/workflows/codeql.yaml/badge.svg)](https://github.com/admiral-io/admiral-cli/actions/workflows/codeql.yaml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/admiral-io/admiral-cli/blob/master/LICENSE)
-[![Go Report Card](https://goreportcard.com/badge/go.admiral.io/cli)](https://goreportcard.com/report/go.admiral.io/cli)
 
 The official command-line interface for [Admiral](https://admiral.io), the deployment orchestrator by [Admiral](https://github.com/admiral-io).
 
