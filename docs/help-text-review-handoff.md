@@ -159,3 +159,43 @@ enum names in human output). Tests that assert on help strings:
 - `ListEnvironments` / `ListRuns` / `ListChangeSets` are `Unimplemented` on
   api.admiral.io (`SERVER_FOLLOWUPS.md`); `env` verbs can't be exercised
   live until that deploys.
+
+## The slice after this one: API-key (PAT) creation from the CLI
+
+Goal, in Martin's words: confirm the full auth path end to end — human
+browser login, then static credentials, fully working.
+
+Today `auth login --with-token` can only *store* a key that was created in
+the web UI. The missing piece is creating and managing keys from the CLI so
+the whole loop runs without the UI:
+
+1. `admiral auth login` (browser) → session
+2. create an API key with that session
+3. `admiral auth login --with-token` (or `ADMIRAL_API_KEY`) with the new key
+4. `admiral whoami` + a real command (`app list`) succeed on the key
+5. list / revoke the key; the revoked key is refused
+
+What already exists:
+
+- Server: `UserAPI` in `admiral-protos/protos/admiral/api/user/v1/user.proto`
+  has `CreateApiKey`, `ListApiKeys`, `GetApiKey`, `UpdateApiKey`,
+  `RevokeApiKey`. The SDK exposes it as `UserAPIClient` (`c.User()` in
+  the CLI's client wrapper; `whoami` already calls `GetMe` on it).
+- CLI: the API-key credential path (`Token` scheme), `--with-token`, the
+  1Password `op://` reference store, and `auth status`/`whoami`. See memory
+  note *cli-auth-model*.
+- Agent tokens are the closest existing shape: `cmd/agent/token/` (`create`
+  prints the secret once, `get`, `list`, `revoke` with confirm/`--force`).
+  Reuse that structure and its wording.
+
+Command shape to decide (style guide §1: gcloud-style nesting; the memory
+note *command-structure* applies): most likely `admiral auth token create
+<name> [--expires-in] [--scope …]`, `list`, `get`, `revoke` — under `auth`
+because the key belongs to the signed-in user, not to a resource. Check
+what `CreateApiKeyRequest` carries (name, expiry, scopes) before choosing
+flags, and whether the response returns the secret once like agent SATs.
+
+Verification is the point of the slice: write the five-step loop above as
+an e2e test against the real server (`test/e2e`, see `docs/e2e-testing.md`
+— it already assumes a seeded user + PAT) and run it by hand once with the
+browser login as the starting credential.
