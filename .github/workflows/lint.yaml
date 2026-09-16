@@ -29,4 +29,4 @@ jobs:
       # golangci-lint's misspell linter covers Go sources; this covers the
       # Markdown docs with the same US locale.
       - name: Check spelling in Markdown
-        run: go run github.com/client9/misspell/cmd/misspell@v0.3.4 -locale US -error $(git ls-files '*.md')
+        run: git ls-files -z '*.md' | xargs -0 go run github.com/client9/misspell/cmd/misspell@v0.3.4 -locale US -error
