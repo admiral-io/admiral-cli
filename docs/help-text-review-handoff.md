@@ -19,6 +19,28 @@ fresh session on branch `martin/next`.
 - Root help on next uses two groups (`Resources:` / `Other:`) via
   `addGroup` in `cmd/root.go`. On master it is flat. Keep it that way.
 
+## Decided since 2026-09-15: environments are addressed as `app/env`
+
+Decided 2026-09-17 and implemented on `martin/next` (style guide §1.2, §1.5,
+§14 #25). It came out of reading the platform design doc
+(`admiral-platform/docs/design/component-registry-and-publish-pipeline.md`),
+whose change-set verbs address things by path (`my-api/prod/users-db`).
+
+- `admiral env describe billing-api/prod` is the canonical form; `env
+  describe prod --app billing-api` still works. `--env` takes the path too
+  (`run list --env shop/prod`). Path or flag, never both: `--app` beside a
+  path is a usage error even when the values agree.
+- `ADMIRAL_APP` and `ADMIRAL_ENV` are removed. `--app`/`--env` have no
+  default; the flag help no longer mentions one. The not-found remedy is
+  `Pass --app or give the environment as app/env.`
+- Completion of the path form is segment by segment (`sh<TAB>` → `shop/`,
+  `shop/pr<TAB>` → `prod`).
+
+For the help-text review this means: every `Example` on an env-scoped verb
+(`env get|describe|update|delete|create`, `changeset create|list|copy`,
+`run list|rollback`) shows the path form first and the `--app` form once,
+and no flag description says "default from ADMIRAL_APP".
+
 ## How to see what the user sees
 
 ```sh

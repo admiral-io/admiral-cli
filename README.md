@@ -92,8 +92,8 @@ Available keys: `server`, `output`, `insecure`, `plaintext`
 ### Usage
 
 Every resource has the same verbs: `list`, `get`, `describe`, `create`,
-`update`, `delete`. Commands take the resource name or ID; `--app` scopes
-environment commands to an application (or set `ADMIRAL_APP`).
+`update`, `delete`. Commands take the resource name or ID. An environment
+is addressed by its path, `app/env`, or by name with `--app`.
 
 ```bash
 # Applications
@@ -102,16 +102,16 @@ admiral app create billing-api --description "Handles billing" --label team=plat
 admiral app describe billing-api
 
 # Environments of an application
-admiral env create staging --app billing-api
+admiral env create billing-api/staging
 admiral env list --app billing-api
-admiral env describe staging --app billing-api
+admiral env describe billing-api/staging
 
 # Machine-readable output for scripts
 admiral app list -o json
 admiral env list --app billing-api -o name
 
 # Skip confirmation prompts in automation
-admiral env delete staging --app billing-api --force
+admiral env delete billing-api/staging --force
 ```
 
 Run `admiral <command> --help` for every flag and more examples.

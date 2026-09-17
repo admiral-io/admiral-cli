@@ -28,11 +28,20 @@ func newRollbackCmd(opts *client.Options) *cobra.Command {
 previous successful run. The rollback goes through the same plan/approve/apply
 cycle as a normal run, producing a Terraform plan that shows the diff from
 current state to the prior configuration.`,
-		Example: `  admiral run rollback <run-id> --app billing --env staging
-  admiral run rollback <run-id> --app billing --env staging -m "reverting bad change"`,
+		Example: `  # Into the run's own environment
+  admiral run rollback <run-id>
+
+  # Into a named environment
+  admiral run rollback <run-id> --env billing/staging
+  admiral run rollback <run-id> --env billing/staging -m "reverting bad change"`,
 		Args: flags.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			sourceRunID := args[0]
+
+			app, env, err := flags.EnvTarget(cmd, appName, envName)
+			if err != nil {
+				return err
+			}
 
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
@@ -42,29 +51,29 @@ current state to the prior configuration.`,
 
 			// If app/env weren't provided, resolve them from the source run.
 			var resolvedAppID, resolvedEnvID string
-			if appName == "" || envName == "" {
+			if app == "" || env == "" {
 				runResp, err := c.Run().GetRun(cmd.Context(), &runv1.GetRunRequest{
 					RunId: sourceRunID,
 				})
 				if err != nil {
 					return fmt.Errorf("fetching source run: %w", err)
 				}
-				if appName == "" {
+				if app == "" {
 					resolvedAppID = runResp.Run.ApplicationId
 				}
-				if envName == "" {
+				if env == "" {
 					resolvedEnvID = runResp.Run.EnvironmentId
 				}
 			}
 
 			if resolvedAppID == "" {
-				resolvedAppID, err = resolve.App(cmd.Context(), c.Application(), appName)
+				resolvedAppID, err = resolve.App(cmd.Context(), c.Application(), app)
 				if err != nil {
 					return err
 				}
 			}
 			if resolvedEnvID == "" {
-				resolvedEnvID, err = resolve.Environment(cmd.Context(), c.Environment(), c.Application(), appName, envName)
+				resolvedEnvID, err = resolve.Environment(cmd.Context(), c.Environment(), c.Application(), app, env)
 				if err != nil {
 					return err
 				}
@@ -91,7 +100,7 @@ current state to the prior configuration.`,
 	}
 
 	flags.App(cmd, &appName, opts)
-	flags.Env(cmd, &envName)
+	flags.Env(cmd, &envName, opts)
 	cmd.Flags().StringVarP(&message, "message", "m", "", "run message")
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "skip the confirmation prompt")
 

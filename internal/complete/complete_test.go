@@ -13,15 +13,31 @@ import (
 	"go.admiral.io/cli/internal/client"
 	sdkclient "go.admiral.io/sdk/client"
 	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
+	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
 )
 
 type fakeClient struct {
 	sdkclient.AdmiralClient
 	apps *appClient
+	envs *envClient
 }
 
 func (f *fakeClient) Application() applicationv1.ApplicationAPIClient { return f.apps }
+func (f *fakeClient) Environment() environmentv1.EnvironmentAPIClient { return f.envs }
 func (f *fakeClient) Close() error                                    { return nil }
+
+// envClient serves one page of environments and records the filter it
+// was asked for, so a test can check the scope.
+type envClient struct {
+	environmentv1.EnvironmentAPIClient
+	envs   []*environmentv1.Environment
+	filter string
+}
+
+func (m *envClient) ListEnvironments(_ context.Context, req *environmentv1.ListEnvironmentsRequest, _ ...grpc.CallOption) (*environmentv1.ListEnvironmentsResponse, error) {
+	m.filter = req.Filter
+	return &environmentv1.ListEnvironmentsResponse{Environments: m.envs}, nil
+}
 
 type appClient struct {
 	applicationv1.ApplicationAPIClient
@@ -48,14 +64,44 @@ func (m *appClient) ListApplications(_ context.Context, req *applicationv1.ListA
 
 func useClient(t *testing.T, apps *appClient, err error) {
 	t.Helper()
+	useClients(t, apps, &envClient{}, err)
+}
+
+func useClients(t *testing.T, apps *appClient, envs *envClient, err error) {
+	t.Helper()
 	prev := newClient
 	newClient = func(context.Context, *client.Options) (sdkclient.AdmiralClient, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &fakeClient{apps: apps}, nil
+		return &fakeClient{apps: apps, envs: envs}, nil
 	}
 	t.Cleanup(func() { newClient = prev })
+}
+
+// scopedCmd is a command with --app registered and, when app is not
+// empty, already parsed from the line.
+func scopedCmd(t *testing.T, app string) *cobra.Command {
+	t.Helper()
+	cmd := &cobra.Command{Use: "x"}
+	cmd.Flags().String("app", "", "")
+	if app != "" {
+		require.NoError(t, cmd.Flags().Set("app", app))
+	}
+	return cmd
+}
+
+// shopWithEnvs is one application, shop (id app-1), with two environments.
+func shopWithEnvs() (*appClient, *envClient) {
+	apps := &appClient{pages: [][]*applicationv1.Application{{
+		{Id: "app-1", Name: "shop", Description: "Storefront"},
+		{Id: "app-2", Name: "shipping"},
+	}}}
+	envs := &envClient{envs: []*environmentv1.Environment{
+		{Name: "prod", Description: "Production"},
+		{Name: "staging"},
+	}}
+	return apps, envs
 }
 
 func app(name, desc string) *applicationv1.Application {
@@ -116,4 +162,68 @@ func TestFirst_OnlyCompletesFirstPositional(t *testing.T) {
 
 func TestFlag_PanicsOnUnknownFlag(t *testing.T) {
 	require.Panics(t, func() { Flag(&cobra.Command{}, "nope", First(nil)) })
+}
+
+func TestEnvs_BareNameCompletesInsideAppFlag(t *testing.T) {
+	apps, envs := shopWithEnvs()
+	useClients(t, apps, envs, nil)
+	got, directive := Envs(&client.Options{})(scopedCmd(t, "shop"), nil, "pr")
+	require.Equal(t, []string{"prod\tProduction"}, got)
+	require.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+	require.Equal(t, "field['application_id'] = 'app-1'", envs.filter)
+}
+
+// With no scope on the line, the only thing to offer is the first segment
+// of the path, and the shell must not add a space after it.
+func TestEnvs_NoScopeOffersAppPrefixes(t *testing.T) {
+	apps, envs := shopWithEnvs()
+	useClients(t, apps, envs, nil)
+	got, directive := Envs(&client.Options{})(scopedCmd(t, ""), nil, "sh")
+	require.Equal(t, []string{"shop/\tStorefront", "shipping/"}, got)
+	require.Equal(t, cobra.ShellCompDirectiveNoFileComp|cobra.ShellCompDirectiveNoSpace, directive)
+}
+
+func TestEnvs_PathCompletesSecondSegment(t *testing.T) {
+	apps, envs := shopWithEnvs()
+	useClients(t, apps, envs, nil)
+	got, directive := Envs(&client.Options{})(scopedCmd(t, ""), nil, "shop/st")
+	require.Equal(t, []string{"shop/staging"}, got)
+	require.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+	require.Equal(t, "field['application_id'] = 'app-1'", envs.filter)
+
+	got, _ = Envs(&client.Options{})(scopedCmd(t, ""), nil, "shop/")
+	require.Equal(t, []string{"shop/prod\tProduction", "shop/staging"}, got)
+}
+
+// A command without an --app flag (changeset copy --env) still completes.
+func TestEnvs_NoAppFlagRegistered(t *testing.T) {
+	apps, envs := shopWithEnvs()
+	useClients(t, apps, envs, nil)
+	got, _ := Envs(&client.Options{})(&cobra.Command{}, nil, "shop/p")
+	require.Equal(t, []string{"shop/prod\tProduction"}, got)
+}
+
+func TestEnvs_UnknownAppIsSilent(t *testing.T) {
+	apps, envs := shopWithEnvs()
+	useClients(t, apps, envs, nil)
+	got, directive := Envs(&client.Options{})(scopedCmd(t, ""), nil, "nope/")
+	require.Nil(t, got)
+	require.Equal(t, cobra.ShellCompDirectiveError, directive)
+}
+
+// A new environment's name cannot be completed; only its application can.
+func TestNewEnv_OffersOnlyAppPrefixes(t *testing.T) {
+	apps, envs := shopWithEnvs()
+	useClients(t, apps, envs, nil)
+	got, directive := NewEnv(&client.Options{})(scopedCmd(t, ""), nil, "sh")
+	require.Equal(t, []string{"shop/\tStorefront", "shipping/"}, got)
+	require.Equal(t, cobra.ShellCompDirectiveNoFileComp|cobra.ShellCompDirectiveNoSpace, directive)
+
+	got, directive = NewEnv(&client.Options{})(scopedCmd(t, ""), nil, "shop/")
+	require.Nil(t, got)
+	require.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+
+	got, directive = NewEnv(&client.Options{})(scopedCmd(t, "shop"), nil, "")
+	require.Nil(t, got)
+	require.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
 }

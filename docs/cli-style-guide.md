@@ -85,9 +85,19 @@ admiral <verb> [flags]                            # daily-loop verbs: status, lo
 
 ### 1.2 Identity and scoping
 
-- **The child's name is positional; the parents are flags.**
-  `admiral env get prod --app shop`. `admiral run get run-vnx81r` needs no
-  parent because run IDs are globally unique. (gcloud, gh `-R`)
+- **The child's name is positional; the parents are flags, or the path.**
+  `admiral env get prod --app shop` and `admiral env get shop/prod` are the
+  same command. A positional (or `--env`) that contains `/` is a path, most
+  general segment first: `app/env`, later `app/env/component`. Each segment
+  is a name or ID; names cannot contain `/`, so the split is unambiguous.
+  `admiral run get run-vnx81r` needs no parent because run IDs are globally
+  unique. (gcloud fully-qualified names, gh `-R owner/repo`)
+- **Path or flag, never both.** `env get shop/prod --app shop` is a usage
+  error even though the values agree — `--app cannot be combined with a
+  path` — because a rule with no exception is the one people remember. A
+  second bare positional beside a path inherits its parent: `env diff
+  shop/prod staging`. Lists keep the parent as a flag (`env list --app
+  shop`) because a list names no child.
 - **A positional accepts a name or an ID.** Server IDs are unambiguous (UUIDs,
   `run-…`, `cs-…` display IDs), so the CLI resolves whichever it is given. The
   same rule applies to parent flags: `--app` takes a name or ID. Existing
@@ -95,15 +105,15 @@ admiral <verb> [flags]                            # daily-loop verbs: status, lo
   later release. (az `--ids`, gcloud fully-qualified positionals)
 - **Ambiguous names are an error, never a guess.** List the candidates with
   their IDs and exit 1. (kubectl, az)
-- **Scope resolution order** for `--app` and `--env`, highest first:
-  1. the flag,
-  2. `ADMIRAL_APP` / `ADMIRAL_ENV`,
-  3. the current context's defaults (`admiral config set app shop`),
-  4. error: `no application specified; pass --app or set ADMIRAL_APP`.
-
-  Flag help states the fallback: `--app string   application name or ID
-  (default from ADMIRAL_APP or config)`. (gcloud "Alternatively, set the
-  property", gh `GH_REPO`, fly `FLY_APP`)
+- **Scope has two sources, and nothing implicit.** The path on the line,
+  else the `--app`/`--env` flag, else a usage error that names both:
+  `no application specified; pass --app or give the environment as
+  app/env`. There is no environment-variable or config default. `ADMIRAL_APP`
+  and `ADMIRAL_ENV` shipped in v0.1.0 and were removed (§14 #25): a scope
+  inherited from the shell is invisible on the line that deletes `prod`, and
+  the path form makes being explicit cost one word. (`FLY_APP` and `GH_REPO`
+  exist because those tools lack a path form on most verbs; `gh -R
+  owner/repo` is the form people actually use)
 - **Lists that span a parent gain a leading scope column.** `run list --app
   shop` (all envs) shows `ENV` first, the way kubectl adds `NAMESPACE` under
   `-A`. A list always requires enough scope to be finite: `run list` requires
@@ -184,10 +194,12 @@ goes through `resolve.X` without a `complete.X` is incomplete.
 - **Names only, never IDs.** Nobody tab-completes a UUID; `-o name` and
   `list` exist for that. A candidate carries its description after a tab
   (`billing-api\tBilling and invoicing`) so zsh and fish can show it.
-- **Scope comes from the same sources as the command.** `--env` completes
-  inside the `--app` already on the line, else `ADMIRAL_APP`, else config —
-  the resolution order of §1.2. With no scope there is nothing to offer, and
-  that is a silent empty result, not an error.
+- **Scope comes from the line, as for the command.** A bare environment
+  name (positional or `--env`) completes inside the `--app` already on the
+  line. A path completes segment by segment: `env describe sh<TAB>` offers
+  `shop/` with no trailing space, `env describe shop/pr<TAB>` offers `prod`.
+  With neither `--app` nor a slash there is nothing to offer except
+  application prefixes, and an empty result is silent, not an error.
 - **Never prompt, never block, never write to stdout.** The shell owns the
   terminal during completion; the shell scripts discard stderr, and anything
   on stdout is parsed as a candidate. The round trip is bounded (2s), runs
@@ -203,7 +215,8 @@ goes through `resolve.X` without a `complete.X` is incomplete.
   `ValidArgsFunction: complete.First(complete.Apps(opts))`; the parent flag
   helpers in `internal/flags` (`flags.App`, `flags.Env`) register the flag
   completion themselves, so a command that registers its scope flags the
-  standard way gets completion for free.
+  standard way gets completion for free. `complete.Envs` handles both the
+  bare and the path form.
 - **Verify with** `admiral __complete app get bil` — it prints the
   candidates and the directive without a shell in the loop.
 
@@ -255,7 +268,7 @@ Default columns:
 Example:
 
 ```
-$ admiral run list --app shop --env prod
+$ admiral run list --env shop/prod
 ID            STATUS     CHANGE-SET   TITLE                        AGE
 run-vnx81r    Succeeded  cs-7f2a1     Bump api to 1.4.0            3h
 run-8k2m1q    Failed     cs-6e019     Rotate DB credentials        2d
@@ -270,7 +283,7 @@ row. (kubectl `No resources found in X namespace.`, gh, gcloud `Listed 0
 items.`; argocd's bare header is the anti-pattern)
 
 ```
-$ admiral run list --app shop --env staging
+$ admiral run list --env shop/staging
 No runs found in shop/staging.
 ```
 
@@ -368,7 +381,7 @@ Recent Runs:
   run-8k2m1q  staging  Failed     cs-6e019    Rotate DB credentials  2d
 ```
 
-#### `admiral env describe prod --app shop` — the operator view
+#### `admiral env describe shop/prod` — the operator view
 
 `env describe` is the command an operator reaches for to answer "what is
 configured here, and is it healthy?" without opening the UI. It is
@@ -513,7 +526,7 @@ Conditions:
 - Metrics lines are marked `<stale>` rather than dropped, so an operator can
   still see the last numbers.
 
-#### `admiral env diff prod staging --app shop` — comparing environments
+#### `admiral env diff shop/prod staging` — comparing environments
 
 Change sets move between environments with `changeset copy <id> --env
 staging` (already exists). To *see* how two environments differ before doing
@@ -522,7 +535,7 @@ same `~/+/-` grammar as a plan, read as "what would have to change to make
 the right side match the left":
 
 ```
-$ admiral env diff prod staging --app shop
+$ admiral env diff shop/prod staging
 Components (prod -> staging):
   ~ api        version  2.1.3 -> 2.1.2
   ~ api        values.replicas  3 -> 1
@@ -643,14 +656,14 @@ Recent Jobs:
 
 ### 2.6 `status` (dashboard)
 
-`admiral status [--app A --env E] [-w] [--interval 5s]` is the fly-style
+`admiral status [app/env] [-w] [--interval 5s]` is the fly-style
 dashboard for one environment: a `Key = value` block, then the components
 table, then in-flight runs. It is `env describe` minus the history, refreshed
 in place with `-w`. Piped or in `-o json` it prints one snapshot and exits.
 (fly `status --watch`, gh `run watch`)
 
 ```
-$ admiral status --app shop --env prod
+$ admiral status shop/prod
 App          shop
 Environment  prod
 Health       Degraded
@@ -805,7 +818,7 @@ all rendered.
   the new run is the *result*:
 
   ```
-  $ admiral run rollback run-p9x2ka --app shop --env prod
+  $ admiral run rollback run-p9x2ka --env shop/prod
   » Re-apply the configuration from run-p9x2ka (Succeeded, 3h ago) to shop/prod as a new run? [y/N] y
   » Rolling shop/prod forward to the configuration of run-p9x2ka... done, run-r8t1zz
   » Rollback re-applies component versions and variables; it does not restore data or state files.
@@ -831,7 +844,7 @@ all rendered.
 
 ### 2.12 Metrics
 
-When metrics land, `admiral env top --app A --env E` (and `run top`) follows
+When metrics land, `admiral env top app/env` (and `run top`) follows
 `docker stats`: one row per component, units inside the values, live redraw
 only on a TTY, one snapshot when piped or with `--no-stream`.
 
@@ -878,7 +891,7 @@ Prints one bare identifier per line (name for CRUD resources, ID for runs,
 change sets and tokens), nothing else. This is the xargs contract:
 
 ```
-admiral env list --app shop -o name | xargs -I{} admiral env delete {} --app shop -f
+admiral env list --app shop -o name | xargs -I{} admiral env delete shop/{} -f
 ```
 
 `-q/--quiet` on `list` is an alias for `-o name`. (kubectl `-o name`, docker
@@ -1001,7 +1014,8 @@ Run 'admiral env list --app shop' to see environments.
   supplies the lowercase/no-period rule)
 - Line 2 (optional, strongly encouraged): a remedy that names the exact command
   or flag, placed last because the eye lands there. Patterns:
-  `Run 'admiral auth login' to sign in.` / `Pass --app or set ADMIRAL_APP.` /
+  `Run 'admiral auth login' to sign in.` / `Pass --app or give the
+  environment as app/env.` /
   `See 'admiral run logs --help' for usage.` (clig.dev, railway, stripe)
 - **Not-found says what was looked up and where.** Never `not found` alone
   (helm's `Error: release: not found` is the anti-pattern).
@@ -1061,8 +1075,7 @@ Commands` grouped, `Flags`, `Global Flags`, footer.
   environments`. (kubectl, gh, docker; deliberate choice against Heroku's
   lowercase)
 - **Flag descriptions**: lowercase sentence fragment, no period, enum values
-  and defaults inline, env fallback named:
-  `--app string   application name or ID (default from ADMIRAL_APP or config)`.
+  and defaults inline: `--app string   application name or ID`.
   Units live in the description, never the name. (Heroku, az)
 - **Every leaf command has an `Example` block** of 2–4 real invocations, each
   preceded by a `# comment`, no `$` prefix, most common first. (clig.dev "lead
@@ -1098,9 +1111,9 @@ Commands` grouped, `Flags`, `Global Flags`, footer.
   gcloud, gh)
 - **Env var names are mechanical**: `ADMIRAL_` + flag name uppercased with
   `-`→`_`: `ADMIRAL_SERVER`, `ADMIRAL_TIMEOUT`, `ADMIRAL_CONFIG_DIR`,
-  `ADMIRAL_OUTPUT`, `ADMIRAL_NO_INPUT`, `ADMIRAL_APP`, `ADMIRAL_ENV`,
-  `ADMIRAL_API_KEY`, `ADMIRAL_DEBUG`. Uppercase `[A-Z0-9_]` only, single-line
-  values. Also honoured: `NO_COLOR`, `CLICOLOR_FORCE`, `TERM`, `PAGER`,
+  `ADMIRAL_OUTPUT`, `ADMIRAL_NO_INPUT`, `ADMIRAL_API_KEY`, `ADMIRAL_DEBUG`.
+  Uppercase `[A-Z0-9_]` only, single-line values. Scope (`--app`, `--env`)
+  is the one flag family with no env or config layer; see §1.2. Also honoured: `NO_COLOR`, `CLICOLOR_FORCE`, `TERM`, `PAGER`,
   `BROWSER` (a command, not a path), `HTTP(S)_PROXY`/`NO_PROXY`, `COLUMNS`.
 - `ADMIRAL_API_KEY` in the environment is the documented CI path; a `--token`
   flag never exists because it leaks into `ps` and shell history. `auth login
@@ -1140,7 +1153,7 @@ applied by the server; --sort-by and --limit by the CLI, in that order.`
 ## 11. Verbs that open the browser
 
 `-w/--web` on every `get`, `describe`, `list` and `status`, and a root
-`admiral open [--app --env]`, print `Opening <url> in your browser.` to stderr
+`admiral open [app/env]`, print `Opening <url> in your browser.` to stderr
 and open it via `BROWSER` or the OS default. Every `describe` and every
 `create` prints the resource `URL:`. (gh, fly, heroku `open`)
 
@@ -1167,8 +1180,9 @@ and open it via `BROWSER` or the OS default. Every `describe` and every
 
 - [ ] Noun singular, verb from the fixed set, aliases declared, ≤ 3 tokens
       before the name.
-- [ ] Positional is the child name-or-ID; parents are `--app`/`--env` with env
-      and config fallback documented in the flag help.
+- [ ] Positional is the child name-or-ID, or its path (`app/env`); parents
+      are `--app`/`--env`; path or flag, never both; no env or config
+      fallback.
 - [ ] Every name-or-ID positional has `ValidArgsFunction: complete.First(…)`;
       every parent flag and enum flag has a flag completion (§1.5).
 - [ ] `Short` capitalised imperative without period; `Example` block with
@@ -1220,12 +1234,14 @@ deliberate decision, with the alternative it rejects.
 | 22 | agent status is a bare word | `Online`/`Stale`/`Offline` with thresholds; env health becomes `Unknown (agent stale)` | a stale agent must never look like a healthy environment |
 | 23 | no way to compare environments | `env diff <a> <b>` in plan grammar | `changeset copy` moves changes between envs; operators need to see the gap first |
 | 24 | only `auth login --scope` completes; names are typed in full | every name positional and parent flag completes from the server (§1.5); done for `app` and `--app`, remaining resources tracked in COMMAND_TREE.md | the operator's mental model is kubectl's: type a prefix, Tab, move on |
+| 25 | `--app`/`--env` default from `ADMIRAL_APP`/`ADMIRAL_ENV` (shipped in v0.1.0) | an environment is addressed as `app/env`; path or flag, never both; the env vars are removed (§1.2) | a scope inherited from the shell is invisible on the line that deletes prod; with the path form, explicit costs one word |
 
 Open questions the guide does not settle:
 
 - Whether `admiral link` (a `.admiral/` file in the repo, railway/vercel style)
-  should join flag > env > config as a fourth scope source. Recommended: not
-  until there is a repo-to-app mapping the server knows about.
+  should join path > flag as a third scope source. Recommended: not until
+  there is a repo-to-app mapping the server knows about, and never as an
+  environment variable (§14 #25).
 - Whether `describe -o json` should exist as a composite document. The guide
   says no (kubectl); if agents need it, add child `list` verbs
   (`run revisions`, `env components`, `env vars`) rather than a bespoke shape.
@@ -1252,7 +1268,7 @@ NAME   DESCRIPTION               LABELS          AGE
 shop   Storefront and checkout   team=commerce   0s
 » URL: https://app.admiral.io/apps/shop
 
-$ admiral env create prod --app shop --runner gke-prod --label tier=1
+$ admiral env create shop/prod --runner gke-prod --label tier=1
 NAME   APP    HEALTH    DESCRIPTION   LABELS   AGE
 prod   shop   Unknown   <none>        tier=1   0s
 
@@ -1414,7 +1430,7 @@ run-r8t1zz   Succeeded   <none>       Re-apply configuration of run-p9x2ka  12s
 ### Status and the operator view
 
 ```
-$ admiral status --app shop --env prod
+$ admiral status shop/prod
 App          shop
 Environment  prod
 Health       Healthy
@@ -1445,7 +1461,7 @@ $ echo $?
 
 $ admiral env get prod
 » Error: no application specified
-» Pass --app or set ADMIRAL_APP.
+» Pass --app or give the environment as app/env.
 $ echo $?
 2
 

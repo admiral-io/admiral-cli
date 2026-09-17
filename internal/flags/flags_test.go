@@ -57,19 +57,80 @@ func TestEnum(t *testing.T) {
 	require.Contains(t, cmd.Flags().Lookup("phase").Usage, "plan, apply")
 }
 
-func TestScopeFlagsDefaultFromEnv(t *testing.T) {
-	t.Setenv(EnvApp, "shop")
-	t.Setenv(EnvEnv, "prod")
+// Scope never comes from the shell: ADMIRAL_APP and ADMIRAL_ENV were
+// removed (style guide §14 #25), so the flags have no default.
+func TestScopeFlagsHaveNoDefault(t *testing.T) {
+	t.Setenv("ADMIRAL_APP", "shop")
+	t.Setenv("ADMIRAL_ENV", "prod")
 	var app, env string
 	cmd := &cobra.Command{Use: "x", RunE: func(*cobra.Command, []string) error { return nil }}
 	App(cmd, &app, &client.Options{})
-	Env(cmd, &env)
+	Env(cmd, &env, &client.Options{})
 	_, err := exec(cmd)
+	require.NoError(t, err)
+	require.Empty(t, app)
+	require.Empty(t, env)
+	require.NotContains(t, cmd.Flags().Lookup("app").Usage, "ADMIRAL")
+}
+
+// scoped runs cmd with a --app flag registered and returns what EnvTarget
+// makes of the given --app value and target.
+func scoped(t *testing.T, target string, flagArgs ...string) (string, string, error) {
+	t.Helper()
+	var appFlag, gotApp, gotEnv string
+	var gotErr error
+	cmd := &cobra.Command{Use: "x", RunE: func(cmd *cobra.Command, _ []string) error {
+		gotApp, gotEnv, gotErr = EnvTarget(cmd, appFlag, target)
+		return nil
+	}}
+	App(cmd, &appFlag, &client.Options{})
+	_, err := exec(cmd, flagArgs...)
+	require.NoError(t, err)
+	return gotApp, gotEnv, gotErr
+}
+
+func TestEnvTarget_BareNameTakesAppFromFlag(t *testing.T) {
+	app, env, err := scoped(t, "prod", "--app", "shop")
 	require.NoError(t, err)
 	require.Equal(t, "shop", app)
 	require.Equal(t, "prod", env)
 
-	_, err = exec(cmd, "--app", "other")
+	app, env, err = scoped(t, "prod")
 	require.NoError(t, err)
-	require.Equal(t, "other", app, "flag beats env")
+	require.Empty(t, app, "no flag, no scope; resolve reports the missing app")
+	require.Equal(t, "prod", env)
+}
+
+func TestEnvTarget_PathCarriesItsOwnScope(t *testing.T) {
+	app, env, err := scoped(t, "shop/prod")
+	require.NoError(t, err)
+	require.Equal(t, "shop", app)
+	require.Equal(t, "prod", env)
+}
+
+// Path or flag, never both — even when they agree.
+func TestEnvTarget_PathAndFlagIsUsageError(t *testing.T) {
+	for _, flag := range []string{"shop", "other"} {
+		_, _, err := scoped(t, "shop/prod", "--app", flag)
+		require.EqualError(t, err, "--app cannot be combined with a path")
+		require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
+		require.Equal(t, "Give the environment as app/env or with --app, not both.", cmderr.Hint(err))
+	}
+}
+
+func TestEnvTarget_MalformedPath(t *testing.T) {
+	for _, target := range []string{"/prod", "shop/", "a/b/c"} {
+		_, _, err := scoped(t, target)
+		require.EqualError(t, err, `invalid environment "`+target+`": expected app/env`)
+		require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
+	}
+}
+
+// A command without --app (changeset copy) can still take a path.
+func TestEnvTarget_NoAppFlagRegistered(t *testing.T) {
+	cmd := &cobra.Command{Use: "x"}
+	app, env, err := EnvTarget(cmd, "", "shop/prod")
+	require.NoError(t, err)
+	require.Equal(t, "shop", app)
+	require.Equal(t, "prod", env)
 }

@@ -18,12 +18,20 @@ func newCopyCmd(opts *client.Options) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:     "copy <id>",
-		Short:   "Copy a change set to another environment",
-		Long:    `Create a new OPEN change set in the target environment by cloning the source's entries and variable entries. Title/description default to the source's values when empty.`,
-		Example: `  admiral changeset copy <source-id> --env prod`,
-		Args:    flags.ExactArgs(1),
+		Use:   "copy <id>",
+		Short: "Copy a change set to another environment",
+		Long:  `Create a new OPEN change set in the target environment by cloning the source's entries and variable entries. Title/description default to the source's values when empty.`,
+		Example: `  # Into another environment of the same application
+  admiral changeset copy <source-id> --env prod
+
+  # Into an environment of another application
+  admiral changeset copy <source-id> --env platform/prod`,
+		Args: flags.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			app, env, err := flags.EnvTarget(cmd, "", envName)
+			if err != nil {
+				return err
+			}
 
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
@@ -35,7 +43,11 @@ func newCopyCmd(opts *client.Options) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resolvedEnvID, err := resolve.Environment(cmd.Context(), c.Environment(), c.Application(), src.ChangeSet.ApplicationId, envName)
+			// A bare --env is looked up in the source change set's application.
+			if app == "" {
+				app = src.ChangeSet.ApplicationId
+			}
+			resolvedEnvID, err := resolve.Environment(cmd.Context(), c.Environment(), c.Application(), app, env)
 			if err != nil {
 				return err
 			}
@@ -54,7 +66,7 @@ func newCopyCmd(opts *client.Options) *cobra.Command {
 			return p.PrintOne(resp.ChangeSet, changeSetID(resp.ChangeSet), changeSetTable.Render(p, resp.ChangeSet))
 		},
 	}
-	flags.Env(cmd, &envName)
+	flags.Env(cmd, &envName, opts)
 	cmd.Flags().StringVar(&title, "title", "", "title override (defaults to source title)")
 	cmd.Flags().StringVar(&description, "description", "", "description override (defaults to source description)")
 	return cmd

@@ -27,9 +27,14 @@ func newListCmd(opts *client.Options) *cobra.Command {
 		Short: "List change sets",
 		Long:  `List change sets, optionally scoped to an application/environment and filtered by status.`,
 		Example: `  admiral changeset list --app billing
-  admiral changeset list --app billing --env staging --status OPEN`,
+  admiral changeset list --env billing/staging --status OPEN`,
 		Args: flags.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			app, env, err := flags.EnvTarget(cmd, appName, envName)
+			if err != nil {
+				return err
+			}
+
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
 				return err
@@ -37,8 +42,8 @@ func newListCmd(opts *client.Options) *cobra.Command {
 			defer c.Close() //nolint:errcheck
 
 			var clauses []string
-			if appName != "" {
-				resolvedAppID, err := resolve.App(cmd.Context(), c.Application(), appName)
+			if app != "" {
+				resolvedAppID, err := resolve.App(cmd.Context(), c.Application(), app)
 				if err != nil {
 					return err
 				}
@@ -47,8 +52,8 @@ func newListCmd(opts *client.Options) *cobra.Command {
 					return err
 				}
 				clauses = append(clauses, clause)
-				if envName != "" {
-					resolvedEnvID, err := resolve.Environment(cmd.Context(), c.Environment(), c.Application(), appName, envName)
+				if env != "" {
+					resolvedEnvID, err := resolve.Environment(cmd.Context(), c.Environment(), c.Application(), app, env)
 					if err != nil {
 						return err
 					}
@@ -89,7 +94,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 	}
 
 	flags.App(cmd, &appName, opts)
-	flags.Env(cmd, &envName)
+	flags.Env(cmd, &envName, opts)
 	flags.Enum(cmd, &statusF, "status", "", "filter by status", "open", "deployed", "discarded")
 	cmd.Flags().Int32Var(&pageSize, "page-size", 50, "maximum number of results per page")
 	cmd.Flags().StringVar(&pageToken, "page-token", "", "pagination token from a previous response")

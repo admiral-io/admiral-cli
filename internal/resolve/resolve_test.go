@@ -57,7 +57,7 @@ func TestApp_Empty(t *testing.T) {
 	_, err := App(context.Background(), &appClient{}, "")
 	require.EqualError(t, err, "no application specified")
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
-	require.Equal(t, "Pass --app or set ADMIRAL_APP.", cmderr.Hint(err))
+	require.Equal(t, "Pass --app.", cmderr.Hint(err))
 }
 
 func TestApp_ByName(t *testing.T) {
@@ -94,6 +94,7 @@ func TestEnvironment_NameNeedsApp(t *testing.T) {
 	_, err := Environment(context.Background(), &envClient{}, &appClient{}, "", "prod")
 	require.EqualError(t, err, "no application specified")
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
+	require.Equal(t, "Pass --app or give the environment as app/env.", cmderr.Hint(err))
 }
 
 func TestEnvironment_ScopedLookup(t *testing.T) {

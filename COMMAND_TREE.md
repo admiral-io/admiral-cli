@@ -286,7 +286,7 @@ Every positional and flag that goes through `resolve.X` must offer names via `co
 
 | Resolver | Positionals | Flags | Notes |
 |---|---|---|---|
-| `Environment` | `env get\|describe\|update\|delete`, `changeset copy` | `--env` on `changeset create\|list\|copy`, `run list\|rollback` | scope from `--app` on the line, else `ADMIRAL_APP`; `flags.Env` should register it like `flags.App` does |
+| `Environment` | `env get\|describe\|update\|delete`, `changeset copy` | `--env` on `changeset create\|list\|copy`, `run list\|rollback` | bare name scoped by `--app` on the line; path form `app/env` completes segment by segment (style guide §1.5); `flags.Env` registers it like `flags.App` does |
 | `Source` | `source get\|describe\|update\|delete\|test\|versions` | `--source` on `catalog create\|update` | |
 | `Credential` | `credential get\|describe\|update\|delete` | `--credential` on `source create\|update` | |
 | `CatalogItem` | `catalog get\|describe\|update\|delete\|resolve`, `changeset entry` | | |

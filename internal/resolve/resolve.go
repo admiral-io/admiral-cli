@@ -74,7 +74,7 @@ func (e *AmbiguousError) Hint() string {
 // App resolves an application name or ID.
 func App(ctx context.Context, c applicationv1.ApplicationAPIClient, nameOrID string) (string, error) {
 	if nameOrID == "" {
-		return "", cmderr.UsageHint("Pass --app or set ADMIRAL_APP.", "no application specified")
+		return "", cmderr.UsageHint("Pass --app.", "no application specified")
 	}
 	return byName(ctx, "application", nameOrID, "", "app list", "",
 		func(ctx context.Context, f string) ([]*applicationv1.Application, error) {
@@ -90,13 +90,17 @@ func App(ctx context.Context, c applicationv1.ApplicationAPIClient, nameOrID str
 }
 
 // Environment resolves an environment name or ID. A UUID needs no
-// application; a name is looked up inside app (itself a name or ID).
+// application; a name is looked up inside app (itself a name or ID). The
+// caller has already split an app/env path with flags.EnvTarget.
 func Environment(ctx context.Context, envs environmentv1.EnvironmentAPIClient, apps applicationv1.ApplicationAPIClient, app, nameOrID string) (string, error) {
 	if IsUUID(nameOrID) {
 		return nameOrID, nil
 	}
 	if nameOrID == "" {
-		return "", cmderr.UsageHint("Pass --env or set ADMIRAL_ENV.", "no environment specified")
+		return "", cmderr.UsageHint("Pass --env as a name or app/env.", "no environment specified")
+	}
+	if app == "" {
+		return "", cmderr.UsageHint("Pass --app or give the environment as app/env.", "no application specified")
 	}
 	appID, err := App(ctx, apps, app)
 	if err != nil {

@@ -22,10 +22,17 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 		Use:   "create",
 		Short: "Create a change set",
 		Long:  `Create a new OPEN change set scoped to (application, environment). Returns the change set ID for use in subsequent entry / variable commands.`,
-		Example: `  admiral changeset create --app billing --env staging --title "bump database"
-  admiral changeset create --app billing --env prod --title "rotate region" --description "move to us-west-2"`,
+		Example: `  admiral changeset create --env billing/staging --title "bump database"
+  admiral changeset create --env billing/prod --title "rotate region" --description "move to us-west-2"
+
+  # By name, scoped with --app
+  admiral changeset create --app billing --env staging --title "bump database"`,
 		Args: flags.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			app, env, err := flags.EnvTarget(cmd, appName, envName)
+			if err != nil {
+				return err
+			}
 
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
@@ -33,11 +40,11 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 			}
 			defer c.Close() //nolint:errcheck
 
-			resolvedAppID, err := resolve.App(cmd.Context(), c.Application(), appName)
+			resolvedAppID, err := resolve.App(cmd.Context(), c.Application(), app)
 			if err != nil {
 				return err
 			}
-			resolvedEnvID, err := resolve.Environment(cmd.Context(), c.Environment(), c.Application(), appName, envName)
+			resolvedEnvID, err := resolve.Environment(cmd.Context(), c.Environment(), c.Application(), app, env)
 			if err != nil {
 				return err
 			}
@@ -58,7 +65,7 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 	}
 
 	flags.App(cmd, &appName, opts)
-	flags.Env(cmd, &envName)
+	flags.Env(cmd, &envName, opts)
 	cmd.Flags().StringVar(&title, "title", "", "human-readable title")
 	cmd.Flags().StringVar(&description, "description", "", "longer description")
 	return cmd
