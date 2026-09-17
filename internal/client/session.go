@@ -11,12 +11,12 @@ import (
 	sdkclient "go.admiral.io/sdk/client"
 	agentv1 "go.admiral.io/sdk/proto/admiral/api/agent/v1"
 	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
-	catalogv1 "go.admiral.io/sdk/proto/admiral/api/catalog/v1"
 	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
 	credentialv1 "go.admiral.io/sdk/proto/admiral/api/credential/v1"
 	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
 	healthcheckv1 "go.admiral.io/sdk/proto/admiral/api/healthcheck/v1"
 	invitationv1 "go.admiral.io/sdk/proto/admiral/api/invitation/v1"
+	registryv1 "go.admiral.io/sdk/proto/admiral/api/registry/v1"
 	runv1 "go.admiral.io/sdk/proto/admiral/api/run/v1"
 	sourcev1 "go.admiral.io/sdk/proto/admiral/api/source/v1"
 	tenantv1 "go.admiral.io/sdk/proto/admiral/api/tenant/v1"
@@ -86,10 +86,6 @@ func (c *sessionClient) Application() applicationv1.ApplicationAPIClient {
 	return applicationv1.NewApplicationAPIClient(c.conn)
 }
 
-func (c *sessionClient) Catalog() catalogv1.CatalogAPIClient {
-	return catalogv1.NewCatalogAPIClient(c.conn)
-}
-
 func (c *sessionClient) ChangeSet() changesetv1.ChangeSetAPIClient {
 	return changesetv1.NewChangeSetAPIClient(c.conn)
 }
@@ -108,6 +104,10 @@ func (c *sessionClient) Healthcheck() healthcheckv1.HealthcheckAPIClient {
 
 func (c *sessionClient) Invitation() invitationv1.InvitationAPIClient {
 	return invitationv1.NewInvitationAPIClient(c.conn)
+}
+
+func (c *sessionClient) Registry() registryv1.RegistryAPIClient {
+	return registryv1.NewRegistryAPIClient(c.conn)
 }
 
 func (c *sessionClient) Run() runv1.RunAPIClient { return runv1.NewRunAPIClient(c.conn) }

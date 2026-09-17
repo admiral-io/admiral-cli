@@ -17,7 +17,6 @@ import (
 	"go.admiral.io/cli/internal/filter"
 	agentv1 "go.admiral.io/sdk/proto/admiral/api/agent/v1"
 	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
-	catalogv1 "go.admiral.io/sdk/proto/admiral/api/catalog/v1"
 	credentialv1 "go.admiral.io/sdk/proto/admiral/api/credential/v1"
 	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
 	sourcev1 "go.admiral.io/sdk/proto/admiral/api/source/v1"
@@ -147,21 +146,6 @@ func Source(ctx context.Context, c sourcev1.SourceAPIClient, nameOrID string) (s
 		},
 		func(s *sourcev1.Source) string { return s.Name },
 		func(s *sourcev1.Source) string { return s.Id },
-	)
-}
-
-// CatalogItem resolves a catalog item name or ID.
-func CatalogItem(ctx context.Context, c catalogv1.CatalogAPIClient, nameOrID string) (string, error) {
-	return byName(ctx, "catalog item", nameOrID, "", "catalog list", "",
-		func(ctx context.Context, f string) ([]*catalogv1.CatalogItem, error) {
-			resp, err := c.ListCatalogItems(ctx, &catalogv1.ListCatalogItemsRequest{Filter: f})
-			if err != nil {
-				return nil, err
-			}
-			return resp.CatalogItems, nil
-		},
-		func(m *catalogv1.CatalogItem) string { return m.Name },
-		func(m *catalogv1.CatalogItem) string { return m.Id },
 	)
 }
 
