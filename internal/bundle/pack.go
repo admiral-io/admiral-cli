@@ -133,7 +133,7 @@ func PackContext(ctx context.Context, root string, creds Credentials) (*Packed, 
 		}
 		pins = f.pins
 	case KindHelm:
-		vendored, pins, version, err = closeHelm(ctx, rootAbs, stage, newHelmFetcher())
+		vendored, pins, version, err = closeHelm(ctx, rootAbs, stage, newHelmFetcher(creds))
 		if err != nil {
 			return nil, err
 		}

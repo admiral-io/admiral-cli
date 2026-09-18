@@ -22,7 +22,11 @@ func TestAmbientCredentials(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(home, ".terraform.d", "credentials.tfrc.json"), []byte(
 		`{"credentials": {"login.example": {"token": "from-login"}}}`), 0o644))
 
+	require.NoError(t, os.WriteFile(filepath.Join(home, "repositories.yaml"), []byte(
+		"repositories:\n- name: acme\n  url: https://charts.acme.example/stable\n  username: helm-user\n  password: helm-pw\n- name: public\n  url: https://charts.public.example\n"), 0o644))
+
 	a := &AmbientCredentials{home: home, environ: []string{
+		"HELM_REPOSITORY_CONFIG=" + filepath.Join(home, "repositories.yaml"),
 		"TF_TOKEN_registry_acme__corp_example=acme-env",
 		"tf_token_lower_example=lower",
 		"TF_TOKEN_empty_example=",
@@ -42,6 +46,17 @@ func TestAmbientCredentials(t *testing.T) {
 	assert.Equal(t, "from-login", lookup("https://login.example/"), "tofu login's file is read too")
 	assert.Equal(t, "", lookup("https://empty.example/"))
 	assert.Equal(t, "", lookup("https://registry.opentofu.org/"))
+
+	c, err := a.Lookup(context.Background(), "https://charts.acme.example/stable/index.yaml")
+	require.NoError(t, err)
+	require.NotNil(t, c)
+	assert.Equal(t, &BasicAuth{Username: "helm-user", Password: "helm-pw"}, c.Basic, "helm repo add --username")
+	c, err = a.Lookup(context.Background(), "https://charts.acme.example/other/index.yaml")
+	require.NoError(t, err)
+	assert.Nil(t, c, "a prefix, not a host")
+	c, err = a.Lookup(context.Background(), "https://charts.public.example/index.yaml")
+	require.NoError(t, err)
+	assert.Nil(t, c, "no username, nothing to present")
 }
 
 func TestCredentialFamilies(t *testing.T) {

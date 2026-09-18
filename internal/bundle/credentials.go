@@ -9,11 +9,13 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/zclconf/go-cty/cty"
+	"gopkg.in/yaml.v3"
 )
 
 // Credentials answers what a fetch may present to a URL. The platform
@@ -103,7 +105,9 @@ func NewAmbientCredentials() *AmbientCredentials {
 	return &AmbientCredentials{environ: os.Environ(), home: home}
 }
 
-// Lookup returns the token configured for the URL's host, or nil.
+// Lookup returns what the machine has for the URL: a registry token for its
+// host, or the basic auth `helm repo add --username` stored for a chart
+// repository whose URL is a prefix of it. Nil otherwise.
 func (a *AmbientCredentials) Lookup(_ context.Context, rawURL string) (*Credential, error) {
 	host := hostOf(rawURL)
 	if host == "" {
@@ -119,7 +123,61 @@ func (a *AmbientCredentials) Lookup(_ context.Context, rawURL string) (*Credenti
 	if tok != "" {
 		return &Credential{Token: tok}, nil
 	}
-	return nil, nil
+	return a.fromHelmRepositories(rawURL)
+}
+
+// fromHelmRepositories reads Helm's repositories.yaml (HELM_REPOSITORY_CONFIG,
+// else Helm's per-OS config directory) for a repository whose URL is the
+// longest prefix of rawURL and carries a username.
+func (a *AmbientCredentials) fromHelmRepositories(rawURL string) (*Credential, error) {
+	p := a.envValue("HELM_REPOSITORY_CONFIG")
+	if p == "" {
+		if a.home == "" {
+			return nil, nil
+		}
+		p = filepath.Join(helmConfigDir(a.home, a.envValue("XDG_CONFIG_HOME")), "repositories.yaml")
+	}
+	src, err := os.ReadFile(p)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var f struct {
+		Repositories []struct {
+			URL      string `yaml:"url"`
+			Username string `yaml:"username"`
+			Password string `yaml:"password"`
+		} `yaml:"repositories"`
+	}
+	if err := yaml.Unmarshal(src, &f); err != nil {
+		return nil, fmt.Errorf("%s: %w", p, err)
+	}
+	var best *Credential
+	bestLen := 0
+	for _, r := range f.Repositories {
+		u := strings.TrimSuffix(r.URL, "/")
+		if r.Username == "" || u == "" {
+			continue
+		}
+		if (rawURL == u || strings.HasPrefix(rawURL, u+"/")) && len(u) > bestLen {
+			best, bestLen = &Credential{Basic: &BasicAuth{Username: r.Username, Password: r.Password}}, len(u)
+		}
+	}
+	return best, nil
+}
+
+// helmConfigDir is where Helm keeps repositories.yaml: XDG on Linux,
+// ~/Library/Preferences on macOS, as Helm's own helmpath does.
+func helmConfigDir(home, xdg string) string {
+	if xdg != "" {
+		return filepath.Join(xdg, "helm")
+	}
+	if runtime.GOOS == "darwin" {
+		return filepath.Join(home, "Library", "Preferences", "helm")
+	}
+	return filepath.Join(home, ".config", "helm")
 }
 
 // fromEnv finds TF_TOKEN_<host>, with `.` as `_` and `-` as `__`, matched

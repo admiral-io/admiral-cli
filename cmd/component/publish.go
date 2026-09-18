@@ -44,11 +44,21 @@ The directory is packed and uploaded; the registry normalizes it, digests
 it, inspects it for its contract, and stores it. Publishing the same tree
 twice yields the same revision, so a publish-everything CI step is safe.
 
-Terraform modules are closed before upload: every module call whose source
-is a local path outside the directory is copied into vendor/ and the call
-rewritten to point there, recursively. The working copy is never modified.
-Remote sources (registry addresses, git URLs) are not fetched yet; vendor
-them into the tree first.
+Terraform modules are closed before upload: every module call is brought
+into the bundle and rewritten to point there, recursively. A local path
+outside the directory is copied; a registry address is resolved to the
+newest version its constraint allows; a git URL is cloned at its ref; an
+archive is downloaded. Each resolution is recorded on the revision as a pin.
+A chart's dependencies are vendored from Chart.lock, from HTTP repositories
+and oci:// registries. Credentials are the machine's own: TF_TOKEN_<host>
+and ~/.tofurc for registries, git's agent and helpers, helm repo add
+--username, and docker's login for OCI. The working copy is never modified.
+
+Pointed at an OCI chart reference, oci://host/path/name:version, publish
+pulls that chart and publishes it as it is, named after the chart and
+tagged with its version. That is how a chart the tenant does not own enters
+the registry: the bytes reviewed are the bytes deployed, whatever upstream
+does to the tag later.
 
 The component is created on first publish, named after the directory
 unless --name says otherwise. --tag names the revision; a semver tag can be
@@ -75,7 +85,10 @@ component. This is the form CI runs on every push.`,
   admiral component publish
 
   # A manifest that is not at the current directory
-  admiral component publish -f infra/admiral.yaml`,
+  admiral component publish -f infra/admiral.yaml
+
+  # A chart the tenant does not own, pulled from an OCI registry
+  admiral component publish oci://ghcr.io/argoproj/argo-helm/argo-cd:7.7.0`,
 		Args: flags.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			labels, err := flags.ParseLabels(labelStrs)
@@ -85,6 +98,12 @@ component. This is the form CI runs on every push.`,
 			dir := "."
 			if len(args) == 1 {
 				dir = args[0]
+			}
+			if strings.HasPrefix(dir, "oci://") {
+				if manifestArg != "" {
+					return cmderr.Usage("pass either an OCI reference or --manifest, not both")
+				}
+				return publishOCI(cmd, opts, dir, name, kind, tags, description, labels)
 			}
 			abs, err := filepath.Abs(dir)
 			if err != nil {
@@ -145,7 +164,7 @@ component. This is the form CI runs on every push.`,
 		},
 	}
 
-	cmd.Flags().StringVar(&name, "name", "", "component name (default: the directory's name)")
+	cmd.Flags().StringVar(&name, "name", "", "component name (default: the directory's name, or the chart's)")
 	flags.Enum(cmd, &kind, "kind", "", "what the directory is, when detection should not decide", "terraform", "helm", "manifests")
 	cmd.Flags().StringArrayVarP(&tags, "tag", "t", nil, "tag to set on the revision (repeatable)")
 	cmd.Flags().StringVar(&description, "description", "", "component description, applied when the component is created")
@@ -179,6 +198,47 @@ func pack(ctx context.Context, p *output.Printer, abs, display string) (*bundle.
 	return packed, nil
 }
 
+// publishOCI pulls a chart from an OCI registry and publishes it.
+func publishOCI(cmd *cobra.Command, opts *client.Options, reference, name, kind string, tags []string, description string, labels map[string]string) error {
+	if kind != "" && kind != "helm" {
+		return cmderr.Usage("an OCI reference is a chart; --kind %s does not apply", kind)
+	}
+	p := output.NewPrinter(cmd, opts.OutputFormat)
+	pulled, err := bundle.PullChart(cmd.Context(), reference, bundle.NewAmbientCredentials())
+	if err != nil {
+		return err
+	}
+	defer pulled.Cleanup()
+	output.Writef(p.Err(), "Pulled %s (%s)\n", reference, pulled.Provenance.Commit)
+
+	if name == "" {
+		name = filepath.Base(pulled.Dir)
+	}
+	if !namePattern.MatchString(name) {
+		return cmderr.Usage("component name %q must be lowercase letters, digits and hyphens (use --name)", name)
+	}
+	packed, err := pack(cmd.Context(), p, pulled.Dir, reference)
+	if err != nil {
+		return err
+	}
+	c, err := client.CreateClient(cmd.Context(), opts)
+	if err != nil {
+		return err
+	}
+	defer c.Close() //nolint:errcheck
+
+	resp, err := publishOne(cmd, p, c, publishRequest{
+		name: name, kind: registryv1.ComponentKind_HELM, tags: tags, description: description, labels: labels,
+		dir: pulled.Dir, packed: packed, provenance: &pulled.Provenance,
+	})
+	if err != nil {
+		return err
+	}
+	rev := resp.Revision
+	rev.Tags = applyTags(cmd.Context(), p, c, resp, packed, afterPublish{})
+	return p.PrintOne(rev, resp.Component.Name+"@"+rev.Digest, revisionTable.Render(p, rev))
+}
+
 type publishRequest struct {
 	name        string
 	kind        registryv1.ComponentKind
@@ -187,12 +247,18 @@ type publishRequest struct {
 	labels      map[string]string
 	dir         string
 	packed      *bundle.Packed
+	// provenance, when set, says where the bytes came from instead of git
+	// at dir: a chart pulled from a registry.
+	provenance *bundle.Provenance
 }
 
 // publishOne uploads a packed component and reports the outcome and the
 // findings on stderr. The caller decides how to print the revision.
 func publishOne(cmd *cobra.Command, p *output.Printer, c sdkclient.AdmiralClient, req publishRequest) (*registryv1.PublishComponentResponse, error) {
 	prov := bundle.Describe(cmd.Context(), req.dir)
+	if req.provenance != nil {
+		prov = *req.provenance
+	}
 	if prov.Dirty {
 		output.Writef(p.Err(), "Working copy has uncommitted changes; the revision will say so\n")
 	}
@@ -203,7 +269,7 @@ func publishOne(cmd *cobra.Command, p *output.Printer, c sdkclient.AdmiralClient
 		Description: req.description,
 		Labels:      req.labels,
 		Provenance: &registryv1.Provenance{
-			Uri: prov.URI, Commit: prov.Commit, Path: prov.Path, Dirty: prov.Dirty,
+			Uri: prov.URI, Ref: prov.Ref, Commit: prov.Commit, Path: prov.Path, Dirty: prov.Dirty,
 			Pins: pinsToProto(req.packed.Pins),
 		},
 		Bundle: req.packed.Bytes,
