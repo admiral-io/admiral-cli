@@ -35,19 +35,27 @@ func gitRepo(t *testing.T) (root, sha string) {
 func TestDefaultTagsAreBranchAndSha(t *testing.T) {
 	root, sha := gitRepo(t)
 	t.Setenv("GITHUB_REF_NAME", "")
-	assert.Equal(t, []string{"main", "sha-" + sha}, defaultTags(t.Context(), root))
+	tags, commit := defaultTags(t.Context(), root)
+	assert.Equal(t, []string{"main"}, tags)
+	assert.Equal(t, "sha-"+sha, commit)
 
 	// CI checks out a detached HEAD and names the branch in the environment.
 	require.NoError(t, exec.Command("git", "-C", root, "checkout", "-q", "--detach").Run())
 	t.Setenv("GITHUB_REF_NAME", "master")
-	assert.Equal(t, []string{"master", "sha-" + sha}, defaultTags(t.Context(), root))
+	tags, commit = defaultTags(t.Context(), root)
+	assert.Equal(t, []string{"master"}, tags)
+	assert.Equal(t, "sha-"+sha, commit)
 
 	// A ref with a slash (feature/x) is not a tag name; only the sha is applied.
 	t.Setenv("GITHUB_REF_NAME", "feature/x")
-	assert.Equal(t, []string{"sha-" + sha}, defaultTags(t.Context(), root))
+	tags, commit = defaultTags(t.Context(), root)
+	assert.Empty(t, tags)
+	assert.Equal(t, "sha-"+sha, commit)
 
 	// Outside git there is nothing to derive; --tag is the caller's job.
-	assert.Empty(t, defaultTags(t.Context(), t.TempDir()))
+	tags, commit = defaultTags(t.Context(), t.TempDir())
+	assert.Empty(t, tags)
+	assert.Empty(t, commit)
 }
 
 // The thing pointed at says what it is. A directory with admiral.yaml is a
@@ -69,4 +77,15 @@ func TestRepositoryPublishUsageErrors(t *testing.T) {
 	_, err = run(t, "publish", "-f", filepath.Join(root, "nope.yaml"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "nope.yaml")
+}
+
+// Only what the registry treats as immutable is applied as a chart's version
+// tag; a chart that calls itself "latest" or "1.0" gets no version tag.
+func TestSemverPattern(t *testing.T) {
+	for _, ok := range []string{"0.1.0", "v1.2.3", "9.5.1", "1.0.0-rc.1", "1.0.0+build.7"} {
+		assert.True(t, semverPattern.MatchString(ok), ok)
+	}
+	for _, bad := range []string{"", "latest", "1.0", "1.0.0.0", "v1", "01.0.0"} {
+		assert.False(t, semverPattern.MatchString(bad), bad)
+	}
 }

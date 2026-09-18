@@ -140,6 +140,7 @@ component. This is the form CI runs on every push.`,
 				return err
 			}
 			rev := resp.Revision
+			rev.Tags = applyTags(cmd.Context(), p, c, resp, packed, afterPublish{})
 			return p.PrintOne(rev, resp.Component.Name+"@"+rev.Digest, revisionTable.Render(p, rev))
 		},
 	}
