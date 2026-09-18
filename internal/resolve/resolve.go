@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	commonv1 "buf.build/gen/go/admiral/common/protocolbuffers/go/admiral/common/v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/filter"
@@ -19,6 +21,7 @@ import (
 	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
 	credentialv1 "go.admiral.io/sdk/proto/admiral/api/credential/v1"
 	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
+	registryv1 "go.admiral.io/sdk/proto/admiral/api/registry/v1"
 	sourcev1 "go.admiral.io/sdk/proto/admiral/api/source/v1"
 	userv1 "go.admiral.io/sdk/proto/admiral/api/user/v1"
 )
@@ -251,4 +254,23 @@ func byName[T any](
 	default:
 		return "", &AmbiguousError{Kind: kind, Name: nameOrID, IDs: ids}
 	}
+}
+
+// Component resolves a registry component name or ID. Names are unique in
+// the registry, so this is one read rather than a filtered list.
+func Component(ctx context.Context, c registryv1.RegistryAPIClient, nameOrID string) (string, error) {
+	if IsUUID(nameOrID) {
+		return nameOrID, nil
+	}
+	if nameOrID == "" {
+		return "", cmderr.Usage("no component specified")
+	}
+	resp, err := c.GetComponent(ctx, &registryv1.GetComponentRequest{Name: nameOrID})
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return "", &NotFoundError{Kind: "component", Name: nameOrID, ListCommand: "component list"}
+		}
+		return "", fmt.Errorf("looking up component %q: %w", nameOrID, err)
+	}
+	return resp.Component.Id, nil
 }

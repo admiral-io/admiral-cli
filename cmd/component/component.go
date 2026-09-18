@@ -38,6 +38,9 @@ References: NAME:TAG (cloud-sql:v1.2.0) or NAME@DIGEST (cloud-sql@sha256:...).`,
 		newPublishCmd(opts),
 		newListCmd(opts),
 		newGetCmd(opts),
+		newTagCmd(opts),
+		newDeprecateCmd(opts),
+		newRevisionCmd(opts),
 	)
 
 	root.Cmd = cmd
