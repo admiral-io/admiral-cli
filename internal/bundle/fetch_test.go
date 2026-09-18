@@ -429,6 +429,18 @@ func TestCloseHTTPArchive(t *testing.T) {
 	assert.Equal(t, "# net", readStage(t, stage, prefix+"/main.tf"), "the single top-level directory is the tree")
 	assert.NoFileExists(t, filepath.Join(stage, prefix, ".terraform.lock.hcl"))
 
+	// Basic auth reaches the archive host.
+	var seen string
+	authed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = r.Header.Get("Authorization")
+		_, _ = w.Write(archive)
+	}))
+	t.Cleanup(authed.Close)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "main.tf"), []byte(`module "n" { source = "`+authed.URL+`/net-1.0.0.tgz" }`), 0o644))
+	creds := staticCredentials{authed.URL: {Basic: &BasicAuth{Username: "u", Password: "p"}}}
+	_, _ = closeInStage(t, root, newFetcher(t.TempDir(), creds, nil))
+	assert.True(t, strings.HasPrefix(seen, "Basic "), seen)
+
 	// A wrong checksum refuses; a right one passes.
 	bad := src + "?checksum=sha256:" + strings.Repeat("0", 64)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "main.tf"), []byte(`module "n" { source = "`+bad+`" }`), 0o644))

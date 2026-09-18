@@ -300,6 +300,11 @@ func (f *fetcher) fetchGit(ctx context.Context, source string, u *url.URL, dst s
 			return "", nil, err
 		}
 	} else {
+		restore, err := f.gitEnv(ctx, u)
+		if err != nil {
+			return "", nil, err
+		}
+		defer restore()
 		req := &getter.Request{Src: "git::" + u.String(), Dst: dst, GetMode: getter.ModeDir}
 		if _, err := f.getter.Get(ctx, req); err != nil {
 			return "", nil, err
@@ -315,6 +320,94 @@ func (f *fetcher) fetchGit(ctx context.Context, source string, u *url.URL, dst s
 		prefix: path.Join(vendorDir, repoKey, sha[:12]),
 		pin:    pin,
 	}, nil
+}
+
+// gitEnv presents a credential to the git go-getter runs, which inherits
+// this process's environment: an SSH key through GIT_SSH_COMMAND with the key
+// in a file only this process can read, basic auth through a git config
+// entry (never the command line, never the URL). The returned function undoes
+// it. Ambient lookups answer nil here and git's own agent and helpers apply.
+func (f *fetcher) gitEnv(ctx context.Context, u *url.URL) (func(), error) {
+	none := func() {}
+	if f.creds == nil {
+		return none, nil
+	}
+	cred, err := f.creds.Lookup(ctx, u.String())
+	if err != nil || cred == nil {
+		return none, err
+	}
+	set := func(kv map[string]string) func() {
+		prev := map[string]*string{}
+		for k, v := range kv {
+			if old, ok := os.LookupEnv(k); ok {
+				prev[k] = &old
+			} else {
+				prev[k] = nil
+			}
+			os.Setenv(k, v)
+		}
+		return func() {
+			for k, old := range prev {
+				if old == nil {
+					os.Unsetenv(k)
+				} else {
+					os.Setenv(k, *old)
+				}
+			}
+		}
+	}
+	switch {
+	case cred.SSHKey != nil:
+		if u.Scheme != "ssh" {
+			return none, fmt.Errorf("%w: %s to %s", ErrCredentialFamily, cred.family(), u.Redacted())
+		}
+		key, err := os.CreateTemp(f.dir, "key-*")
+		if err != nil {
+			return none, err
+		}
+		if err := os.Chmod(key.Name(), 0o600); err != nil {
+			return none, errors.Join(err, key.Close())
+		}
+		if _, err := key.Write(cred.SSHKey.PEM); err != nil {
+			return none, errors.Join(err, key.Close())
+		}
+		if err := key.Close(); err != nil {
+			return none, err
+		}
+		if cred.SSHKey.Passphrase != "" {
+			// An encrypted key would prompt; publish is not interactive.
+			return none, fmt.Errorf("ssh key for %s has a passphrase; decrypt it before registering it", u.Hostname())
+		}
+		undo := set(map[string]string{
+			"GIT_SSH_COMMAND": fmt.Sprintf("ssh -i %q -o IdentitiesOnly=yes -o BatchMode=yes", key.Name()),
+		})
+		return func() { undo(); os.Remove(key.Name()) }, nil
+	case cred.Basic != nil:
+		if u.Scheme != "https" && u.Scheme != "http" {
+			return none, fmt.Errorf("%w: %s to %s", ErrCredentialFamily, cred.family(), u.Redacted())
+		}
+		// A credential helper that answers from the environment, so the
+		// secret is never in a file or an argument.
+		return set(map[string]string{
+			"GIT_CONFIG_COUNT":     "1",
+			"GIT_CONFIG_KEY_0":     "credential.helper",
+			"GIT_CONFIG_VALUE_0":   `!f() { echo "username=$ADMIRAL_GIT_USERNAME"; echo "password=$ADMIRAL_GIT_PASSWORD"; }; f`,
+			"ADMIRAL_GIT_USERNAME": cred.Basic.Username,
+			"ADMIRAL_GIT_PASSWORD": cred.Basic.Password,
+		}), nil
+	default:
+		if u.Scheme != "https" && u.Scheme != "http" {
+			return none, fmt.Errorf("%w: %s to %s", ErrCredentialFamily, cred.family(), u.Redacted())
+		}
+		// GitHub and GitLab take a token as the basic password; an App's
+		// installation token is presented as x-access-token.
+		return set(map[string]string{
+			"GIT_CONFIG_COUNT":     "1",
+			"GIT_CONFIG_KEY_0":     "credential.helper",
+			"GIT_CONFIG_VALUE_0":   `!f() { echo "username=x-access-token"; echo "password=$ADMIRAL_GIT_PASSWORD"; }; f`,
+			"ADMIRAL_GIT_PASSWORD": cred.Token,
+		}), nil
+	}
 }
 
 // fetchArchive downloads u, records its digest, and unpacks it by the
@@ -337,8 +430,8 @@ func (f *fetcher) fetchArchive(ctx context.Context, source string, u *url.URL, d
 		if err != nil {
 			return "", nil, err
 		}
-		if cred != nil && cred.Token != "" {
-			req.Header.Set("Authorization", "Bearer "+cred.Token)
+		if err := cred.authorize(req); err != nil {
+			return "", nil, err
 		}
 	}
 	resp, err := f.http.Do(req)

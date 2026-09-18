@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -24,10 +25,65 @@ type Credentials interface {
 	Lookup(ctx context.Context, rawURL string) (*Credential, error)
 }
 
-// Credential is what a fetch presents: a bearer token for a registry or an
-// archive host.
+// Credential is what a fetch presents, one of three protocol families (D33):
+// a bearer token, basic auth, or an SSH private key. Exactly one is set. Each
+// fetch site takes the family its protocol speaks and refuses another by
+// name; a GitHub App is not a fourth family but a lookup that yields a Token.
 type Credential struct {
+	// Token goes in `Authorization: Bearer`: a module registry, an http
+	// archive, an OCI registry token.
 	Token string
+	// Basic is a username and password: git over https (GitHub's
+	// `x-access-token`), a Helm repository, an OCI login.
+	Basic *BasicAuth
+	// SSHKey is a private key for git over ssh.
+	SSHKey *SSHKey
+}
+
+// BasicAuth is a username and password.
+type BasicAuth struct {
+	Username string
+	Password string
+}
+
+// SSHKey is a PEM-encoded private key and its passphrase, if any.
+type SSHKey struct {
+	PEM        []byte
+	Passphrase string
+}
+
+// ErrCredentialFamily is a credential of a family the protocol cannot present:
+// an SSH key to a registry, a bearer token to git over ssh.
+var ErrCredentialFamily = errors.New("credential is not of a kind this protocol can present")
+
+// family names the one set field, for messages.
+func (c *Credential) family() string {
+	switch {
+	case c == nil:
+		return "none"
+	case c.SSHKey != nil:
+		return "ssh key"
+	case c.Basic != nil:
+		return "basic auth"
+	default:
+		return "bearer token"
+	}
+}
+
+// authorize sets the request's Authorization header from a bearer token or
+// basic auth; an SSH key has no HTTP form.
+func (c *Credential) authorize(req *http.Request) error {
+	switch {
+	case c == nil:
+		return nil
+	case c.SSHKey != nil:
+		return fmt.Errorf("%w: %s to %s", ErrCredentialFamily, c.family(), req.URL.Hostname())
+	case c.Basic != nil:
+		req.SetBasicAuth(c.Basic.Username, c.Basic.Password)
+	case c.Token != "":
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+	}
+	return nil
 }
 
 // AmbientCredentials reads what tofu itself reads for a private module

@@ -2,8 +2,11 @@ package bundle
 
 import (
 	"context"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -39,4 +42,89 @@ func TestAmbientCredentials(t *testing.T) {
 	assert.Equal(t, "from-login", lookup("https://login.example/"), "tofu login's file is read too")
 	assert.Equal(t, "", lookup("https://empty.example/"))
 	assert.Equal(t, "", lookup("https://registry.opentofu.org/"))
+}
+
+func TestCredentialFamilies(t *testing.T) {
+	ctx := context.Background()
+	req := func() *http.Request {
+		r, _ := http.NewRequest(http.MethodGet, "https://example.test/x", nil)
+		return r
+	}
+
+	r := req()
+	require.NoError(t, (&Credential{Token: "tok"}).authorize(r))
+	assert.Equal(t, "Bearer tok", r.Header.Get("Authorization"))
+
+	r = req()
+	require.NoError(t, (&Credential{Basic: &BasicAuth{Username: "u", Password: "p"}}).authorize(r))
+	u, p, ok := r.BasicAuth()
+	assert.True(t, ok)
+	assert.Equal(t, []string{"u", "p"}, []string{u, p})
+
+	r = req()
+	require.NoError(t, (*Credential)(nil).authorize(r))
+	assert.Empty(t, r.Header.Get("Authorization"))
+
+	assert.ErrorIs(t, (&Credential{SSHKey: &SSHKey{PEM: []byte("k")}}).authorize(req()), ErrCredentialFamily, "an ssh key has no HTTP form")
+
+	// git: each family goes to the scheme it fits, through the environment,
+	// and is undone afterwards.
+	f := newFetcher(t.TempDir(), staticCredentials{
+		"ssh://git@github.com/acme/infra": {SSHKey: &SSHKey{PEM: []byte("PEM")}},
+		"https://github.com/acme/infra":   {Basic: &BasicAuth{Username: "u", Password: "p"}},
+		"https://gitlab.test/acme/infra":  {Token: "tok"},
+	}, nil)
+	parse := func(s string) *url.URL {
+		u, err := url.Parse(s)
+		require.NoError(t, err)
+		return u
+	}
+
+	undo, err := f.gitEnv(ctx, parse("ssh://git@github.com/acme/infra.git"))
+	require.NoError(t, err)
+	cmd := os.Getenv("GIT_SSH_COMMAND")
+	assert.Contains(t, cmd, "IdentitiesOnly=yes")
+	keyFile := strings.Trim(strings.Fields(cmd)[2], `"`)
+	pem, err := os.ReadFile(keyFile)
+	require.NoError(t, err)
+	assert.Equal(t, "PEM", string(pem))
+	undo()
+	assert.Empty(t, os.Getenv("GIT_SSH_COMMAND"))
+	assert.NoFileExists(t, keyFile, "the key file does not outlive the fetch")
+
+	undo, err = f.gitEnv(ctx, parse("https://github.com/acme/infra.git"))
+	require.NoError(t, err)
+	assert.Equal(t, "credential.helper", os.Getenv("GIT_CONFIG_KEY_0"))
+	assert.Equal(t, "p", os.Getenv("ADMIRAL_GIT_PASSWORD"))
+	undo()
+	assert.Empty(t, os.Getenv("GIT_CONFIG_COUNT"))
+
+	undo, err = f.gitEnv(ctx, parse("https://gitlab.test/acme/infra.git"))
+	require.NoError(t, err)
+	assert.Contains(t, os.Getenv("GIT_CONFIG_VALUE_0"), "x-access-token")
+	assert.Equal(t, "tok", os.Getenv("ADMIRAL_GIT_PASSWORD"))
+	undo()
+
+	_, err = f.gitEnv(ctx, parse("https://github.com/acme/infra.git?x"))
+	require.NoError(t, err)
+	f.creds = staticCredentials{"ssh://git@github.com/acme/infra": {Basic: &BasicAuth{Username: "u", Password: "p"}}}
+	_, err = f.gitEnv(ctx, parse("ssh://git@github.com/acme/infra.git"))
+	assert.ErrorIs(t, err, ErrCredentialFamily, "basic auth cannot ride ssh")
+}
+
+// staticCredentials answers by the longest registered prefix, the way the
+// platform's registered credentials will.
+type staticCredentials map[string]*Credential
+
+func (s staticCredentials) Lookup(_ context.Context, rawURL string) (*Credential, error) {
+	var best string
+	for prefix := range s {
+		if strings.HasPrefix(rawURL, prefix) && len(prefix) > len(best) {
+			best = prefix
+		}
+	}
+	if best == "" {
+		return nil, nil
+	}
+	return s[best], nil
 }

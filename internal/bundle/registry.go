@@ -209,8 +209,8 @@ func (r *registryClient) get(ctx context.Context, host string, u *url.URL) (*htt
 		if err != nil {
 			return nil, err
 		}
-		if cred != nil && cred.Token != "" {
-			req.Header.Set("Authorization", "Bearer "+cred.Token)
+		if err := cred.authorize(req); err != nil {
+			return nil, err
 		}
 	}
 	resp, err := r.client.Do(req)
