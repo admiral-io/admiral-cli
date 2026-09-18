@@ -169,7 +169,7 @@ func describeEnv(e *environmentv1.Environment, app *applicationv1.Application, s
 			}
 			for _, c := range comps {
 				b.Block(c.Name, func(b *output.Block) {
-					b.Field("Kind", output.FormatEnumKebab(c.CatalogItemType))
+					b.Field("Kind", output.FormatEnumKebab(c.Kind))
 					b.Field("Ref", c.Ref)
 					st := output.FormatEnum(c.LastRevisionStatus)
 					if c.LastDeployedAt != nil {
