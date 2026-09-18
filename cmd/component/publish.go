@@ -12,7 +12,9 @@ import (
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/flags"
+	"go.admiral.io/cli/internal/manifest"
 	"go.admiral.io/cli/internal/output"
+	sdkclient "go.admiral.io/sdk/client"
 	registryv1 "go.admiral.io/sdk/proto/admiral/api/registry/v1"
 )
 
@@ -29,6 +31,7 @@ func newPublishCmd(opts *client.Options) *cobra.Command {
 		tags        []string
 		description string
 		labelStrs   []string
+		manifestArg string
 	)
 
 	cmd := &cobra.Command{
@@ -48,7 +51,15 @@ them into the tree first.
 
 The component is created on first publish, named after the directory
 unless --name says otherwise. --tag names the revision; a semver tag can be
-set once and never moved.`,
+set once and never moved.
+
+Pointed at a directory that holds admiral.yaml, publish takes the whole
+repository: every component the manifest declares is packed and pushed. The
+registry is content-addressed, so a component whose bytes it already holds
+is a no-op and only what changed becomes a new revision; a shared module's
+change shows up in every component that vendors it. Without --tag the
+revisions are tagged with the branch name and sha-<short>, on every declared
+component. This is the form CI runs on every push.`,
 		Example: `  # Publish the current directory, named after it
   admiral component publish
 
@@ -56,9 +67,20 @@ set once and never moved.`,
   admiral component publish ./modules/cloud-sql --tag v1.2.0 --tag latest
 
   # A dev build under a floating tag, with a different name
-  admiral component publish . --name cloud-sql-dev --tag dev`,
+  admiral component publish . --name cloud-sql-dev --tag dev
+
+  # The repository: everything admiral.yaml declares, tagged <branch> and
+  # sha-<short>; what the registry already has is a no-op
+  admiral component publish
+
+  # A manifest that is not at the current directory
+  admiral component publish -f infra/admiral.yaml`,
 		Args: flags.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			labels, err := flags.ParseLabels(labelStrs)
+			if err != nil {
+				return err
+			}
 			dir := "."
 			if len(args) == 1 {
 				dir = args[0]
@@ -67,34 +89,40 @@ set once and never moved.`,
 			if err != nil {
 				return err
 			}
+
+			// The thing pointed at says what it is: a manifest, or a
+			// directory holding one, is a repository; anything else is one
+			// component, and Detect decides its kind.
+			manifestPath := manifestArg
+			if manifestPath == "" && manifest.Exists(abs) {
+				manifestPath = filepath.Join(abs, manifest.Filename)
+			}
+			if manifestPath != "" {
+				if name != "" || kind != "" {
+					return cmderr.Usage("a repository publish takes its names and kinds from %s; --name and --kind apply to one component", manifest.Filename)
+				}
+				if manifestArg != "" && len(args) == 1 {
+					return cmderr.Usage("pass either a directory or --manifest, not both")
+				}
+				manifestPath, err = filepath.Abs(manifestPath)
+				if err != nil {
+					return err
+				}
+				return publishRepository(cmd, opts, repositoryOptions{
+					manifestPath: manifestPath, tags: tags, labels: labels, description: description,
+				})
+			}
 			if name == "" {
 				name = filepath.Base(abs)
 			}
 			if !namePattern.MatchString(name) {
 				return cmderr.Usage("component name %q must be lowercase letters, digits and hyphens (use --name)", name)
 			}
-			labels, err := flags.ParseLabels(labelStrs)
-			if err != nil {
-				return err
-			}
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
-
-			packed, err := bundle.Pack(abs)
+			packed, err := pack(p, abs, dir)
 			if err != nil {
 				return err
-			}
-			for _, v := range packed.Vendored {
-				output.Writef(p.Err(), "Vendored %s (from %s) into %s\n", v.Source, displayCaller(v.Caller), v.Into)
-			}
-			if len(packed.Bytes) > maxBundleBytes {
-				return fmt.Errorf("bundle is %s, over the %s limit", formatSize(int64(len(packed.Bytes))), formatSize(maxBundleBytes))
-			}
-			output.Writef(p.Err(), "Packed %s: %d files, %s, %s\n", dir, packed.Files, formatSize(int64(len(packed.Bytes))), strings.ToLower(string(packed.Kind)))
-
-			prov := bundle.Describe(cmd.Context(), abs)
-			if prov.Dirty {
-				output.Writef(p.Err(), "Working copy has uncommitted changes; the revision will say so\n")
 			}
 
 			c, err := client.CreateClient(cmd.Context(), opts)
@@ -103,31 +131,14 @@ set once and never moved.`,
 			}
 			defer c.Close() //nolint:errcheck
 
-			resp, err := c.Registry().PublishComponent(cmd.Context(), &registryv1.PublishComponentRequest{
-				Name:        name,
-				Kind:        kindEnum(kind),
-				Tags:        tags,
-				Description: description,
-				Labels:      labels,
-				Provenance: &registryv1.Provenance{
-					Uri: prov.URI, Commit: prov.Commit, Path: prov.Path, Dirty: prov.Dirty,
-				},
-				Bundle: packed.Bytes,
+			resp, err := publishOne(cmd, p, c, publishRequest{
+				name: name, kind: kindEnum(kind), tags: tags, description: description, labels: labels,
+				dir: abs, packed: packed,
 			})
 			if err != nil {
 				return err
 			}
-
 			rev := resp.Revision
-			if resp.Unchanged {
-				output.Writef(p.Err(), "Already published as %s; nothing written\n", shortDigest(rev.Digest))
-			} else {
-				output.Writef(p.Err(), "Published %s@%s\n", resp.Component.Name, rev.Digest)
-			}
-			for _, f := range rev.Findings {
-				output.Writef(p.Err(), "  %s %s: %s\n", strings.ToLower(f.Severity.String()), f.Source, f.Message)
-			}
-
 			return p.PrintOne(rev, resp.Component.Name+"@"+rev.Digest, revisionTable.Render(p, rev))
 		},
 	}
@@ -137,8 +148,69 @@ set once and never moved.`,
 	cmd.Flags().StringArrayVarP(&tags, "tag", "t", nil, "tag to set on the revision (repeatable)")
 	cmd.Flags().StringVar(&description, "description", "", "component description, applied when the component is created")
 	flags.Label(cmd, &labelStrs, "label to attach when the component is created (key=value, repeatable)")
+	cmd.Flags().StringVarP(&manifestArg, "manifest", "f", "", "publish the repository this "+manifest.Filename+" describes (default: the one in the directory, if any)")
 
 	return cmd
+}
+
+// pack stages and packs one component directory, reporting what it vendored.
+// display is the path as the user typed it, for the messages.
+func pack(p *output.Printer, abs, display string) (*bundle.Packed, error) {
+	packed, err := bundle.Pack(abs)
+	if err != nil {
+		return nil, err
+	}
+	for _, v := range packed.Vendored {
+		output.Writef(p.Err(), "Vendored %s (from %s) into %s\n", v.Source, displayCaller(v.Caller), v.Into)
+	}
+	if len(packed.Bytes) > maxBundleBytes {
+		return nil, fmt.Errorf("bundle is %s, over the %s limit", formatSize(int64(len(packed.Bytes))), formatSize(maxBundleBytes))
+	}
+	output.Writef(p.Err(), "Packed %s: %d files, %s, %s\n", display, packed.Files, formatSize(int64(len(packed.Bytes))), strings.ToLower(string(packed.Kind)))
+	return packed, nil
+}
+
+type publishRequest struct {
+	name        string
+	kind        registryv1.ComponentKind
+	tags        []string
+	description string
+	labels      map[string]string
+	dir         string
+	packed      *bundle.Packed
+}
+
+// publishOne uploads a packed component and reports the outcome and the
+// findings on stderr. The caller decides how to print the revision.
+func publishOne(cmd *cobra.Command, p *output.Printer, c sdkclient.AdmiralClient, req publishRequest) (*registryv1.PublishComponentResponse, error) {
+	prov := bundle.Describe(cmd.Context(), req.dir)
+	if prov.Dirty {
+		output.Writef(p.Err(), "Working copy has uncommitted changes; the revision will say so\n")
+	}
+	resp, err := c.Registry().PublishComponent(cmd.Context(), &registryv1.PublishComponentRequest{
+		Name:        req.name,
+		Kind:        req.kind,
+		Tags:        req.tags,
+		Description: req.description,
+		Labels:      req.labels,
+		Provenance: &registryv1.Provenance{
+			Uri: prov.URI, Commit: prov.Commit, Path: prov.Path, Dirty: prov.Dirty,
+		},
+		Bundle: req.packed.Bytes,
+	})
+	if err != nil {
+		return nil, err
+	}
+	rev := resp.Revision
+	if resp.Unchanged {
+		output.Writef(p.Err(), "%s already published as %s; nothing written\n", resp.Component.Name, shortDigest(rev.Digest))
+	} else {
+		output.Writef(p.Err(), "Published %s@%s\n", resp.Component.Name, rev.Digest)
+	}
+	for _, f := range rev.Findings {
+		output.Writef(p.Err(), "  %s %s: %s\n", strings.ToLower(f.Severity.String()), f.Source, f.Message)
+	}
+	return resp, nil
 }
 
 func kindEnum(kind string) registryv1.ComponentKind {
