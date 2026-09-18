@@ -369,8 +369,9 @@ func copyFile(src, dst string, mode os.FileMode) error {
 		return err
 	}
 	if _, err := io.Copy(out, in); err != nil {
-		out.Close()
-		return err
+		// A write error and a close error can both carry the reason; keep
+		// both rather than let the second hide the first.
+		return errors.Join(err, out.Close())
 	}
 	return out.Close()
 }
