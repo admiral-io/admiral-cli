@@ -39,6 +39,7 @@ References: NAME:TAG (cloud-sql:v1.2.0) or NAME@DIGEST (cloud-sql@sha256:...).`,
 		newListCmd(opts),
 		newGetCmd(opts),
 		newTagCmd(opts),
+		newUntagCmd(opts),
 		newDeprecateCmd(opts),
 		newRevisionCmd(opts),
 	)
