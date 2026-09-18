@@ -1,62 +1,35 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="${REPO_ROOT:-"$(realpath "$(dirname "${BASH_SOURCE[0]}")/..")"}"
-BUILD_ROOT="${REPO_ROOT}/build"
-BUILD_BIN="${BUILD_ROOT}/bin"
+# golangci-lint wrapper script
+# Ensures consistent lint behavior across development and CI environments.
+#
+# Checks the VERSION, not merely the presence, of the binary. Checking presence
+# alone means a different version already on PATH silently wins -- which is how
+# CI can fail a lint that passed locally, on a rule the older binary does not
+# have. Keep GOLANGCI_LINT_VERSION in lockstep with .github/workflows/lint.yaml.
+#
+# It also checks the Go release the binary was BUILT with against the local
+# toolchain. A golangci-lint built with an older Go panics with "file requires
+# newer Go version" when the toolchain moves on, even when its own version is
+# right, so that case reinstalls too.
 
-NAME=golangci-lint
-RELEASE=v2.11.3
-OSX_RELEASE_256=f93bda1f2cc981fd1326464020494be62f387bbf262706e1b3b644e5afacc440
-LINUX_RELEASE_256=87bb8cddbcc825d5778b64e8a91b46c0526b247f4e2f2904dea74ec7450475d1
+GOLANGCI_LINT_VERSION="v2.12.2"
 
-ARCH=amd64
+want="${GOLANGCI_LINT_VERSION#v}"
+want_go="$(go env GOVERSION | sed -n 's/^go\([0-9]*\.[0-9]*\).*/\1/p')"
+have=""
+have_go=""
+if command -v golangci-lint &> /dev/null; then
+    have="$(golangci-lint --version 2>/dev/null | sed -n 's/.*version \([0-9][^ ]*\).*/\1/p')"
+    have_go="$(golangci-lint --version 2>/dev/null | sed -n 's/.*built with go\([0-9]*\.[0-9]*\).*/\1/p')"
+fi
 
-RELEASE_BINARY="${BUILD_BIN}/${NAME}-${RELEASE}"
+if [[ "${have}" != "${want}" || "${have_go}" != "${want_go}" ]]; then
+    echo "Installing golangci-lint ${GOLANGCI_LINT_VERSION} with go${want_go} (found: ${have:-none}, built with go${have_go:-?})..." >&2
+    GOBIN="$(go env GOPATH)/bin" go install \
+        "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}"
+    exec "$(go env GOPATH)/bin/golangci-lint" "$@"
+fi
 
-main() {
-  ensure_binary
-
-  "${RELEASE_BINARY}" "$@"
-}
-
-ensure_binary() {
-  if [[ ! -f "${RELEASE_BINARY}" ]]; then
-    echo "info: Downloading ${NAME} ${RELEASE} to build environment"
-
-    mkdir -p "${BUILD_BIN}"
-
-    case "${OSTYPE}" in
-    "darwin"*)
-      os_type="darwin"
-      sum="${OSX_RELEASE_256}"
-      ;;
-    "linux"*)
-      os_type="linux"
-      sum="${LINUX_RELEASE_256}"
-      ;;
-    *) echo "error: Unsupported OS '${OSTYPE}' for shellcheck install, please install manually" && exit 1 ;;
-    esac
-
-    release_archive="/tmp/${NAME}-${RELEASE}.tar.gz"
-
-    URL="https://github.com/golangci/golangci-lint/releases/download/${RELEASE}/golangci-lint-${RELEASE:1}-${os_type}-${ARCH}.tar.gz"
-    curl -sSL -o "${release_archive}" "${URL}"
-    echo "${sum}" "${release_archive}" | sha256sum --check --quiet -
-
-    release_tmp_dir="/tmp/${NAME}-${RELEASE}"
-    mkdir -p "${release_tmp_dir}"
-    tar -xzf "${release_archive}" --strip=1 -C "${release_tmp_dir}"
-
-    if [[ ! -f "${RELEASE_BINARY}" ]]; then
-      find "${BUILD_BIN}" -maxdepth 0 -regex '.*/'${NAME}'-[A-Za-z0-9\.]+$' -exec rm {} \; # cleanup older versions
-      mv "${release_tmp_dir}/${NAME}" "${RELEASE_BINARY}"
-    fi
-
-    # Cleanup stale resources.
-    rm "${release_archive}"
-    rm -rf "${release_tmp_dir}"
-  fi
-}
-
-main "$@"
+golangci-lint "$@"
