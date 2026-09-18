@@ -73,6 +73,10 @@ type Packed struct {
 	// version: a chart's dependencies today, a module's remote sources when
 	// those are fetched. Recorded on the revision's provenance.
 	Pins []Pin
+	// Version is the version the component declares for itself, when its
+	// format has one: a chart's Chart.yaml version. Terraform has no such
+	// field, and the string is empty.
+	Version string
 }
 
 // Pack stages, closes and packs the component at root.
@@ -108,6 +112,7 @@ func PackContext(ctx context.Context, root string) (*Packed, error) {
 	var (
 		vendored []Vendored
 		pins     []Pin
+		version  string
 	)
 	switch kind {
 	case KindTerraform:
@@ -116,7 +121,7 @@ func PackContext(ctx context.Context, root string) (*Packed, error) {
 			return nil, err
 		}
 	case KindHelm:
-		vendored, pins, err = closeHelm(ctx, rootAbs, stage, newHelmFetcher())
+		vendored, pins, version, err = closeHelm(ctx, rootAbs, stage, newHelmFetcher())
 		if err != nil {
 			return nil, err
 		}
@@ -126,7 +131,7 @@ func PackContext(ctx context.Context, root string) (*Packed, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Packed{Kind: kind, Bytes: data, Files: count, Vendored: vendored, Pins: pins}, nil
+	return &Packed{Kind: kind, Bytes: data, Files: count, Vendored: vendored, Pins: pins, Version: version}, nil
 }
 
 // Detect reads the root the way the server does: a Chart.yaml is a chart,

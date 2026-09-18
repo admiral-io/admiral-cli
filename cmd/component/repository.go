@@ -43,9 +43,12 @@ func publishRepository(cmd *cobra.Command, opts *client.Options, o repositoryOpt
 	}
 	root := filepath.Dir(o.manifestPath)
 
-	tags := o.tags
+	// Explicit --tag applies to every publish as given. Otherwise the branch
+	// tag rides on the publish and the commit tag is set only on a revision
+	// this run created (see tags.go).
+	tags, sha := o.tags, ""
 	if len(tags) == 0 {
-		tags = defaultTags(ctx, root)
+		tags, sha = defaultTags(ctx, root)
 	}
 
 	cl, err := client.CreateClient(ctx, opts)
@@ -77,6 +80,7 @@ func publishRepository(cmd *cobra.Command, opts *client.Options, o repositoryOpt
 			failures = append(failures, c.Name)
 			continue
 		}
+		resp.Revision.Tags = applyTags(ctx, p, cl, resp, packed, afterPublish{sha: sha})
 		revisions = append(revisions, resp.Revision)
 		rows = append(rows, publishedRow{name: resp.Component.Name, rev: resp.Revision, unchanged: resp.Unchanged})
 		names = append(names, resp.Component.Name+"@"+resp.Revision.Digest)
@@ -95,12 +99,12 @@ func publishRepository(cmd *cobra.Command, opts *client.Options, o repositoryOpt
 	return nil
 }
 
-// defaultTags is the push policy: the branch, and sha-<short>. On a detached
-// HEAD (which is what CI checks out) the branch comes from GITHUB_REF_NAME
-// when set. A ref with a slash in it is not a tag name and is left out.
-// Outside git, nothing is applied and the caller's own --tag is the way.
-func defaultTags(ctx context.Context, root string) []string {
-	var tags []string
+// defaultTags is the push policy: the branch, applied to every publish, and
+// sha-<short>, applied only to a revision the publish created. On a
+// detached HEAD (which is what CI checks out) the branch comes from
+// GITHUB_REF_NAME when set. A ref with a slash in it is not a tag name and
+// is left out. Outside git, nothing is applied and --tag is the way.
+func defaultTags(ctx context.Context, root string) (tags []string, sha string) {
 	branch, _ := gitOutput(ctx, root, "rev-parse", "--abbrev-ref", "HEAD")
 	if branch == "HEAD" || branch == "" {
 		branch = os.Getenv("GITHUB_REF_NAME")
@@ -109,9 +113,9 @@ func defaultTags(ctx context.Context, root string) []string {
 		tags = append(tags, branch)
 	}
 	if short, err := gitOutput(ctx, root, "rev-parse", "--short=7", "HEAD"); err == nil && short != "" {
-		tags = append(tags, "sha-"+short)
+		sha = "sha-" + short
 	}
-	return tags
+	return tags, sha
 }
 
 func gitOutput(ctx context.Context, dir string, args ...string) (string, error) {

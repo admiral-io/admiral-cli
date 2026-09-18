@@ -36,6 +36,7 @@ func TestPositionalUsageErrors(t *testing.T) {
 		{[]string{"publish", "a", "b"}, `accepts at most 1 arg(s), received 2`},
 		{[]string{"tag", "--digest", "sha256:ab"}, "missing argument: tag <name>:<tag> --digest <digest>"},
 		{[]string{"deprecate", "--digest", "sha256:ab", "--reason", "x"}, "missing argument: deprecate <name> --digest <digest> --reason <text>"},
+		{[]string{"untag"}, "missing argument: untag <name>:<tag>"},
 		{[]string{"revision", "list"}, "missing argument: list <name>"},
 		{[]string{"revision", "get"}, "missing argument: get <name>:<tag> | <name>@<digest>"},
 	}
@@ -100,6 +101,10 @@ func TestSplitRef(t *testing.T) {
 	}
 
 	_, err := run(t, "tag", "cloud-sql", "--digest", "sha256:ab")
+	require.EqualError(t, err, `"cloud-sql" names no tag; use <name>:<tag>`)
+	assert.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
+
+	_, err = run(t, "untag", "cloud-sql")
 	require.EqualError(t, err, `"cloud-sql" names no tag; use <name>:<tag>`)
 	assert.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 

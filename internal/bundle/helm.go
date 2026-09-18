@@ -62,6 +62,7 @@ type chartDependency struct {
 }
 
 type chartMetadata struct {
+	Version      string            `yaml:"version"`
 	Dependencies []chartDependency `yaml:"dependencies"`
 }
 
@@ -92,25 +93,24 @@ func newHelmFetcher() *helmFetcher {
 // closeHelm vendors the chart's dependencies into stage/charts and returns
 // what it pinned. A dependency already under charts/ in the working copy
 // (someone ran `helm dependency build`) is kept as it is.
-func closeHelm(ctx context.Context, rootAbs, stage string, f *helmFetcher) ([]Vendored, []Pin, error) {
+func closeHelm(ctx context.Context, rootAbs, stage string, f *helmFetcher) (vendored []Vendored, pins []Pin, version string, err error) {
 	meta, err := readChartMetadata(rootAbs)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
+	version = meta.Version
 	if len(meta.Dependencies) == 0 {
-		return nil, nil, nil
+		return nil, nil, version, nil
 	}
 	lock, err := readChartLock(rootAbs)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 	if err := lockMatches(meta, lock); err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 
 	chartsDir := filepath.Join(stage, "charts")
-	var vendored []Vendored
-	var pins []Pin
 	for _, locked := range lock.Dependencies {
 		declared := findDependency(meta.Dependencies, locked)
 		pin := Pin{
@@ -120,14 +120,14 @@ func closeHelm(ctx context.Context, rootAbs, stage string, f *helmFetcher) ([]Ve
 		}
 		into, err := vendorChartDependency(ctx, rootAbs, chartsDir, locked, f)
 		if err != nil {
-			return nil, nil, fmt.Errorf("dependency %q: %w", locked.Name, err)
+			return nil, nil, "", fmt.Errorf("dependency %q: %w", locked.Name, err)
 		}
 		pins = append(pins, pin)
 		if into != "" {
 			vendored = append(vendored, Vendored{Caller: ".", Source: pin.Source + " " + locked.Version, Into: into})
 		}
 	}
-	return vendored, pins, nil
+	return vendored, pins, version, nil
 }
 
 // vendorChartDependency puts one dependency under chartsDir and returns the
