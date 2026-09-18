@@ -62,7 +62,7 @@ func publishRepository(cmd *cobra.Command, opts *client.Options, o repositoryOpt
 	)
 	for _, c := range m.Components {
 		abs := filepath.Join(root, filepath.FromSlash(c.Path))
-		packed, err := pack(p, abs, c.Path)
+		packed, err := pack(ctx, p, abs, c.Path)
 		if err != nil {
 			output.Writef(p.Err(), "%s: %v\n", c.Name, err)
 			failures = append(failures, c.Name)
