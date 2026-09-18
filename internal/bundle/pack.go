@@ -17,6 +17,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -68,10 +69,19 @@ type Packed struct {
 	Bytes    []byte
 	Files    int
 	Vendored []Vendored
+	// Pins is what the closure step resolved from a constraint to an exact
+	// version: a chart's dependencies today, a module's remote sources when
+	// those are fetched. Recorded on the revision's provenance.
+	Pins []Pin
 }
 
 // Pack stages, closes and packs the component at root.
 func Pack(root string) (*Packed, error) {
+	return PackContext(context.Background(), root)
+}
+
+// PackContext is Pack with a context, for the closure steps that fetch.
+func PackContext(ctx context.Context, root string) (*Packed, error) {
 	rootAbs, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err
@@ -95,9 +105,18 @@ func Pack(root string) (*Packed, error) {
 		return nil, fmt.Errorf("stage %s: %w", root, err)
 	}
 
-	var vendored []Vendored
-	if kind == KindTerraform {
+	var (
+		vendored []Vendored
+		pins     []Pin
+	)
+	switch kind {
+	case KindTerraform:
 		vendored, err = closeTerraform(rootAbs, stage)
+		if err != nil {
+			return nil, err
+		}
+	case KindHelm:
+		vendored, pins, err = closeHelm(ctx, rootAbs, stage, newHelmFetcher())
 		if err != nil {
 			return nil, err
 		}
@@ -107,7 +126,7 @@ func Pack(root string) (*Packed, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Packed{Kind: kind, Bytes: data, Files: count, Vendored: vendored}, nil
+	return &Packed{Kind: kind, Bytes: data, Files: count, Vendored: vendored, Pins: pins}, nil
 }
 
 // Detect reads the root the way the server does: a Chart.yaml is a chart,

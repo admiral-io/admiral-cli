@@ -1,6 +1,7 @@
 package component
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"regexp"
@@ -120,7 +121,7 @@ component. This is the form CI runs on every push.`,
 			}
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
-			packed, err := pack(p, abs, dir)
+			packed, err := pack(cmd.Context(), p, abs, dir)
 			if err != nil {
 				return err
 			}
@@ -155,8 +156,8 @@ component. This is the form CI runs on every push.`,
 
 // pack stages and packs one component directory, reporting what it vendored.
 // display is the path as the user typed it, for the messages.
-func pack(p *output.Printer, abs, display string) (*bundle.Packed, error) {
-	packed, err := bundle.Pack(abs)
+func pack(ctx context.Context, p *output.Printer, abs, display string) (*bundle.Packed, error) {
+	packed, err := bundle.PackContext(ctx, abs)
 	if err != nil {
 		return nil, err
 	}
@@ -195,6 +196,7 @@ func publishOne(cmd *cobra.Command, p *output.Printer, c sdkclient.AdmiralClient
 		Labels:      req.labels,
 		Provenance: &registryv1.Provenance{
 			Uri: prov.URI, Commit: prov.Commit, Path: prov.Path, Dirty: prov.Dirty,
+			Pins: pinsToProto(req.packed.Pins),
 		},
 		Bundle: req.packed.Bytes,
 	})
@@ -231,4 +233,12 @@ func displayCaller(rel string) string {
 		return "the root"
 	}
 	return rel
+}
+
+func pinsToProto(pins []bundle.Pin) []*registryv1.Pin {
+	out := make([]*registryv1.Pin, 0, len(pins))
+	for _, p := range pins {
+		out = append(out, &registryv1.Pin{Source: p.Source, Constraint: p.Constraint, Resolved: p.Resolved})
+	}
+	return out
 }
