@@ -158,12 +158,19 @@ component. This is the form CI runs on every push.`,
 // pack stages and packs one component directory, reporting what it vendored.
 // display is the path as the user typed it, for the messages.
 func pack(ctx context.Context, p *output.Printer, abs, display string) (*bundle.Packed, error) {
-	packed, err := bundle.PackContext(ctx, abs)
+	packed, err := bundle.PackContext(ctx, abs, bundle.NewAmbientCredentials())
 	if err != nil {
 		return nil, err
 	}
 	for _, v := range packed.Vendored {
 		output.Writef(p.Err(), "Vendored %s (from %s) into %s\n", v.Source, displayCaller(v.Caller), v.Into)
+	}
+	for _, pin := range packed.Pins {
+		if pin.Constraint != "" {
+			output.Writef(p.Err(), "Pinned %s %s to %s\n", pin.Source, pin.Constraint, pin.Resolved)
+		} else {
+			output.Writef(p.Err(), "Pinned %s to %s\n", pin.Source, pin.Resolved)
+		}
 	}
 	if len(packed.Bytes) > maxBundleBytes {
 		return nil, fmt.Errorf("bundle is %s, over the %s limit", formatSize(int64(len(packed.Bytes))), formatSize(maxBundleBytes))

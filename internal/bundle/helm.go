@@ -151,7 +151,7 @@ func vendorChartDependency(ctx context.Context, rootAbs, chartsDir string, dep c
 			return "", fmt.Errorf("%w: %s does not exist", ErrMissing, dep.Repository)
 		}
 		into := path.Join("charts", dep.Name)
-		if err := copyTree(src, filepath.Join(chartsDir, dep.Name)); err != nil {
+		if err := copyTree(src, filepath.Join(chartsDir, dep.Name), true); err != nil {
 			return "", err
 		}
 		return into, nil
