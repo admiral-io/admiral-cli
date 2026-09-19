@@ -7,7 +7,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"go.admiral.io/cli/internal/bundle"
+	"go.admiral.io/bundle"
 	"go.admiral.io/cli/internal/output"
 	sdkclient "go.admiral.io/sdk/client"
 	registryv1 "go.admiral.io/sdk/proto/admiral/api/registry/v1"

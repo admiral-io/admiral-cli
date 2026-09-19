@@ -9,7 +9,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"go.admiral.io/cli/internal/bundle"
+	"go.admiral.io/bundle"
+	"go.admiral.io/bundle/gitcmd"
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/flags"
@@ -158,7 +159,10 @@ component. This is the form CI runs on every push.`,
 // pack stages and packs one component directory, reporting what it vendored.
 // display is the path as the user typed it, for the messages.
 func pack(ctx context.Context, p *output.Printer, abs, display string) (*bundle.Packed, error) {
-	packed, err := bundle.PackContext(ctx, abs, bundle.NewAmbientCredentials())
+	packed, err := bundle.PackContext(ctx, abs, bundle.Options{
+		Credentials: bundle.NewAmbientCredentials(),
+		Git:         &gitcmd.Transport{Repo: gitcmd.DescribeRepo(ctx, abs)},
+	})
 	if err != nil {
 		return nil, err
 	}
