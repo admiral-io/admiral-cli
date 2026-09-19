@@ -123,8 +123,8 @@ func TestPackRefusesWhatTheLockCannotVouchFor(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "0.3.8 is not in the index")
 	})
-	t.Run("oci", func(t *testing.T) {
-		dir := wrapperChart(t, "oci://ghcr.io/acme/charts", "dependencies:\n- name: openfga\n  repository: oci://ghcr.io/acme/charts\n  version: 0.3.9\n")
+	t.Run("alias", func(t *testing.T) {
+		dir := wrapperChart(t, "\"@acme\"", "dependencies:\n- name: openfga\n  repository: \"@acme\"\n  version: 0.3.9\n")
 		_, err := Pack(dir)
 		assert.ErrorIs(t, err, ErrChartDependencyUnsupported)
 	})

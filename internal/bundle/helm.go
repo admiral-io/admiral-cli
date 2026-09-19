@@ -30,9 +30,10 @@ import (
 // range could resolve differently tomorrow, and the point of a published
 // revision is that it cannot. What got resolved is recorded as a pin.
 //
-// Not here yet: oci:// dependencies (oras when a chart needs it), repository
-// aliases (@name, which need a repositories.yaml; say the URL), and private
-// repositories (the credential lookup the fetcher design adds).
+// An oci:// dependency is pulled through oci.go. A private repository gets
+// its credential from the same seam every fetch uses (D32, D33); the ambient
+// lookup reads what `helm repo add --username` stored. Not here: repository
+// aliases (@name, which need a repositories.yaml; say the URL).
 
 var (
 	// ErrChartLockMissing is a chart with dependencies and no Chart.lock.
@@ -81,13 +82,16 @@ type repoEntry struct {
 	Digest  string   `yaml:"digest"`
 }
 
-// helmFetcher is the network the closure step is allowed: HTTP GET.
+// helmFetcher is the network the closure step is allowed: HTTP GET against a
+// chart repository, and an OCI pull.
 type helmFetcher struct {
 	client *http.Client
+	creds  Credentials
+	oci    *ociClient
 }
 
-func newHelmFetcher() *helmFetcher {
-	return &helmFetcher{client: &http.Client{Timeout: 2 * time.Minute}}
+func newHelmFetcher(creds Credentials) *helmFetcher {
+	return &helmFetcher{client: &http.Client{Timeout: 2 * time.Minute}, creds: creds, oci: newOCIClient(creds)}
 }
 
 // closeHelm vendors the chart's dependencies into stage/charts and returns
@@ -156,7 +160,17 @@ func vendorChartDependency(ctx context.Context, rootAbs, chartsDir string, dep c
 		}
 		return into, nil
 	case strings.HasPrefix(dep.Repository, "oci://"):
-		return "", fmt.Errorf("%w: %s (oci:// is not fetched by the CLI yet; run `helm dependency build` before publishing)", ErrChartDependencyUnsupported, dep.Repository)
+		data, _, err := f.oci.pullChart(ctx, dep.Repository, dep.Name, dep.Version)
+		if err != nil {
+			return "", err
+		}
+		if err := os.MkdirAll(chartsDir, 0o755); err != nil {
+			return "", err
+		}
+		if err := os.WriteFile(filepath.Join(chartsDir, tgz), data, 0o644); err != nil {
+			return "", err
+		}
+		return path.Join("charts", tgz), nil
 	case strings.HasPrefix(dep.Repository, "@") || strings.HasPrefix(dep.Repository, "alias:"):
 		return "", fmt.Errorf("%w: %s is a repository alias; declare the repository's URL", ErrChartDependencyUnsupported, dep.Repository)
 	case strings.HasPrefix(dep.Repository, "http://") || strings.HasPrefix(dep.Repository, "https://"):
@@ -232,6 +246,16 @@ func (f *helmFetcher) get(ctx context.Context, rawURL string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, err
+	}
+	req.Header.Set("User-Agent", "admiral-cli")
+	if f.creds != nil {
+		cred, err := f.creds.Lookup(ctx, rawURL)
+		if err != nil {
+			return nil, err
+		}
+		if err := cred.authorize(req); err != nil {
+			return nil, err
+		}
 	}
 	resp, err := f.client.Do(req)
 	if err != nil {
