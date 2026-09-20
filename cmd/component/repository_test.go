@@ -35,27 +35,33 @@ func gitRepo(t *testing.T) (root, sha string) {
 func TestDefaultTagsAreBranchAndSha(t *testing.T) {
 	root, sha := gitRepo(t)
 	t.Setenv("GITHUB_REF_NAME", "")
-	tags, commit := defaultTags(t.Context(), root)
+	tags, commit, skipped := defaultTags(t.Context(), root)
 	assert.Equal(t, []string{"main"}, tags)
 	assert.Equal(t, "sha-"+sha, commit)
+	assert.Empty(t, skipped)
 
 	// CI checks out a detached HEAD and names the branch in the environment.
 	require.NoError(t, exec.Command("git", "-C", root, "checkout", "-q", "--detach").Run())
 	t.Setenv("GITHUB_REF_NAME", "master")
-	tags, commit = defaultTags(t.Context(), root)
+	tags, commit, skipped = defaultTags(t.Context(), root)
 	assert.Equal(t, []string{"master"}, tags)
 	assert.Equal(t, "sha-"+sha, commit)
+	assert.Empty(t, skipped)
 
-	// A ref with a slash (feature/x) is not a tag name; only the sha is applied.
+	// A ref with a slash (feature/x) is not a tag name; only the sha is
+	// applied, and the caller is told which branch was passed over.
 	t.Setenv("GITHUB_REF_NAME", "feature/x")
-	tags, commit = defaultTags(t.Context(), root)
+	tags, commit, skipped = defaultTags(t.Context(), root)
 	assert.Empty(t, tags)
 	assert.Equal(t, "sha-"+sha, commit)
+	assert.Equal(t, "feature/x", skipped)
 
 	// Outside git there is nothing to derive; --tag is the caller's job.
-	tags, commit = defaultTags(t.Context(), t.TempDir())
+	t.Setenv("GITHUB_REF_NAME", "")
+	tags, commit, skipped = defaultTags(t.Context(), t.TempDir())
 	assert.Empty(t, tags)
 	assert.Empty(t, commit)
+	assert.Empty(t, skipped)
 }
 
 // The thing pointed at says what it is. A directory with admiral.yaml is a

@@ -47,7 +47,15 @@ func publishRepository(cmd *cobra.Command, opts *client.Options, o repositoryOpt
 	// this run created (see tags.go).
 	tags, sha := o.tags, ""
 	if len(tags) == 0 {
-		tags, sha = defaultTags(ctx, root)
+		var skipped string
+		tags, sha, skipped = defaultTags(ctx, root)
+		if skipped != "" {
+			what := "no tag"
+			if sha != "" {
+				what = sha + " only"
+			}
+			output.Writef(p.Err(), "branch %s is not a valid tag name; tagging %s (use --tag to choose one)\n", skipped, what)
+		}
 	}
 
 	cl, err := client.CreateClient(ctx, opts)
@@ -102,19 +110,25 @@ func publishRepository(cmd *cobra.Command, opts *client.Options, o repositoryOpt
 // sha-<short>, applied only to a revision the publish created. On a
 // detached HEAD (which is what CI checks out) the branch comes from
 // GITHUB_REF_NAME when set. A ref with a slash in it is not a tag name and
-// is left out. Outside git, nothing is applied and --tag is the way.
-func defaultTags(ctx context.Context, root string) (tags []string, sha string) {
+// is left out; it is returned as skipped so the caller can say so rather
+// than publish under the commit tag alone without a word. Outside git,
+// nothing is applied and --tag is the way.
+func defaultTags(ctx context.Context, root string) (tags []string, sha, skipped string) {
 	branch, _ := gitOutput(ctx, root, "rev-parse", "--abbrev-ref", "HEAD")
 	if branch == "HEAD" || branch == "" {
 		branch = os.Getenv("GITHUB_REF_NAME")
 	}
-	if branch != "" && !strings.Contains(branch, "/") {
+	switch {
+	case branch == "":
+	case strings.Contains(branch, "/"):
+		skipped = branch
+	default:
 		tags = append(tags, branch)
 	}
 	if short, err := gitOutput(ctx, root, "rev-parse", "--short=7", "HEAD"); err == nil && short != "" {
 		sha = "sha-" + short
 	}
-	return tags, sha
+	return tags, sha, skipped
 }
 
 func gitOutput(ctx context.Context, dir string, args ...string) (string, error) {
