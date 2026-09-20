@@ -4,6 +4,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"go.admiral.io/cli/internal/client"
+	"go.admiral.io/cli/internal/cmderr"
+	"go.admiral.io/cli/internal/complete"
 	"go.admiral.io/cli/internal/filter"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
@@ -19,22 +21,35 @@ func newListCmd(opts *client.Options) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "list",
+		Use:   "list [app]",
 		Short: "List environments",
-		Example: `  # List environments of an application
-  admiral env list --app billing
+		Long:  `List the environments of an application, named as the argument or with --app.`,
+		Example: `  # Environments of an application
+  admiral env list billing
 
   # Names only, for scripting
-  admiral env list --app billing -o name`,
-		Args: flags.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
+  admiral env list billing -o name`,
+		Args:              flags.MaximumNArgs(1),
+		ValidArgsFunction: complete.First(complete.Apps(opts)),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			app, err := flags.AppTarget(cmd, appName, args)
+			if err != nil {
+				return err
+			}
+			// Checked before the client is built: dialing first would
+			// report a missing credential for what is a missing argument.
+			if app == "" {
+				return cmderr.UsageHint("Name the application: 'admiral env list billing'.",
+					"no application specified")
+			}
+
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
 				return err
 			}
 			defer c.Close() //nolint:errcheck
 
-			resolvedAppID, err := resolve.App(cmd.Context(), c.Application(), appName)
+			resolvedAppID, err := resolve.App(cmd.Context(), c.Application(), app)
 			if err != nil {
 				return err
 			}

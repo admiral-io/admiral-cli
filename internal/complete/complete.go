@@ -18,8 +18,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"go.admiral.io/cli/internal/client"
+	"go.admiral.io/cli/internal/filter"
+	"go.admiral.io/cli/internal/resolve"
 	sdkclient "go.admiral.io/sdk/client"
 	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
+	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
 )
 
 // Func is cobra's completion signature, shared by ValidArgsFunction and
@@ -87,6 +90,106 @@ func Apps(opts *client.Options) Func {
 			return out, err
 		})
 	}
+}
+
+// Envs offers environment names for a positional or --env, in both forms
+// of style guide §1.2. A bare prefix completes inside the --app already on
+// the line. With no --app it offers application prefixes ("shop/", no
+// trailing space) so the path can be typed segment by segment, and a
+// prefix that already contains "/" completes the environment inside that
+// application as "shop/prod".
+func Envs(opts *client.Options) Func {
+	return func(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		app, _, isPath := strings.Cut(toComplete, "/")
+		if !isPath {
+			app = flagValue(cmd, "app")
+			if app == "" {
+				return appPrefixes(cmd, opts, toComplete)
+			}
+		}
+		// withClient filters on toComplete, which in the path form is
+		// "shop/pr" against candidates renamed to "shop/prod".
+		return withClient(cmd, opts, toComplete, func(ctx context.Context, c sdkclient.AdmiralClient) ([]Candidate, error) {
+			items, err := envsIn(ctx, c, app)
+			if err != nil {
+				return nil, err
+			}
+			if isPath {
+				for i := range items {
+					items[i].Name = app + "/" + items[i].Name
+				}
+			}
+			return items, nil
+		})
+	}
+}
+
+// NewEnv offers the application prefix of a new environment's path
+// ("shop/") and nothing after the slash, since the name does not exist
+// yet. With --app on the line there is nothing to offer.
+func NewEnv(opts *client.Options) Func {
+	return func(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if strings.Contains(toComplete, "/") || flagValue(cmd, "app") != "" {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		return appPrefixes(cmd, opts, toComplete)
+	}
+}
+
+// appPrefixes offers application names with a trailing slash and tells
+// the shell not to add a space, so the next Tab completes the environment.
+func appPrefixes(cmd *cobra.Command, opts *client.Options, toComplete string) ([]string, cobra.ShellCompDirective) {
+	out, directive := Apps(opts)(cmd, nil, toComplete)
+	for i, s := range out {
+		name, desc, _ := strings.Cut(s, "\t")
+		out[i] = name + "/"
+		if desc != "" {
+			out[i] += "\t" + desc
+		}
+	}
+	if directive == cobra.ShellCompDirectiveNoFileComp {
+		directive |= cobra.ShellCompDirectiveNoSpace
+	}
+	return out, directive
+}
+
+// envsIn lists the environments of app (a name or ID).
+func envsIn(ctx context.Context, c sdkclient.AdmiralClient, app string) ([]Candidate, error) {
+	appID, err := resolve.App(ctx, c.Application(), app)
+	if err != nil {
+		return nil, err
+	}
+	byApp, err := filter.Eq("application_id", appID)
+	if err != nil {
+		return nil, err
+	}
+	var out []Candidate
+	err = paged(func(token string) (string, error) {
+		resp, err := c.Environment().ListEnvironments(ctx, &environmentv1.ListEnvironmentsRequest{
+			Filter:    byApp,
+			PageSize:  pageSize,
+			PageToken: token,
+		})
+		if err != nil {
+			return "", err
+		}
+		for _, e := range resp.Environments {
+			out = append(out, Candidate{Name: e.Name, Description: e.Description})
+		}
+		return resp.NextPageToken, nil
+	}, &out)
+	return out, err
+}
+
+// flagValue returns the named flag's value on cmd, or "" when the flag is
+// not defined. During completion cobra has already parsed the line, so
+// this is the --app the user typed before pressing Tab.
+func flagValue(cmd *cobra.Command, name string) string {
+	f := cmd.Flags().Lookup(name)
+	if f == nil {
+		return ""
+	}
+	return f.Value.String()
 }
 
 // withClient runs list with a bounded context and a fresh client, then

@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"go.admiral.io/cli/internal/client"
+	"go.admiral.io/cli/internal/complete"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
 	"go.admiral.io/cli/internal/resolve"
@@ -21,12 +22,20 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 		Use:   "create <name>",
 		Short: "Create an environment",
 		Example: `  # Create an environment
-  admiral env create staging --app billing
+  admiral env create billing/staging
 
   # Create with a description and labels
-  admiral env create prod --app billing --description "US East production" --label tier=1`,
-		Args: flags.ExactArgs(1),
+  admiral env create billing/prod --description "US East production" --label tier=1
+
+  # By name, scoped with --app
+  admiral env create staging --app billing`,
+		Args:              flags.ExactArgs(1),
+		ValidArgsFunction: complete.First(complete.NewEnv(opts)),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			app, name, err := flags.EnvTarget(cmd, appName, args[0])
+			if err != nil {
+				return err
+			}
 			labels, err := flags.ParseLabels(labelStrs)
 			if err != nil {
 				return err
@@ -38,14 +47,14 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 			}
 			defer c.Close() //nolint:errcheck
 
-			resolvedAppID, err := resolve.App(cmd.Context(), c.Application(), appName)
+			resolvedAppID, err := resolve.App(cmd.Context(), c.Application(), app)
 			if err != nil {
 				return err
 			}
 
 			req := &environmentv1.CreateEnvironmentRequest{
 				ApplicationId: resolvedAppID,
-				Name:          args[0],
+				Name:          name,
 				Description:   description,
 				Labels:        labels,
 			}

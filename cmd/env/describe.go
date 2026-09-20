@@ -13,6 +13,7 @@ import (
 
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
+	"go.admiral.io/cli/internal/complete"
 	"go.admiral.io/cli/internal/filter"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
@@ -42,11 +43,23 @@ Environment health is the worst of its components, in the order Healthy,
 Progressing, Degraded, Unknown.
 
 describe is a human view. Use 'env get -o json' for the raw record.`,
-		Example: `  admiral env describe prod --app shop
+		Example: `  # By path
+  admiral env describe shop/prod
+
+  # By name, scoped with --app
+  admiral env describe prod --app shop
+
+  # By ID
   admiral env describe <uuid>`,
-		Aliases: []string{"desc"},
-		Args:    flags.ExactArgs(1),
+		Aliases:           []string{"desc"},
+		Args:              flags.ExactArgs(1),
+		ValidArgsFunction: complete.First(complete.Envs(opts)),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			appScope, name, err := flags.EnvTarget(cmd, appName, args[0])
+			if err != nil {
+				return err
+			}
+
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
 				return err
@@ -55,7 +68,7 @@ describe is a human view. Use 'env get -o json' for the raw record.`,
 
 			ctx := cmd.Context()
 
-			envID, err := resolve.Environment(ctx, c.Environment(), c.Application(), appName, args[0])
+			envID, err := resolve.Environment(ctx, c.Environment(), c.Application(), appScope, name)
 			if err != nil {
 				return err
 			}
@@ -96,7 +109,7 @@ describe is a human view. Use 'env get -o json' for the raw record.`,
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
 			return p.PrintDescribe(describeEnv(e, app, sec),
-				fmt.Sprintf("admiral env get %s --app %s", e.Name, app.Name))
+				fmt.Sprintf("admiral env get %s/%s", app.Name, e.Name))
 		},
 	}
 

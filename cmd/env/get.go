@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"go.admiral.io/cli/internal/client"
+	"go.admiral.io/cli/internal/complete"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
 	"go.admiral.io/cli/internal/resolve"
@@ -18,17 +19,29 @@ func newGetCmd(opts *client.Options) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get <name>",
 		Short: "Get an environment",
-		Example: `  admiral env get staging --app billing
+		Example: `  # By path
+  admiral env get billing/staging
+
+  # By name, scoped with --app
+  admiral env get staging --app billing
+
+  # By ID
   admiral env get <uuid>`,
-		Args: flags.ExactArgs(1),
+		Args:              flags.ExactArgs(1),
+		ValidArgsFunction: complete.First(complete.Envs(opts)),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			app, name, err := flags.EnvTarget(cmd, appName, args[0])
+			if err != nil {
+				return err
+			}
+
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
 				return err
 			}
 			defer c.Close() //nolint:errcheck
 
-			envID, err := resolve.Environment(cmd.Context(), c.Environment(), c.Application(), appName, args[0])
+			envID, err := resolve.Environment(cmd.Context(), c.Environment(), c.Application(), app, name)
 			if err != nil {
 				return err
 			}
