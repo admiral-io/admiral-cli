@@ -58,9 +58,20 @@ func (cmd *rootCmd) Execute(args []string) {
 
 	// Ctrl+C cancels the command's context: in-flight RPCs are canceled
 	// server-side and the login callback server shuts down, instead of the
-	// process being killed mid-request. A second Ctrl+C kills it outright.
+	// process being killed mid-request.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// A second Ctrl+C kills the process outright. NotifyContext keeps the
+	// signals registered until stop is called, so on its own it swallows
+	// every signal after the first and a command that does not watch the
+	// context (a prompt reading stdin, a dial to a black-holed host) can
+	// only be ended with kill -9. Restoring default handling as soon as the
+	// context is canceled gives the next signal its usual effect.
+	go func() {
+		<-ctx.Done()
+		stop()
+	}()
 
 	if err := cmd.cmd.ExecuteContext(ctx); err != nil {
 		if errors.Is(err, context.Canceled) || ctx.Err() != nil {
