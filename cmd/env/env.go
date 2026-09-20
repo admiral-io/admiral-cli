@@ -24,8 +24,8 @@ with --app for the scope. A path and --app are never combined.`,
 		Aliases:       []string{"environment", "environments"},
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		Args:          flags.NoArgs,
 	}
+	flags.Group(cmd)
 
 	cmd.AddCommand(
 		newCreateCmd(opts),

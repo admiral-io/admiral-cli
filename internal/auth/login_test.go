@@ -446,3 +446,99 @@ func TestLogin_TimesOutWaitingForBrowser(t *testing.T) {
 	})
 	require.ErrorContains(t, err, "timed out")
 }
+
+// Signing in over an existing session revokes the session being replaced:
+// its refresh token is gone from disk but would otherwise stay usable at
+// the provider until it expires.
+func TestLogin_RevokesReplacedSession(t *testing.T) {
+	idp := newFakeIdP(t)
+	dir := t.TempDir()
+	require.NoError(t, credentials.Save(dir, &credentials.Credential{
+		Kind:          credentials.KindSession,
+		AccessToken:   "old-jwt",
+		RefreshToken:  "refresh-old",
+		Issuer:        idp.srv.URL,
+		ClientID:      idp.clientID,
+		RevocationURL: idp.revocationURL(),
+	}))
+
+	res, err := Login(context.Background(), LoginOptions{
+		Issuer:      idp.srv.URL,
+		ClientID:    idp.clientID,
+		ConfigDir:   dir,
+		OpenBrowser: followRedirects(t),
+		Status:      &strings.Builder{},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "martin@example.com", res.Email)
+
+	require.Equal(t, "refresh-old", idp.revokeForm.Get("token"), "the replaced session's refresh token is revoked")
+	require.Equal(t, idp.clientID, idp.revokeForm.Get("client_id"))
+
+	sess, err := credentials.Load(dir)
+	require.NoError(t, err)
+	require.Equal(t, "refresh-1", sess.RefreshToken, "the new session is the one stored")
+}
+
+func TestStore_RevokesReplacedSession(t *testing.T) {
+	idp := newFakeIdP(t)
+	dir := t.TempDir()
+	require.NoError(t, credentials.Save(dir, &credentials.Credential{
+		Kind:          credentials.KindSession,
+		AccessToken:   "jwt",
+		RefreshToken:  "refresh-old",
+		Issuer:        idp.srv.URL,
+		ClientID:      idp.clientID,
+		RevocationURL: idp.revocationURL(),
+	}))
+
+	err := Store(context.Background(), dir, &credentials.Credential{Kind: credentials.KindAPIKey, APIKey: "admp_new"})
+	require.NoError(t, err)
+	require.Equal(t, "refresh-old", idp.revokeForm.Get("token"))
+
+	cred, err := credentials.Load(dir)
+	require.NoError(t, err)
+	require.Equal(t, credentials.KindAPIKey, cred.Kind)
+}
+
+// The new credential is on disk even when the provider cannot be reached;
+// the user is told the old session lives on rather than losing the sign-in.
+func TestStore_KeepsNewCredentialWhenRevocationFails(t *testing.T) {
+	warnings := captureWarnings(t)
+	dir := t.TempDir()
+	require.NoError(t, credentials.Save(dir, &credentials.Credential{
+		Kind:          credentials.KindSession,
+		AccessToken:   "jwt",
+		RefreshToken:  "refresh-old",
+		Issuer:        "http://127.0.0.1:1",
+		ClientID:      "admiral-cli",
+		RevocationURL: "http://127.0.0.1:1/revoke",
+	}))
+
+	err := Store(context.Background(), dir, &credentials.Credential{Kind: credentials.KindAPIKey, APIKey: "admp_new"})
+	require.NoError(t, err)
+	require.Contains(t, warnings.String(), "previous session")
+	require.Contains(t, warnings.String(), "http://127.0.0.1:1")
+
+	cred, err := credentials.Load(dir)
+	require.NoError(t, err)
+	require.Equal(t, "admp_new", cred.APIKey)
+}
+
+// Replacing an API key, or storing over nothing, contacts no provider.
+func TestStore_NothingToRevoke(t *testing.T) {
+	idp := newFakeIdP(t)
+	for name, prev := range map[string]*credentials.Credential{
+		"api key": {Kind: credentials.KindAPIKey, APIKey: "admp_old"},
+		"nothing": nil,
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			if prev != nil {
+				require.NoError(t, credentials.Save(dir, prev))
+			}
+			require.NoError(t, Store(context.Background(), dir, &credentials.Credential{Kind: credentials.KindAPIKey, APIKey: "admp_new"}))
+			require.Nil(t, idp.revokeForm)
+		})
+	}
+}

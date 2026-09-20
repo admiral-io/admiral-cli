@@ -60,3 +60,18 @@ func usageError(cmd *cobra.Command, want, got int) error {
 func helpHint(cmd *cobra.Command) string {
 	return "Run '" + cmd.CommandPath() + " --help' for usage."
 }
+
+// Group marks cmd as one that only groups subcommands. Cobra skips Args on
+// a command that has no Run, so a parent with NoArgs still answers
+// `admiral app bogus` with its help text and exit 0. Group gives the
+// command a run that prints help and an Args that rejects an unknown
+// subcommand as a usage error (exit 2), the same contract as a bad flag.
+func Group(cmd *cobra.Command) {
+	cmd.Args = func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return nil
+		}
+		return cmderr.UsageHint(helpHint(cmd), "unknown command %q for %q", args[0], cmd.CommandPath())
+	}
+	cmd.RunE = func(cmd *cobra.Command, _ []string) error { return cmd.Help() }
+}

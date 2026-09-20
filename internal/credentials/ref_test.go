@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -111,7 +112,7 @@ func TestResolveToken_StoredRef(t *testing.T) {
 	calls := fakeOp(t, "admp_from_op", nil)
 	require.NoError(t, Save(dir, &Credential{Kind: KindAPIKeyRef, Ref: "op://Vault/item/field"}))
 
-	got, err := ResolveToken(dir)
+	got, err := ResolveToken(context.Background(), dir)
 	require.NoError(t, err)
 	require.Equal(t, "admp_from_op", got.Token)
 	require.Equal(t, client.AuthSchemeToken, got.AuthScheme)
@@ -130,7 +131,7 @@ func TestResolveToken_StoredRefFailure(t *testing.T) {
 	fakeOp(t, "", errors.New("vault is locked"))
 	require.NoError(t, Save(dir, &Credential{Kind: KindAPIKeyRef, Ref: "op://Vault/item/field"}))
 
-	_, err := ResolveToken(dir)
+	_, err := ResolveToken(context.Background(), dir)
 	require.ErrorContains(t, err, "resolving stored credential reference")
 	require.ErrorContains(t, err, "vault is locked")
 }
@@ -140,7 +141,7 @@ func TestResolveToken_StoredRefEmpty(t *testing.T) {
 	os.Unsetenv(EnvAPIKey)
 	require.NoError(t, Save(dir, &Credential{Kind: KindAPIKeyRef}))
 
-	_, err := ResolveToken(dir)
+	_, err := ResolveToken(context.Background(), dir)
 	require.ErrorIs(t, err, ErrNotAuthenticated)
 }
 
@@ -149,9 +150,8 @@ func TestRefresh_IgnoresStoredRef(t *testing.T) {
 	os.Unsetenv(EnvAPIKey)
 	require.NoError(t, Save(dir, &Credential{Kind: KindAPIKeyRef, Ref: "op://Vault/item/field"}))
 
-	_, err := ForceRefresh(dir)
+	_, err := ForceRefresh(context.Background(), dir)
 	require.Error(t, err)
-	require.NoError(t, ProactiveRefresh(dir, 0))
 }
 
 // The real exec path hands the child our stdin, so a store that must prompt
@@ -172,4 +172,31 @@ func TestRunCommand_ChildInheritsStdin(t *testing.T) {
 	out, err := runCommand(context.Background(), filepath.Join(bin, "stub"))
 	require.NoError(t, err)
 	require.Equal(t, "got:yes", string(out))
+}
+
+// The caller's deadline is what bounds `op read`, not only resolveTimeout:
+// shell completion gives itself two seconds and must not sit behind a
+// biometric prompt for sixty.
+func TestResolveToken_StoredRefReceivesCallerContext(t *testing.T) {
+	dir := t.TempDir()
+	os.Unsetenv(EnvAPIKey)
+	fakeOp(t, "admp_from_op", nil)
+	var seen context.Context
+	prev := runCommand
+	runCommand = func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		seen = ctx
+		return []byte("admp_from_op"), nil
+	}
+	t.Cleanup(func() { runCommand = prev })
+	require.NoError(t, Save(dir, &Credential{Kind: KindAPIKeyRef, Ref: "op://Vault/item/field"}))
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	_, err := ResolveToken(ctx, dir)
+	require.NoError(t, err)
+	require.NotNil(t, seen)
+	deadline, ok := seen.Deadline()
+	require.True(t, ok, "op read must run under a deadline")
+	require.WithinDuration(t, time.Now().Add(time.Second), deadline, 500*time.Millisecond,
+		"the caller's one-second deadline wins over the sixty-second default")
 }

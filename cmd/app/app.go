@@ -25,8 +25,8 @@ Commands accept an application name or ID as the positional argument.`,
 		Aliases:       []string{"application"},
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		Args:          flags.NoArgs,
 	}
+	flags.Group(cmd)
 
 	cmd.AddCommand(
 		newListCmd(opts),

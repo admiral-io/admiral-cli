@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sync/atomic"
 	"time"
 
 	"google.golang.org/grpc"
@@ -13,11 +12,6 @@ import (
 	"go.admiral.io/cli/internal/output"
 	sdkclient "go.admiral.io/sdk/client"
 )
-
-// created records whether this process built a client, so post-run work
-// that only matters after network use (proactive session refresh) can skip
-// commands like `config list` or `completion`.
-var created atomic.Bool
 
 // Options hold the configuration shared across all commands.
 type Options struct {
@@ -46,8 +40,7 @@ type Options struct {
 // Every call gets a deadline (opts.Timeout, default DefaultTimeout) and
 // read-only calls are retried on Unavailable.
 func CreateClient(ctx context.Context, opts *Options) (sdkclient.AdmiralClient, error) {
-	created.Store(true)
-	cred, err := credentials.ResolveToken(opts.ConfigDir)
+	cred, err := credentials.ResolveToken(ctx, opts.ConfigDir)
 	if err != nil {
 		return nil, err
 	}
@@ -98,6 +91,3 @@ func CreateClient(ctx context.Context, opts *Options) (sdkclient.AdmiralClient, 
 	}
 	return c, nil
 }
-
-// Created reports whether CreateClient ran during this process.
-func Created() bool { return created.Load() }

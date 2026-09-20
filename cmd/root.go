@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -21,7 +20,6 @@ import (
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/config"
-	"go.admiral.io/cli/internal/credentials"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
 	"go.admiral.io/cli/internal/version"
@@ -72,14 +70,15 @@ func (cmd *rootCmd) Execute(args []string) {
 	}()
 
 	if err := cmd.cmd.ExecuteContext(ctx); err != nil {
+		stderr := cmd.cmd.ErrOrStderr()
 		if errors.Is(err, context.Canceled) || ctx.Err() != nil {
-			output.Writef(os.Stderr, "\nInterrupted.\n")
+			output.Writef(stderr, "\nInterrupted.\n")
 			cmd.exit(cmderr.ExitInterrupted)
 			return
 		}
-		output.Writef(os.Stderr, "Error: %s\n", formatError(err))
+		output.Writef(stderr, "Error: %s\n", formatError(err))
 		if hint := errorHint(err); hint != "" {
-			output.Writef(os.Stderr, "%s\n", hint)
+			output.Writef(stderr, "%s\n", hint)
 		}
 		cmd.exit(exitCode(err))
 	}
@@ -104,7 +103,6 @@ Documentation: https://admiral.io/docs`,
 		Version:       ver.String(),
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		Args:          flags.NoArgs,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			// --no-input is the flag form of ADMIRAL_NO_INPUT; iostreams reads
 			// the variable, so the flag just sets it for this process.
@@ -153,7 +151,7 @@ Documentation: https://admiral.io/docs`,
 				if v := os.Getenv(envTimeout); v != "" {
 					d, err := time.ParseDuration(v)
 					if err != nil {
-						return fmt.Errorf("invalid %s %q: %w", envTimeout, v, err)
+						return cmderr.Usage("invalid %s %q: %v", envTimeout, v, err)
 					}
 					clientOpts.Timeout = d
 				}
@@ -182,31 +180,8 @@ Documentation: https://admiral.io/docs`,
 
 			return nil
 		},
-		PersistentPostRun: func(cmd *cobra.Command, args []string) {
-			// Best-effort: if the login session is close to expiring,
-			// refresh it now so the next command does not pay the latency.
-			// Only after a command that actually used the API; there is no
-			// point reading the credentials file after `config list`.
-			if !client.Created() {
-				return
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-			defer cancel()
-
-			done := make(chan struct{})
-			go func() {
-				if err := credentials.ProactiveRefresh(root.configPath, time.Minute); err != nil {
-					slog.Debug("proactive session refresh failed", "error", err)
-				}
-				close(done)
-			}()
-			select {
-			case <-done:
-			case <-ctx.Done():
-				slog.Debug("proactive session refresh timed out")
-			}
-		},
 	}
+	flags.Group(cmd)
 	cmd.SetVersionTemplate("{{.Version}}")
 
 	// A bad or unknown flag is a usage error: exit 2, one line, and a hint

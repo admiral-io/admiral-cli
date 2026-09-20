@@ -1,6 +1,7 @@
 package credentials
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -30,7 +31,7 @@ func session(expiry time.Time, refresh, tokenURL string) *Credential {
 func TestResolveToken_EnvAPIKey(t *testing.T) {
 	t.Setenv(EnvAPIKey, "admp_env")
 
-	got, err := ResolveToken(t.TempDir())
+	got, err := ResolveToken(context.Background(), t.TempDir())
 	require.NoError(t, err)
 	require.Equal(t, "admp_env", got.Token)
 	require.Equal(t, client.AuthSchemeToken, got.AuthScheme)
@@ -42,7 +43,7 @@ func TestResolveToken_EnvBeatsFile(t *testing.T) {
 	require.NoError(t, Save(dir, &Credential{Kind: KindAPIKey, APIKey: "admp_stored"}))
 	t.Setenv(EnvAPIKey, "admp_env")
 
-	got, err := ResolveToken(dir)
+	got, err := ResolveToken(context.Background(), dir)
 	require.NoError(t, err)
 	require.Equal(t, "admp_env", got.Token)
 	require.Equal(t, SourceEnv, got.Source)
@@ -53,7 +54,7 @@ func TestResolveToken_StoredAPIKey(t *testing.T) {
 	os.Unsetenv(EnvAPIKey)
 	require.NoError(t, Save(dir, &Credential{Kind: KindAPIKey, APIKey: "admp_stored"}))
 
-	got, err := ResolveToken(dir)
+	got, err := ResolveToken(context.Background(), dir)
 	require.NoError(t, err)
 	require.Equal(t, "admp_stored", got.Token)
 	require.Equal(t, client.AuthSchemeToken, got.AuthScheme)
@@ -65,7 +66,7 @@ func TestResolveToken_Session(t *testing.T) {
 	os.Unsetenv(EnvAPIKey)
 	require.NoError(t, Save(dir, session(time.Now().Add(time.Hour), "", "")))
 
-	got, err := ResolveToken(dir)
+	got, err := ResolveToken(context.Background(), dir)
 	require.NoError(t, err)
 	require.Equal(t, "jwt-1", got.Token)
 	require.Equal(t, client.AuthSchemeBearer, got.AuthScheme)
@@ -77,7 +78,7 @@ func TestResolveToken_SessionNoExpiry(t *testing.T) {
 	os.Unsetenv(EnvAPIKey)
 	require.NoError(t, Save(dir, session(time.Time{}, "", "")))
 
-	got, err := ResolveToken(dir)
+	got, err := ResolveToken(context.Background(), dir)
 	require.NoError(t, err)
 	require.Equal(t, "jwt-1", got.Token)
 }
@@ -85,7 +86,7 @@ func TestResolveToken_SessionNoExpiry(t *testing.T) {
 func TestResolveToken_NotAuthenticated(t *testing.T) {
 	os.Unsetenv(EnvAPIKey)
 
-	_, err := ResolveToken(t.TempDir())
+	_, err := ResolveToken(context.Background(), t.TempDir())
 	require.ErrorIs(t, err, ErrNotAuthenticated)
 }
 
@@ -94,7 +95,7 @@ func TestResolveToken_UnknownKind(t *testing.T) {
 	os.Unsetenv(EnvAPIKey)
 	require.NoError(t, Save(dir, &Credential{Kind: "mystery"}))
 
-	_, err := ResolveToken(dir)
+	_, err := ResolveToken(context.Background(), dir)
 	require.ErrorContains(t, err, "unknown kind")
 }
 
@@ -114,7 +115,7 @@ func TestResolveToken_ExpiredWithoutRefreshToken(t *testing.T) {
 	os.Unsetenv(EnvAPIKey)
 	require.NoError(t, Save(dir, session(time.Now().Add(-time.Minute), "", "")))
 
-	_, err := ResolveToken(dir)
+	_, err := ResolveToken(context.Background(), dir)
 	require.ErrorIs(t, err, ErrSessionExpired)
 }
 
@@ -145,7 +146,7 @@ func TestResolveToken_RefreshesNearExpiry(t *testing.T) {
 	srv, seen := tokenServer(t, "refresh-2")
 	require.NoError(t, Save(dir, session(time.Now().Add(5*time.Second), "refresh-1", srv.URL)))
 
-	got, err := ResolveToken(dir)
+	got, err := ResolveToken(context.Background(), dir)
 	require.NoError(t, err)
 	require.Equal(t, "jwt-2", got.Token)
 	require.Equal(t, []string{"refresh_token:refresh-1:admiral-cli"}, *seen)
@@ -166,7 +167,7 @@ func TestRefresh_KeepsOldRefreshTokenWhenNoneReturned(t *testing.T) {
 	srv, _ := tokenServer(t, "")
 	require.NoError(t, Save(dir, session(time.Now().Add(-time.Minute), "refresh-1", srv.URL)))
 
-	_, err := ResolveToken(dir)
+	_, err := ResolveToken(context.Background(), dir)
 	require.NoError(t, err)
 
 	cred, err := Load(dir)
@@ -180,7 +181,7 @@ func TestForceRefresh(t *testing.T) {
 	srv, seen := tokenServer(t, "refresh-2")
 	require.NoError(t, Save(dir, session(time.Now().Add(time.Hour), "refresh-1", srv.URL))) // looks valid locally
 
-	got, err := ForceRefresh(dir)
+	got, err := ForceRefresh(context.Background(), dir)
 	require.NoError(t, err)
 	require.Equal(t, "jwt-2", got.Token)
 	require.Len(t, *seen, 1)
@@ -189,45 +190,15 @@ func TestForceRefresh(t *testing.T) {
 func TestForceRefresh_APIKeyActive(t *testing.T) {
 	t.Run("env", func(t *testing.T) {
 		t.Setenv(EnvAPIKey, "admp_env")
-		_, err := ForceRefresh(t.TempDir())
+		_, err := ForceRefresh(context.Background(), t.TempDir())
 		require.Error(t, err)
 	})
 	t.Run("stored", func(t *testing.T) {
 		dir := t.TempDir()
 		os.Unsetenv(EnvAPIKey)
 		require.NoError(t, Save(dir, &Credential{Kind: KindAPIKey, APIKey: "admp_stored"}))
-		_, err := ForceRefresh(dir)
+		_, err := ForceRefresh(context.Background(), dir)
 		require.Error(t, err)
-	})
-}
-
-func TestProactiveRefresh(t *testing.T) {
-	os.Unsetenv(EnvAPIKey)
-	srv, seen := tokenServer(t, "refresh-2")
-
-	cases := []struct {
-		name string
-		cred *Credential
-		want int
-	}{
-		{"within window", session(time.Now().Add(30*time.Second), "r", srv.URL), 1},
-		{"fresh", session(time.Now().Add(time.Hour), "r", srv.URL), 0},
-		{"already expired", session(time.Now().Add(-time.Minute), "r", srv.URL), 0},
-		{"no refresh token", session(time.Now().Add(30*time.Second), "", srv.URL), 0},
-		{"stored api key", &Credential{Kind: KindAPIKey, APIKey: "admp_stored"}, 0},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			dir := t.TempDir()
-			*seen = nil
-			require.NoError(t, Save(dir, tc.cred))
-			require.NoError(t, ProactiveRefresh(dir, time.Minute))
-			require.Len(t, *seen, tc.want)
-		})
-	}
-
-	t.Run("no credentials", func(t *testing.T) {
-		require.NoError(t, ProactiveRefresh(t.TempDir(), time.Minute))
 	})
 }
 
@@ -334,7 +305,7 @@ func TestResolveToken_ConcurrentRefreshHappensOnce(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			results[i], errs[i] = ResolveToken(dir)
+			results[i], errs[i] = ResolveToken(context.Background(), dir)
 		}()
 	}
 	wg.Wait()
@@ -357,7 +328,7 @@ func TestForceRefresh_SkipsWhenAlreadyRefreshed(t *testing.T) {
 	require.NoError(t, Save(dir, session(time.Now().Add(time.Hour), "r1", srv.URL)))
 
 	// First 401 handler refreshes.
-	first, err := ForceRefresh(dir)
+	first, err := ForceRefresh(context.Background(), dir)
 	require.NoError(t, err)
 	require.Equal(t, "jwt-r1", first.Token)
 
@@ -365,7 +336,7 @@ func TestForceRefresh_SkipsWhenAlreadyRefreshed(t *testing.T) {
 	// refreshSession with the stale credential; it must pick up the new one
 	// rather than burn the rotated refresh token.
 	stale := session(time.Now().Add(time.Hour), "r1", srv.URL) // AccessToken "jwt-1", now stale
-	got, err := refreshSession(dir, stale)
+	got, err := refreshSession(context.Background(), dir, stale)
 	require.NoError(t, err)
 	require.Equal(t, "jwt-r1", got.AccessToken)
 	require.EqualValues(t, 1, atomic.LoadInt32(calls))
@@ -376,7 +347,7 @@ func TestResolveToken_CorruptFile(t *testing.T) {
 	os.Unsetenv(EnvAPIKey)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, credentialsFile), []byte(`{"kind":"session","access_tok`), 0600))
 
-	_, err := ResolveToken(dir)
+	_, err := ResolveToken(context.Background(), dir)
 	require.ErrorContains(t, err, "is not valid")
 	require.ErrorContains(t, err, "admiral auth login")
 	require.ErrorContains(t, err, credentialsFile)
@@ -393,4 +364,35 @@ func TestDelete_KeepsLockFile(t *testing.T) {
 	require.NoError(t, err, "lock file survives logout so concurrent holders stay excluded")
 	_, err = Load(dir)
 	require.ErrorIs(t, err, os.ErrNotExist)
+}
+
+// A caller's context reaches the token endpoint: a refresh that is still
+// in flight when the context ends is abandoned and reported as the
+// context's error, not as an expired session, so the root can say
+// "Interrupted." instead of telling the user to sign in again.
+func TestResolveToken_RefreshHonorsContext(t *testing.T) {
+	dir := t.TempDir()
+	os.Unsetenv(EnvAPIKey)
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	t.Cleanup(func() { close(release); srv.Close() })
+	require.NoError(t, Save(dir, session(time.Now().Add(-time.Minute), "r1", srv.URL)))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, err := ResolveToken(ctx, dir)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.NotErrorIs(t, err, ErrSessionExpired)
+	require.Less(t, time.Since(start), refreshTimeout, "must not wait for the refresh budget")
+
+	// The stored session is untouched: a later command retries the refresh.
+	cred, err := Load(dir)
+	require.NoError(t, err)
+	require.Equal(t, "r1", cred.RefreshToken)
 }
