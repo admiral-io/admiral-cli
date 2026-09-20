@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"go.admiral.io/cli/internal/client"
+	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/credentials"
 	"go.admiral.io/cli/internal/output"
 )
@@ -122,6 +123,7 @@ func TestLogin_FlagsMutuallyExclusive(t *testing.T) {
 	opts := &client.Options{ConfigDir: t.TempDir()}
 	_, err := run(t, opts, "", "login", "--with-token", "--no-browser")
 	require.ErrorContains(t, err, "mutually exclusive")
+	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 }
 
 func TestLogout_StoredAPIKey(t *testing.T) {
@@ -306,9 +308,11 @@ func TestLogin_ScopeFlagValidation(t *testing.T) {
 
 	_, err := run(t, opts, "", "login", "--scope", "bogus:read")
 	require.ErrorContains(t, err, `unknown scope "bogus:read"`)
+	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 
 	_, err = run(t, opts, validKey+"\n", "login", "--with-token", "--scope", "app:read")
 	require.ErrorContains(t, err, "--scope applies to browser sign-in")
+	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 }
 
 func TestStatus_ShowsScopes(t *testing.T) {

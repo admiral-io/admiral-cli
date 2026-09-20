@@ -10,6 +10,7 @@ import (
 
 	internalauth "go.admiral.io/cli/internal/auth"
 	"go.admiral.io/cli/internal/client"
+	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/credentials"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/input"
@@ -69,10 +70,10 @@ precedence over whatever is stored.`,
 		Args: flags.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if withToken && noBrowser {
-				return errors.New("--with-token and --no-browser are mutually exclusive")
+				return cmderr.Usage("--with-token and --no-browser are mutually exclusive")
 			}
 			if withToken && len(scopeFlag) > 0 {
-				return errors.New("--scope applies to browser sign-in; an API key's scopes are fixed when the key is created")
+				return cmderr.Usage("--scope applies to browser sign-in; an API key's scopes are fixed when the key is created")
 			}
 			scopeList, err := validateScopes(scopeFlag)
 			if err != nil {

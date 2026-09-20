@@ -1,9 +1,6 @@
 package config
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/spf13/cobra"
 
 	admiralclient "go.admiral.io/cli/internal/client"
@@ -24,8 +21,8 @@ use 'admiral config list' to see the effective value and where it comes from.`,
 		Args: flags.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			key := args[0]
-			if !config.IsValidKey(key) {
-				return fmt.Errorf("unknown config key %q (valid keys: %s)", key, strings.Join(config.ValidKeys, ", "))
+			if err := config.CheckKey(key); err != nil {
+				return err
 			}
 
 			s, err := config.LoadSettings(opts.ConfigDir)

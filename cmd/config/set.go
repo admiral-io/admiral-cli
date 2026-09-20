@@ -8,6 +8,7 @@ import (
 
 	admiralclient "go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/config"
+	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/input"
 	"go.admiral.io/cli/internal/output"
 )
@@ -30,11 +31,11 @@ See 'admiral config --help' for what each key does.`,
 
   # Prompt for the value
   admiral config set server`,
-		Args: cobra.RangeArgs(1, 2),
+		Args: flags.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			key := args[0]
-			if !config.IsValidKey(key) {
-				return fmt.Errorf("unknown config key %q (valid keys: %s)", key, strings.Join(config.ValidKeys, ", "))
+			if err := config.CheckKey(key); err != nil {
+				return err
 			}
 
 			var value string

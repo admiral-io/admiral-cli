@@ -1,6 +1,11 @@
 package config
 
-import "slices"
+import (
+	"slices"
+	"strings"
+
+	"go.admiral.io/cli/internal/cmderr"
+)
 
 // ValidKeys lists all recognized configuration keys.
 var ValidKeys = []string{"insecure", "output", "plaintext", "server"}
@@ -27,6 +32,15 @@ var Defaults = map[string]string{
 // IsValidKey reports whether key is a recognized config key.
 func IsValidKey(key string) bool {
 	return slices.Contains(ValidKeys, key)
+}
+
+// CheckKey returns a usage error (exit 2) naming the valid keys when key is
+// not one of them.
+func CheckKey(key string) error {
+	if IsValidKey(key) {
+		return nil
+	}
+	return cmderr.Usage("unknown config key %q (valid keys: %s)", key, strings.Join(ValidKeys, ", "))
 }
 
 // IsSensitive reports whether a key should be masked in output.

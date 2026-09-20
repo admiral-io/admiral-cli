@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"go.admiral.io/cli/internal/cmderr"
 )
 
 func TestSetAndGet(t *testing.T) {
@@ -22,6 +24,13 @@ func TestSet_InvalidKey(t *testing.T) {
 	err := Set(t.TempDir(), "bogus", "value")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unknown config key")
+	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
+}
+
+func TestSet_InvalidBool(t *testing.T) {
+	err := Set(t.TempDir(), "insecure", "yes")
+	require.EqualError(t, err, `invalid value "yes" for insecure: must be true or false`)
+	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 }
 
 func TestUnset(t *testing.T) {
@@ -39,6 +48,7 @@ func TestUnset_InvalidKey(t *testing.T) {
 	err := Unset(t.TempDir(), "bogus")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unknown config key")
+	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 }
 
 func TestLoadSettings_NoFile(t *testing.T) {

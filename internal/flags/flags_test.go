@@ -36,6 +36,22 @@ func TestExactArgs(t *testing.T) {
 	require.EqualError(t, err, "accepts 1 arg(s), received 2")
 }
 
+func TestRangeArgs(t *testing.T) {
+	cmd := &cobra.Command{Use: "set <key> [value]", Args: RangeArgs(1, 2), RunE: func(*cobra.Command, []string) error { return nil }}
+	_, err := exec(cmd, "k")
+	require.NoError(t, err)
+	_, err = exec(cmd, "k", "v")
+	require.NoError(t, err)
+
+	_, err = exec(cmd)
+	require.EqualError(t, err, "missing argument: set <key> [value]")
+	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
+
+	_, err = exec(cmd, "a", "b", "c")
+	require.EqualError(t, err, "accepts at most 2 arg(s), received 3")
+	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
+}
+
 func TestNoArgs(t *testing.T) {
 	cmd := &cobra.Command{Use: "list", Args: NoArgs, RunE: func(*cobra.Command, []string) error { return nil }}
 	_, err := exec(cmd, "extra")
