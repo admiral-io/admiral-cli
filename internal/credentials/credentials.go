@@ -122,7 +122,10 @@ type Credential struct {
 // ResolveToken returns the credential to use for API calls. The environment
 // wins over the file. A stored session that is expired or within
 // refreshWindow of expiry is refreshed and persisted before being returned.
-func ResolveToken(configDir string) (*TokenResult, error) {
+// ctx bounds the work a credential may need before it is usable: a stored
+// reference runs an external program (`op read`) and a stale session calls
+// the token endpoint, and both stop when ctx does.
+func ResolveToken(ctx context.Context, configDir string) (*TokenResult, error) {
 	if k := os.Getenv(EnvAPIKey); k != "" {
 		return &TokenResult{Token: k, AuthScheme: client.AuthSchemeToken, Source: SourceEnv}, nil
 	}
@@ -150,7 +153,7 @@ func ResolveToken(configDir string) (*TokenResult, error) {
 		if cred.Ref == "" {
 			return nil, ErrNotAuthenticated
 		}
-		key, err := ResolveRef(context.Background(), cred.Ref)
+		key, err := ResolveRef(ctx, cred.Ref)
 		if err != nil {
 			return nil, fmt.Errorf("resolving stored credential reference: %w", err)
 		}
@@ -163,8 +166,11 @@ func ResolveToken(configDir string) (*TokenResult, error) {
 		if cred.Expiry.IsZero() || time.Until(cred.Expiry) > refreshWindow {
 			return &TokenResult{Token: cred.AccessToken, AuthScheme: client.AuthSchemeBearer, Source: SourceSession}, nil
 		}
-		refreshed, err := refreshSession(configDir, cred)
+		refreshed, err := refreshSession(ctx, configDir, cred)
 		if err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
 			slog.Debug("session refresh failed", "error", err)
 			return nil, ErrSessionExpired
 		}
@@ -178,7 +184,7 @@ func ResolveToken(configDir string) (*TokenResult, error) {
 // ForceRefresh refreshes the stored session regardless of its local expiry.
 // Used after the server rejects a token that looked valid locally. Returns
 // an error when the active credential is not a session.
-func ForceRefresh(configDir string) (*TokenResult, error) {
+func ForceRefresh(ctx context.Context, configDir string) (*TokenResult, error) {
 	if os.Getenv(EnvAPIKey) != "" {
 		return nil, errors.New("active credential is an API key; nothing to refresh")
 	}
@@ -191,35 +197,11 @@ func ForceRefresh(configDir string) (*TokenResult, error) {
 		return nil, errors.New("active credential is an API key; nothing to refresh")
 	}
 
-	refreshed, err := refreshSession(configDir, cred)
+	refreshed, err := refreshSession(ctx, configDir, cred)
 	if err != nil {
 		return nil, fmt.Errorf("token refresh failed: %w", err)
 	}
 	return &TokenResult{Token: refreshed.AccessToken, AuthScheme: client.AuthSchemeBearer, Source: SourceSession}, nil
-}
-
-// ProactiveRefresh refreshes a session that is still valid but will expire
-// within window, so the next command starts with a fresh token. It is a no-op
-// unless a session is the active credential and is inside the window.
-func ProactiveRefresh(configDir string, window time.Duration) error {
-	if os.Getenv(EnvAPIKey) != "" {
-		return nil
-	}
-
-	cred, err := Load(configDir)
-	if err != nil {
-		return nil //nolint:nilerr // no credentials is not an error here
-	}
-	if cred.Kind != KindSession || cred.Expiry.IsZero() || cred.RefreshToken == "" || cred.TokenURL == "" {
-		return nil
-	}
-	remaining := time.Until(cred.Expiry)
-	if remaining > window || remaining <= 0 {
-		return nil
-	}
-
-	_, err = refreshSession(configDir, cred)
-	return err
 }
 
 // FilePath returns the location of the credentials file for configDir.
@@ -313,7 +295,7 @@ func Delete(configDir string) error {
 // commands start at once, the first to get the lock refreshes and the rest
 // find its result on disk instead of presenting an already-rotated refresh
 // token, which the server refuses.
-func refreshSession(configDir string, cred *Credential) (*Credential, error) {
+func refreshSession(ctx context.Context, configDir string, cred *Credential) (*Credential, error) {
 	var out *Credential
 	err := withLock(configDir, func() error {
 		current, err := Load(configDir)
@@ -327,15 +309,16 @@ func refreshSession(configDir string, cred *Credential) (*Credential, error) {
 			out = current
 			return nil
 		}
-		out, err = doRefresh(configDir, current)
+		out, err = doRefresh(ctx, configDir, current)
 		return err
 	})
 	return out, err
 }
 
 // doRefresh performs the token endpoint call and persists the result. The
-// caller holds the credentials lock.
-func doRefresh(configDir string, cred *Credential) (*Credential, error) {
+// caller holds the credentials lock. The call is bounded by refreshTimeout
+// and by ctx, whichever ends first.
+func doRefresh(ctx context.Context, configDir string, cred *Credential) (*Credential, error) {
 	if cred.RefreshToken == "" || cred.TokenURL == "" {
 		return nil, errors.New("session has no refresh token")
 	}
@@ -358,7 +341,7 @@ func doRefresh(configDir string, cred *Credential) (*Credential, error) {
 		Endpoint: oauth2.Endpoint{TokenURL: cred.TokenURL, AuthStyle: oauth2.AuthStyleInParams},
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), refreshTimeout)
+	ctx, cancel := context.WithTimeout(ctx, refreshTimeout)
 	defer cancel()
 
 	refreshed, err := cfg.TokenSource(ctx, tok).Token()

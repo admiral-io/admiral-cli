@@ -70,7 +70,7 @@ func TestLoginWithAPIKey_StoresKey(t *testing.T) {
 	require.Equal(t, validKey, cred.APIKey)
 
 	// It is now what commands will use, with the Token scheme.
-	res, err := credentials.ResolveToken(opts.ConfigDir)
+	res, err := credentials.ResolveToken(context.Background(), opts.ConfigDir)
 	require.NoError(t, err)
 	require.Equal(t, credentials.SourceAPIKey, res.Source)
 }

@@ -115,7 +115,7 @@ func authRetryInterceptor(configDir string, setToken func(string)) grpc.UnaryCli
 		}
 
 		slog.Debug("unauthenticated response; refreshing session and retrying", "method", method)
-		fresh, refreshErr := credentials.ForceRefresh(configDir)
+		fresh, refreshErr := credentials.ForceRefresh(ctx, configDir)
 		if refreshErr != nil {
 			slog.Debug("session refresh failed", "error", refreshErr)
 			return err

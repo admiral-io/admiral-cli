@@ -21,7 +21,6 @@ import (
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/config"
-	"go.admiral.io/cli/internal/credentials"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
 	"go.admiral.io/cli/internal/version"
@@ -183,30 +182,6 @@ Documentation: https://admiral.io/docs`,
 			clientOpts.OutputFormat = f
 
 			return nil
-		},
-		PersistentPostRun: func(cmd *cobra.Command, args []string) {
-			// Best-effort: if the login session is close to expiring,
-			// refresh it now so the next command does not pay the latency.
-			// Only after a command that actually used the API; there is no
-			// point reading the credentials file after `config list`.
-			if !client.Created() {
-				return
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-			defer cancel()
-
-			done := make(chan struct{})
-			go func() {
-				if err := credentials.ProactiveRefresh(root.configPath, time.Minute); err != nil {
-					slog.Debug("proactive session refresh failed", "error", err)
-				}
-				close(done)
-			}()
-			select {
-			case <-done:
-			case <-ctx.Done():
-				slog.Debug("proactive session refresh timed out")
-			}
 		},
 	}
 	cmd.SetVersionTemplate("{{.Version}}")
