@@ -31,10 +31,10 @@ func TestVersionJSON(t *testing.T) {
 		t.Fatal("expected no error, got", err)
 	}
 
-	if string(json) == "" {
+	if json == "" {
 		t.Fatal("should not be empty")
 	}
-	t.Log("\n" + string(json))
+	t.Log("\n" + json)
 }
 
 func TestGetGitVersion(t *testing.T) {

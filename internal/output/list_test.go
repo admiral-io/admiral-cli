@@ -26,7 +26,10 @@ func items(names ...string) []proto.Message {
 }
 
 func nameOf(l List) func(int) string {
-	return func(i int) string { return l.Items[i].(*structpb.Value).GetStringValue() }
+	return func(i int) string {
+		v, _ := l.Items[i].(*structpb.Value)
+		return v.GetStringValue()
+	}
 }
 
 func TestPrintList_Table(t *testing.T) {
