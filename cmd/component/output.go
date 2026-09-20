@@ -1,6 +1,7 @@
 package component
 
 import (
+	"strconv"
 	"strings"
 
 	"go.admiral.io/cli/internal/output"
@@ -33,7 +34,7 @@ var revisionTable = output.Table[*registryv1.Revision]{
 
 func formatTags(tags []*registryv1.Tag) string {
 	if len(tags) == 0 {
-		return "-"
+		return "" // the table renders the empty cell as <none>
 	}
 	names := make([]string, 0, len(tags))
 	for _, t := range tags {
@@ -66,21 +67,26 @@ func formatFindingCount(fs []*registryv1.Finding) string {
 		registryv1.FindingSeverity_MEDIUM, registryv1.FindingSeverity_LOW, registryv1.FindingSeverity_INFO,
 	} {
 		if n := counts[sev]; n > 0 {
-			parts = append(parts, strings.ToLower(sev.String())+":"+itoa(n))
+			parts = append(parts, strings.ToLower(sev.String())+":"+strconv.Itoa(n))
 		}
 	}
 	return strings.Join(parts, " ")
 }
 
+// sizeUnits are the binary prefixes formatSize can print; anything past the
+// last one is expressed in it rather than indexing off the end.
+var sizeUnits = []string{"B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"}
+
 func formatSize(n int64) string {
 	const unit = 1024
 	if n < unit {
-		return itoa(int(n)) + " B"
+		return strconv.FormatInt(n, 10) + " B"
 	}
-	div, exp := int64(unit), 0
-	for m := n / unit; m >= unit; m /= unit {
+	div, exp := int64(unit), 1
+	for m := n / unit; m >= unit && exp < len(sizeUnits)-1; m /= unit {
 		div *= unit
 		exp++
 	}
-	return strings.TrimSuffix(strings.TrimSuffix(ftoa(float64(n)/float64(div)), "0"), ".") + " " + "KMGT"[exp:exp+1] + "iB"
+	v := strconv.FormatFloat(float64(n)/float64(div), 'f', 1, 64)
+	return strings.TrimSuffix(strings.TrimSuffix(v, "0"), ".") + " " + sizeUnits[exp]
 }

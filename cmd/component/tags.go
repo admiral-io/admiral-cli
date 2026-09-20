@@ -3,6 +3,7 @@ package component
 import (
 	"context"
 	"regexp"
+	"slices"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -41,7 +42,7 @@ func applyTags(ctx context.Context, p *output.Printer, c sdkclient.AdmiralClient
 	tags := append([]string(nil), resp.Revision.Tags...)
 	comp, rev := resp.Component, resp.Revision
 
-	if after.sha != "" && !resp.Unchanged && !contains(tags, after.sha) {
+	if after.sha != "" && !resp.Unchanged && !slices.Contains(tags, after.sha) {
 		if _, err := c.Registry().SetTag(ctx, &registryv1.SetTagRequest{ComponentId: comp.Id, Name: after.sha, Digest: rev.Digest}); err != nil {
 			output.Writef(p.Err(), "%s: could not tag %s: %v\n", comp.Name, after.sha, err)
 		} else {
@@ -49,7 +50,7 @@ func applyTags(ctx context.Context, p *output.Printer, c sdkclient.AdmiralClient
 		}
 	}
 
-	if v := packed.Version; v != "" && semverPattern.MatchString(v) && !contains(tags, v) {
+	if v := packed.Version; v != "" && semverPattern.MatchString(v) && !slices.Contains(tags, v) {
 		_, err := c.Registry().SetTag(ctx, &registryv1.SetTagRequest{ComponentId: comp.Id, Name: v, Digest: rev.Digest})
 		switch {
 		case err == nil:
@@ -64,13 +65,4 @@ func applyTags(ctx context.Context, p *output.Printer, c sdkclient.AdmiralClient
 		}
 	}
 	return tags
-}
-
-func contains(list []string, s string) bool {
-	for _, x := range list {
-		if x == s {
-			return true
-		}
-	}
-	return false
 }

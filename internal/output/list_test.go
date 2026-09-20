@@ -191,3 +191,13 @@ func TestFormatEnum(t *testing.T) {
 	require.Equal(t, "ssh-key", FormatEnumKebab(credentialv1.CredentialType_CREDENTIAL_TYPE_SSH_KEY))
 	require.Equal(t, None, FormatEnumKebab(credentialv1.CredentialType_CREDENTIAL_TYPE_UNSPECIFIED))
 }
+
+// A list whose caller forgot Name fails with a message rather than a nil
+// dereference; an empty list still prints nothing.
+func TestPrintList_NameMissing(t *testing.T) {
+	var out, errOut bytes.Buffer
+	p := testPrinterErr(FormatName, &out, &errOut)
+	err := p.PrintList(List{Kind: "w", Items: items("prod")}, nil)
+	require.ErrorContains(t, err, "-o name is not supported")
+	require.Empty(t, out.String())
+}

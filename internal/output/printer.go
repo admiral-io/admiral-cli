@@ -3,6 +3,7 @@ package output
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -77,6 +78,9 @@ func (p *Printer) PrintList(l List, tableFn func(w *tabwriter.Writer)) error {
 	case FormatYAML:
 		err = p.printYAMLArray(l.Items)
 	case FormatName:
+		if l.Name == nil && len(l.Items) > 0 {
+			return errors.New("-o name is not supported by this command")
+		}
 		for i := range l.Items {
 			Writeln(p.IO.Out, l.Name(i))
 		}

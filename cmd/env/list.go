@@ -54,12 +54,12 @@ func newListCmd(opts *client.Options) *cobra.Command {
 				return err
 			}
 
-			filter, err := filter.Eq("application_id", resolvedAppID)
+			byApp, err := filter.Eq("application_id", resolvedAppID)
 			if err != nil {
 				return err
 			}
 			resp, err := c.Environment().ListEnvironments(cmd.Context(), &environmentv1.ListEnvironmentsRequest{
-				Filter:    filter,
+				Filter:    byApp,
 				PageSize:  pageSize,
 				PageToken: pageToken,
 			})

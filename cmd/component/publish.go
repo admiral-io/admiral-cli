@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -23,8 +22,6 @@ import (
 // maxBundleBytes is the registry's cap on an inline bundle. Checked here so
 // the answer is a sentence, not a rejected upload after the upload.
 const maxBundleBytes = 64 << 20
-
-var namePattern = regexp.MustCompile(`^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
 func newPublishCmd(opts *client.Options) *cobra.Command {
 	var (
@@ -125,7 +122,7 @@ component. This is the form CI runs on every push.`,
 			if name == "" {
 				name = filepath.Base(abs)
 			}
-			if !namePattern.MatchString(name) {
+			if !manifest.ValidName(name) {
 				return cmderr.Usage("component name %q must be lowercase letters, digits and hyphens (use --name)", name)
 			}
 

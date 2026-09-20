@@ -2,6 +2,7 @@ package output
 
 import (
 	"fmt"
+	"os"
 	"slices"
 	"sort"
 	"strings"
@@ -196,4 +197,12 @@ func OrEmpty(s string) string {
 		return None
 	}
 	return s
+}
+
+// Tildify shortens a path under $HOME to ~/... for display.
+func Tildify(p string) string {
+	if home, err := os.UserHomeDir(); err == nil && home != "" && strings.HasPrefix(p, home+string(os.PathSeparator)) {
+		return "~" + p[len(home):]
+	}
+	return p
 }

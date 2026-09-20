@@ -27,6 +27,11 @@ var ErrNotFound = errors.New("no " + Filename + " found")
 
 var namePattern = regexp.MustCompile(`^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
+// ValidName reports whether s is a component name the registry accepts:
+// lowercase letters, digits and hyphens, starting with a letter, at most
+// 63 characters. Shared with `component publish --name`.
+func ValidName(s string) bool { return namePattern.MatchString(s) }
+
 // Component is one declared component.
 type Component struct {
 	// Path is the directory, relative to the repository root, forward slashes.
@@ -80,8 +85,11 @@ func Parse(data []byte) (*Manifest, error) {
 		if c.Path == "" {
 			return nil, fmt.Errorf("%s: components[%d] has no path", Filename, i)
 		}
+		// filepath.IsAbs on the raw value catches a Windows drive path
+		// (C:\modules\x), which ToSlash turns into C:/modules/x and
+		// path.IsAbs would then wave through.
 		clean := path.Clean(filepath.ToSlash(c.Path))
-		if path.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, "../") {
+		if filepath.IsAbs(c.Path) || path.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, "../") {
 			return nil, fmt.Errorf("%s: path %q is not inside the repository", Filename, c.Path)
 		}
 		c.Path = clean
@@ -92,7 +100,7 @@ func Parse(data []byte) (*Manifest, error) {
 		if c.Name == "" {
 			c.Name = path.Base(clean)
 		}
-		if !namePattern.MatchString(c.Name) {
+		if !ValidName(c.Name) {
 			return nil, fmt.Errorf("%s: %q is not a valid component name (lowercase letters, digits and hyphens); set name: on the %q entry", Filename, c.Name, c.Path)
 		}
 		if other, dup := names[c.Name]; dup {

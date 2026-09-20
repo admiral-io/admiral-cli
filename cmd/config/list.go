@@ -3,7 +3,6 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -57,9 +56,9 @@ built-in default. Credentials are not configuration; see 'admiral auth status'.`
 			}
 
 			if _, err := os.Stat(path); err == nil {
-				output.Writef(cmd.ErrOrStderr(), "\nConfig file: %s\n", tildify(path))
+				output.Writef(cmd.ErrOrStderr(), "\nConfig file: %s\n", output.Tildify(path))
 			} else {
-				output.Writef(cmd.ErrOrStderr(), "\nConfig file: %s (not created yet)\n", tildify(path))
+				output.Writef(cmd.ErrOrStderr(), "\nConfig file: %s (not created yet)\n", output.Tildify(path))
 			}
 			return nil
 		},
@@ -82,13 +81,6 @@ func resolve(cmd *cobra.Command, key string, s config.Settings) (value, source s
 		return v, "config file"
 	}
 	return "", "default"
-}
-
-func tildify(p string) string {
-	if home, err := os.UserHomeDir(); err == nil && home != "" && strings.HasPrefix(p, home+string(os.PathSeparator)) {
-		return "~" + p[len(home):]
-	}
-	return p
 }
 
 // settingRow is one resolved configuration value and where it came from.
