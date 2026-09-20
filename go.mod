@@ -8,7 +8,7 @@ require (
 	github.com/go-jose/go-jose/v4 v4.1.5
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
-	go.admiral.io/bundle v1.0.0
+	go.admiral.io/bundle v1.1.0
 	go.admiral.io/sdk v1.31.0
 	golang.org/x/oauth2 v0.37.0
 	golang.org/x/sync v0.23.0
@@ -82,5 +82,3 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260917231906-eeb232e0883d // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 )
-
-replace go.admiral.io/bundle => ../admiral-bundle
