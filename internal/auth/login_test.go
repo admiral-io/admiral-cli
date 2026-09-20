@@ -253,24 +253,57 @@ func TestLogin_BrowserUnavailablePrintsURL(t *testing.T) {
 	require.Contains(t, status.String(), captured)
 }
 
-func TestLogin_RejectsStateMismatch(t *testing.T) {
+// A callback with the wrong state is not ours (a prefetch, a probing page)
+// and must not end the login: it is answered with an error page and the
+// real callback that follows still completes the sign-in.
+func TestLogin_IgnoresStateMismatch(t *testing.T) {
 	idp := newFakeIdP(t)
 
 	open := func(u string) error {
 		parsed, err := url.Parse(u)
 		require.NoError(t, err)
-		q := parsed.Query()
-		q.Set("state", "tampered")
-		parsed.RawQuery = q.Encode()
-		return followRedirects(t)(parsed.String())
+		callbackURL := parsed.Query().Get("redirect_uri")
+
+		resp, err := http.Get(callbackURL + "?code=stray&state=tampered") //nolint:gosec // test-only URL
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+		return followRedirects(t)(u)
 	}
 
+	res, err := Login(context.Background(), LoginOptions{
+		Issuer:      idp.srv.URL,
+		ClientID:    idp.clientID,
+		ConfigDir:   t.TempDir(),
+		OpenBrowser: open,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "martin@example.com", res.Email)
+}
+
+// With only a mismatched callback, the login keeps waiting until it times
+// out rather than failing on the stray request.
+func TestLogin_StateMismatchAloneTimesOut(t *testing.T) {
+	prev := loginTimeout
+	loginTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { loginTimeout = prev })
+
+	idp := newFakeIdP(t)
+	open := func(u string) error {
+		parsed, err := url.Parse(u)
+		require.NoError(t, err)
+		resp, err := http.Get(parsed.Query().Get("redirect_uri") + "?code=stray&state=tampered") //nolint:gosec // test-only URL
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+		return nil
+	}
 	_, err := Login(context.Background(), LoginOptions{
 		Issuer:      idp.srv.URL,
 		ConfigDir:   t.TempDir(),
 		OpenBrowser: open,
 	})
-	require.ErrorContains(t, err, "state mismatch")
+	require.ErrorContains(t, err, "timed out")
 }
 
 func TestLogin_IdPErrorSurfaces(t *testing.T) {
