@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"go.admiral.io/cli/internal/client"
+	"go.admiral.io/cli/internal/complete"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/input"
 	"go.admiral.io/cli/internal/output"
@@ -32,7 +33,8 @@ may name different bytes by the time anyone reads the reason. It is not
 reversible.`,
 		Example: `  admiral component deprecate cloud-sql --digest sha256:3f9a... \
     --reason "CVE-2026-1234 in vendored submodule"`,
-		Args: flags.ExactArgs(1),
+		Args:              flags.ExactArgs(1),
+		ValidArgsFunction: complete.First(complete.Components(opts)),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {

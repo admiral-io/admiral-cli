@@ -5,6 +5,7 @@ import (
 
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
+	"go.admiral.io/cli/internal/complete"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
 	"go.admiral.io/cli/internal/resolve"
@@ -27,7 +28,8 @@ the revision's full sha256, as printed by publish or 'revision list -o wide'.`,
 
   # Move a floating tag
   admiral component tag cloud-sql:latest --digest sha256:3f9a...`,
-		Args: flags.ExactArgs(1),
+		Args:              flags.ExactArgs(1),
+		ValidArgsFunction: complete.First(complete.Refs(opts)),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name, tag, err := splitRef(args[0])
 			if err != nil {
