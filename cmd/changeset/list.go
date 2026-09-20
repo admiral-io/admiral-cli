@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"go.admiral.io/cli/internal/client"
+	"go.admiral.io/cli/internal/complete"
 	"go.admiral.io/cli/internal/filter"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
@@ -23,14 +24,19 @@ func newListCmd(opts *client.Options) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "list",
+		Use:   "list [app|app/env]",
 		Short: "List change sets",
-		Long:  `List change sets, optionally scoped to an application/environment and filtered by status.`,
-		Example: `  admiral changeset list --app billing
-  admiral changeset list --env billing/staging --status OPEN`,
-		Args: flags.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			app, env, err := flags.EnvTarget(cmd, appName, envName)
+		Long:  `List change sets, optionally scoped to an application or one of its environments and filtered by status.`,
+		Example: `  # Every change set you can see
+  admiral changeset list
+
+  # Scoped to an application, or to one environment
+  admiral changeset list billing
+  admiral changeset list billing/staging --status OPEN`,
+		Args:              flags.MaximumNArgs(1),
+		ValidArgsFunction: complete.First(complete.Envs(opts)),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			app, env, err := flags.ScopeTarget(cmd, appName, envName, args)
 			if err != nil {
 				return err
 			}

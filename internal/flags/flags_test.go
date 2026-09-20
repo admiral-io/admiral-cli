@@ -73,6 +73,77 @@ func TestScopeFlagsHaveNoDefault(t *testing.T) {
 	require.NotContains(t, cmd.Flags().Lookup("app").Usage, "ADMIRAL")
 }
 
+// collection runs cmd with --app and --env registered and returns what
+// ScopeTarget makes of the positional arguments and the flag values.
+func collection(t *testing.T, args []string, flagArgs ...string) (string, string, error) {
+	t.Helper()
+	var appFlag, envFlag, gotApp, gotEnv string
+	var gotErr error
+	cmd := &cobra.Command{Use: "x", RunE: func(cmd *cobra.Command, _ []string) error {
+		gotApp, gotEnv, gotErr = ScopeTarget(cmd, appFlag, envFlag, args)
+		return nil
+	}}
+	App(cmd, &appFlag, &client.Options{})
+	Env(cmd, &envFlag, &client.Options{})
+	_, err := exec(cmd, flagArgs...)
+	require.NoError(t, err)
+	return gotApp, gotEnv, gotErr
+}
+
+func TestScopeTarget_ArgumentNamesAnApp(t *testing.T) {
+	app, env, err := collection(t, []string{"shop"})
+	require.NoError(t, err)
+	require.Equal(t, "shop", app)
+	require.Empty(t, env, "an application alone scopes to all of its environments")
+}
+
+func TestScopeTarget_ArgumentNamesAPath(t *testing.T) {
+	app, env, err := collection(t, []string{"shop/prod"})
+	require.NoError(t, err)
+	require.Equal(t, "shop", app)
+	require.Equal(t, "prod", env)
+}
+
+// With no argument the flags behave exactly as they did before.
+func TestScopeTarget_FallsBackToFlags(t *testing.T) {
+	app, env, err := collection(t, nil, "--app", "shop", "--env", "prod")
+	require.NoError(t, err)
+	require.Equal(t, "shop", app)
+	require.Equal(t, "prod", env)
+
+	app, env, err = collection(t, nil, "--env", "shop/prod")
+	require.NoError(t, err)
+	require.Equal(t, "shop", app)
+	require.Equal(t, "prod", env)
+}
+
+// Nothing given is not an error: the command decides what an unscoped
+// listing means for its own collection.
+func TestScopeTarget_NeitherIsEmpty(t *testing.T) {
+	app, env, err := collection(t, nil)
+	require.NoError(t, err)
+	require.Empty(t, app)
+	require.Empty(t, env)
+}
+
+// Argument or flags, never both — even when they agree.
+func TestScopeTarget_ArgumentAndFlagIsUsageError(t *testing.T) {
+	for _, flagArgs := range [][]string{{"--app", "shop"}, {"--app", "other"}, {"--env", "prod"}} {
+		_, _, err := collection(t, []string{"shop"}, flagArgs...)
+		require.ErrorContains(t, err, "cannot be combined with a scope argument")
+		require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
+		require.Equal(t, "Name the scope as the argument or with --app/--env, not both.", cmderr.Hint(err))
+	}
+}
+
+func TestScopeTarget_MalformedPath(t *testing.T) {
+	for _, target := range []string{"/prod", "shop/", "a/b/c"} {
+		_, _, err := collection(t, []string{target})
+		require.EqualError(t, err, `invalid environment "`+target+`": expected app/env`)
+		require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
+	}
+}
+
 // scoped runs cmd with a --app flag registered and returns what EnvTarget
 // makes of the given --app value and target.
 func scoped(t *testing.T, target string, flagArgs ...string) (string, string, error) {

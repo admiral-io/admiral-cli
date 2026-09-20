@@ -4,6 +4,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"go.admiral.io/cli/internal/client"
+	"go.admiral.io/cli/internal/cmderr"
+	"go.admiral.io/cli/internal/complete"
 	"go.admiral.io/cli/internal/filter"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
@@ -20,21 +22,29 @@ func newListCmd(opts *client.Options) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "list",
+		Use:   "list [app|app/env]",
 		Short: "List runs",
+		Long:  `List runs, scoped to an application or to one of its environments.`,
 		Example: `  # Runs in one environment
-  admiral run list --env billing/staging
+  admiral run list billing/staging
 
   # Every environment of an application
-  admiral run list --app billing
+  admiral run list billing
 
   # By name, scoped with --app
   admiral run list --app billing --env staging`,
-		Args: flags.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			app, env, err := flags.EnvTarget(cmd, appName, envName)
+		Args:              flags.MaximumNArgs(1),
+		ValidArgsFunction: complete.First(complete.Envs(opts)),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			app, env, err := flags.ScopeTarget(cmd, appName, envName, args)
 			if err != nil {
 				return err
+			}
+			// Checked before the client is built: dialing first would
+			// report a missing credential for what is a missing argument.
+			if app == "" {
+				return cmderr.UsageHint("Name the scope: 'admiral run list billing' or 'admiral run list billing/staging'.",
+					"no application specified")
 			}
 
 			c, err := client.CreateClient(cmd.Context(), opts)
