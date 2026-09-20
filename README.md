@@ -141,3 +141,8 @@ certificate in the operating system trust store, as you would for a browser.
 
 Full documentation is available at [admiral.io/docs](https://admiral.io/docs).
 
+## Contributing
+
+`make test` and `make lint` are what CI runs; [CONTRIBUTING.md](CONTRIBUTING.md)
+has the rest, including where the CLI style guide lives.
+
