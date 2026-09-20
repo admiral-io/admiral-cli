@@ -2,17 +2,23 @@ package auth
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"go.admiral.io/cli/internal/client"
+	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/credentials"
 	"go.admiral.io/cli/internal/output"
+	userv1 "go.admiral.io/sdk/proto/admiral/api/user/v1"
 )
 
 // validKey passes the SDK's opaque-format check (prefix, length, checksum).
@@ -164,16 +170,16 @@ func TestStatus(t *testing.T) {
 		name   string
 		env    string
 		stored *credentials.Credential
-		want   status
+		want   authStatus
 	}{
-		{"nothing", "", nil, status{Authenticated: false}},
-		{"env", validKey, nil, status{Authenticated: true, Method: "api-key", Storage: "environment"}},
+		{"nothing", "", nil, authStatus{Authenticated: false}},
+		{"env", validKey, nil, authStatus{Authenticated: true, Method: "api-key", Storage: "environment"}},
 		{"stored key", "", &credentials.Credential{Kind: credentials.KindAPIKey, APIKey: validKey},
-			status{Authenticated: true, Method: "api-key", Storage: "file", Path: "FILE"}},
+			authStatus{Authenticated: true, Method: "api-key", Storage: "file", Path: "FILE"}},
 		{"session", "", &credentials.Credential{Kind: credentials.KindSession, AccessToken: "jwt", Issuer: "https://idp", Email: "m@x"},
-			status{Authenticated: true, Method: "session", Storage: "file", Path: "FILE", Issuer: "https://idp", Account: "m@x"}},
+			authStatus{Authenticated: true, Method: "session", Storage: "file", Path: "FILE", Issuer: "https://idp", Account: "m@x"}},
 		{"env beats stored", validKey, &credentials.Credential{Kind: credentials.KindSession, AccessToken: "jwt"},
-			status{Authenticated: true, Method: "api-key", Storage: "environment"}},
+			authStatus{Authenticated: true, Method: "api-key", Storage: "environment"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -187,10 +193,10 @@ func TestStatus(t *testing.T) {
 				require.NoError(t, credentials.Save(opts.ConfigDir, tc.stored))
 			}
 
-			stdout, err := run(t, opts, "", "status")
+			stdout, err := run(t, opts, "", "status", "--no-verify")
 			require.NoError(t, err)
 
-			var got status
+			var got authStatus
 			require.NoError(t, json.Unmarshal([]byte(stdout), &got))
 			got.Error = "" // wording is asserted elsewhere
 			if tc.want.Path == "FILE" {
@@ -239,23 +245,145 @@ func TestLoginWithToken_ReferenceUnresolvable(t *testing.T) {
 	require.ErrorContains(t, err, "vault is locked")
 }
 
-func TestStatus_ShowsReference(t *testing.T) {
+// The stored credential is described without opening the secret store:
+// --no-verify must never prompt for 1Password.
+func TestStatus_ShowsReferenceWithoutResolvingIt(t *testing.T) {
 	os.Unsetenv(credentials.EnvAPIKey)
 	opts := &client.Options{ConfigDir: t.TempDir(), OutputFormat: output.FormatJSON}
-	stubOp(t, validKey, false)
+	calls := stubOp(t, validKey, false)
 	require.NoError(t, credentials.Save(opts.ConfigDir, &credentials.Credential{
 		Kind: credentials.KindAPIKeyRef, Ref: "op://Vault/admiral/key",
 	}))
 
-	stdout, err := run(t, opts, "", "status")
+	stdout, err := run(t, opts, "", "status", "--no-verify")
 	require.NoError(t, err)
-	var got status
+	var got authStatus
 	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
 	require.True(t, got.Authenticated)
 	require.Equal(t, "api-key", got.Method)
 	require.Equal(t, "1password", got.Storage)
 	require.Equal(t, "op://Vault/admiral/key", got.Ref)
 	require.Empty(t, got.Path)
+	require.False(t, got.Verified)
+	require.Equal(t, 0, calls(), "--no-verify opened the secret store")
+}
+
+// stubVerify answers for the server: user when err is nil, else err.
+func stubVerify(t *testing.T, user *userv1.User, err error) {
+	t.Helper()
+	prev := verifyIdentity
+	verifyIdentity = func(context.Context, *client.Options) (*userv1.User, error) { return user, err }
+	t.Cleanup(func() { verifyIdentity = prev })
+}
+
+func storeKey(t *testing.T) *client.Options {
+	t.Helper()
+	os.Unsetenv(credentials.EnvAPIKey)
+	opts := &client.Options{ConfigDir: t.TempDir(), OutputFormat: output.FormatJSON, ServerAddr: "api.example:443"}
+	require.NoError(t, credentials.Save(opts.ConfigDir, &credentials.Credential{Kind: credentials.KindAPIKey, APIKey: validKey}))
+	return opts
+}
+
+func TestStatus_VerifiesWithServer(t *testing.T) {
+	opts := storeKey(t)
+	name := "Martin"
+	stubVerify(t, &userv1.User{Id: "u-1", Email: "m@x", DisplayName: &name}, nil)
+
+	stdout, err := run(t, opts, "", "status")
+	require.NoError(t, err)
+	var got authStatus
+	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
+	require.True(t, got.Authenticated)
+	require.True(t, got.Verified)
+	require.Equal(t, &identity{Email: "m@x", DisplayName: "Martin", ID: "u-1"}, got.User)
+	require.Empty(t, got.Error)
+
+	// Human mode shows the identity the server resolved.
+	opts.OutputFormat = output.FormatTable
+	stdout, err = run(t, opts, "", "status")
+	require.NoError(t, err)
+	require.Contains(t, stdout, "Authenticated:  yes")
+	require.Contains(t, stdout, "Email:         m@x")
+	require.Contains(t, stdout, "ID:            u-1")
+}
+
+// A credential the server refuses is reported as not authenticated, exit
+// 4, even though something is stored.
+func TestStatus_ServerRejectsCredential(t *testing.T) {
+	opts := storeKey(t)
+	stubVerify(t, nil, status.Error(codes.Unauthenticated, "key revoked"))
+
+	stdout, err := run(t, opts, "", "status")
+	require.NoError(t, err, "-o json: the document carries the outcome")
+	var got authStatus
+	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
+	require.False(t, got.Authenticated)
+	require.False(t, got.Verified)
+	require.Equal(t, "not signed in: key revoked", got.Error)
+
+	opts.OutputFormat = output.FormatTable
+	stdout, err = run(t, opts, "", "status")
+	require.Error(t, err)
+	require.Equal(t, codes.Unauthenticated, status.Code(err), "the root maps this to exit 4")
+	require.Contains(t, stdout, "Authenticated:  no")
+	require.Contains(t, stdout, "key revoked")
+}
+
+// A server that cannot be reached says nothing about the credential: it
+// stays authenticated, unverified, and human mode exits non-zero with the
+// transport error rather than claiming a sign-in problem.
+func TestStatus_ServerUnreachable(t *testing.T) {
+	opts := storeKey(t)
+	stubVerify(t, nil, status.Error(codes.Unavailable, "connection refused"))
+
+	stdout, err := run(t, opts, "", "status")
+	require.NoError(t, err)
+	var got authStatus
+	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
+	require.True(t, got.Authenticated)
+	require.False(t, got.Verified)
+	require.Contains(t, got.Error, "could not reach the Admiral API")
+
+	opts.OutputFormat = output.FormatTable
+	stdout, err = run(t, opts, "", "status")
+	require.Error(t, err)
+	require.Equal(t, codes.Unavailable, status.Code(err))
+	require.NotEqual(t, cmderr.ExitAuth, cmderr.Code(err))
+	require.Contains(t, stdout, "Verified:       no (could not reach")
+}
+
+func TestStatus_NoVerifySkipsTheServer(t *testing.T) {
+	opts := storeKey(t)
+	stubVerify(t, nil, errors.New("must not be called"))
+
+	stdout, err := run(t, opts, "", "status", "--no-verify")
+	require.NoError(t, err)
+	var got authStatus
+	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
+	require.True(t, got.Authenticated)
+	require.False(t, got.Verified)
+	require.Empty(t, got.Error)
+}
+
+// `admiral whoami` still works for one release: same output, plus a
+// deprecation note on stderr so stdout stays parseable.
+func TestWhoami_IsDeprecatedAliasOfStatus(t *testing.T) {
+	opts := storeKey(t)
+	stubVerify(t, &userv1.User{Id: "u-1", Email: "m@x"}, nil)
+
+	cmd := NewWhoamiCmd(opts)
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs(nil)
+	require.NoError(t, cmd.Execute())
+
+	var got authStatus
+	require.NoError(t, json.Unmarshal(out.Bytes(), &got))
+	require.True(t, got.Verified)
+	require.Equal(t, "m@x", got.User.Email)
+	require.Contains(t, errOut.String(), "deprecated")
+	require.True(t, cmd.Hidden, "must not appear in help")
 }
 
 func TestLogout_StoredReference(t *testing.T) {
@@ -318,9 +446,9 @@ func TestStatus_ShowsScopes(t *testing.T) {
 		Kind: credentials.KindSession, AccessToken: "jwt", Scopes: []string{"app:read"},
 	}))
 
-	stdout, err := run(t, opts, "", "status")
+	stdout, err := run(t, opts, "", "status", "--no-verify")
 	require.NoError(t, err)
-	var got status
+	var got authStatus
 	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
 	require.Equal(t, []string{"app:read"}, got.Scopes)
 }

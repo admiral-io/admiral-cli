@@ -59,9 +59,11 @@ admiral auth login --with-token
 # Or store a 1Password reference; the key is fetched via `op` on each run
 echo "op://Engineering/admiral/api-key" | admiral auth login --with-token
 
-# Check what the CLI will use, or verify it against the server
+# Check what the CLI will use and who the server says it is
 admiral auth status
-admiral whoami
+
+# Only what is stored: no network, no secret-store prompt
+admiral auth status --no-verify
 
 # Remove the stored credential (and revoke the session, if any)
 admiral auth logout
