@@ -16,12 +16,10 @@ const ScopeHint = "Run 'admiral auth status' to see the active credential and it
 
 // Format returns the user-facing message for err, for the top-level
 // `Error:` line and for inline notes such as an unavailable describe
-// section. For gRPC status errors
-// it returns the underlying description verbatim, stripping only the
-// "rpc error: code = X desc = " wire framing. Anything beyond that
-// (low-signal wrappers, nested framing leaked into descriptions) is a
-// server-side message-quality concern and should be addressed there, not
-// papered over in the CLI.
+// section. A gRPC status is rendered as its description verbatim, with only
+// the "rpc error: code = X desc = " wire framing stripped; anything beyond
+// that is a server-side message-quality concern, not something to paper
+// over here.
 func Format(err error) string {
 	if err == nil {
 		return ""

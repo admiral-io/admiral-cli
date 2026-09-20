@@ -8,7 +8,6 @@ import (
 	vers "go.admiral.io/cli/internal/version"
 )
 
-// nolint: gochecknoglobals
 var (
 	version = "0.0.0"
 	commit  = ""
