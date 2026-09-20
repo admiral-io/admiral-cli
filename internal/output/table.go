@@ -75,8 +75,7 @@ func FormatElapsed(start, end *timestamppb.Timestamp) string {
 // k8s.io/apimachinery/pkg/util/duration: at most two units, and the second
 // unit is dropped once the first is large enough that it no longer matters.
 func HumanDuration(d time.Duration) string {
-	// Allow deviation no more than 2 seconds (excluded) to tolerate machine
-	// time inconsistence, it can be considered as almost now.
+	// Up to 2s of clock skew reads as "now".
 	if seconds := int(d.Seconds()); seconds < -1 {
 		return "<invalid>"
 	} else if seconds < 0 {
@@ -189,9 +188,9 @@ func Truncate(s string, width int) string {
 	return string(r[:width-1]) + "…"
 }
 
-// OrEmpty returns None when s is empty (or whitespace), otherwise s.
-// Use for free-text fields (description, message) so empty cells render as
-// "-" instead of leaving blank space that misaligns columns.
+// OrEmpty returns None when s is empty (or whitespace), otherwise s. Use it
+// for free-text fields (description, message) so an empty cell renders as
+// <none> instead of blank space that misaligns columns.
 func OrEmpty(s string) string {
 	if strings.TrimSpace(s) == "" {
 		return None

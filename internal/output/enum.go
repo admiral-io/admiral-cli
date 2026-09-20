@@ -26,9 +26,9 @@ func TrimEnumPrefix(e protoreflect.Enum) string {
 	return strings.TrimPrefix(name, prefix)
 }
 
-// FormatEnum renders an enum value as a single CamelCase token, the form the
-// used for statuses and health: RUN_STATUS_PARTIALLY_FAILED
-// becomes "PartiallyFailed". The zero (UNSPECIFIED) value renders as None.
+// FormatEnum renders an enum value as a single CamelCase token, the form
+// used for statuses and health: RUN_STATUS_PARTIALLY_FAILED becomes
+// "PartiallyFailed". The zero (UNSPECIFIED) value renders as None.
 func FormatEnum(e protoreflect.Enum) string {
 	if e.Number() == 0 {
 		return None
@@ -36,10 +36,10 @@ func FormatEnum(e protoreflect.Enum) string {
 	return screamingSnakeToCamel(TrimEnumPrefix(e))
 }
 
-// FormatEnumKebab renders an enum value in lowercase kebab-case, the form the
-// used for types and kinds so output matches the words users
-// type: CREDENTIAL_TYPE_SSH_KEY becomes "ssh-key", JOB_TYPE_DESTROY_PLAN
-// becomes "destroy-plan". The zero (UNSPECIFIED) value renders as None.
+// FormatEnumKebab renders an enum value in lowercase kebab-case, the form
+// used for types and kinds so output matches the words users type:
+// CREDENTIAL_TYPE_SSH_KEY becomes "ssh-key", JOB_TYPE_DESTROY_PLAN becomes
+// "destroy-plan". The zero (UNSPECIFIED) value renders as None.
 func FormatEnumKebab(e protoreflect.Enum) string {
 	if e.Number() == 0 {
 		return None

@@ -7,9 +7,8 @@ import (
 	"path/filepath"
 )
 
-// buildCLI compiles the admiral CLI into a temp dir and returns that dir.
-// Prepending it to PATH per-script means `exec admiral ...` resolves to
-// the freshly built binary, not whatever is on the developer's machine.
+// buildCLI compiles the admiral CLI into a temp dir and returns that dir, so
+// tests exec the freshly built binary rather than whatever is on PATH.
 func buildCLI() (string, error) {
 	dir, err := os.MkdirTemp("", "admiral-e2e-bin-")
 	if err != nil {
@@ -27,11 +26,9 @@ func buildCLI() (string, error) {
 	return dir, nil
 }
 
-// seedConfigDir creates a temp config dir and pre-populates it with the
-// server address (and optional plaintext flag) so each script can share
-// a single configured CLI without re-running `config set` every time.
-// Token is *not* stored here — ADMIRAL_API_KEY env var overrides config,
-// which keeps secrets out of the temp dir.
+// seedConfigDir creates a temp config dir holding the server address (and
+// plaintext, when set) that every test shares. The API key is not stored:
+// ADMIRAL_API_KEY is read from the environment, so no secret lands on disk.
 func seedConfigDir(admiralBin string) (string, error) {
 	dir, err := os.MkdirTemp("", "admiral-e2e-config-")
 	if err != nil {
