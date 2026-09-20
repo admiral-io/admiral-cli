@@ -72,8 +72,8 @@ func ApplyLabelPatch(existing map[string]string, patches []string) (map[string]s
 	return out, nil
 }
 
-// LabelFilter converts a slice of "key=value" strings into a filter
-// expression for the API (e.g., `labels.region = "us-east-1" AND labels.cloud = "aws"`).
+// LabelFilter converts "key=value" strings into an API filter expression:
+// field['labels.region'] = 'us-east-1' AND field['labels.cloud'] = 'aws'.
 func LabelFilter(labels []string) (string, error) {
 	if len(labels) == 0 {
 		return "", nil

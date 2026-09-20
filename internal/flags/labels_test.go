@@ -46,7 +46,7 @@ func TestLabelFlag_String(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// AddLabelFlag
+// Label
 // ---------------------------------------------------------------------------
 
 func TestLabel(t *testing.T) {
@@ -261,7 +261,7 @@ func TestApplyLabelPatch_DoesNotMutateInput(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// BuildLabelFilter
+// LabelFilter
 // ---------------------------------------------------------------------------
 
 func TestLabelFilter(t *testing.T) {

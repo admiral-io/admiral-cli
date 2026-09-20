@@ -9,7 +9,8 @@ import (
 	"testing"
 )
 
-// buildCLI compiles the admiral CLI into a temp dir and returns that dir.
+// buildCLI compiles the admiral CLI into a temp dir and returns that dir, so
+// tests exec the freshly built binary rather than whatever is on PATH.
 func buildCLI() (string, error) {
 	dir, err := os.MkdirTemp("", "admiral-e2e-bin-")
 	if err != nil {

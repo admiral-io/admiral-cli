@@ -17,11 +17,10 @@ import (
 )
 
 // Publishing a repository is the Docker shape: pack every component the
-// manifest declares and push each one; the registry is content-addressed,
+// manifest declares and push each one. The registry is content-addressed,
 // so bytes it already holds are a no-op and only what changed becomes a new
-// revision. No git diff decides what to send. A shared module's change
-// shows up as a new digest for every component that vendors it, because
-// their bytes changed, and nothing pinned to a digest moves. The tags
+// revision; no git diff decides what to send, and a shared module's change
+// surfaces as a new digest in every component that vendors it. The tags
 // (<branch> and sha-<short> unless --tag says otherwise) go on every
 // declared component, the way pushing an image tags it whether or not a
 // layer was new.

@@ -8,8 +8,8 @@ import (
 	"fmt"
 )
 
-// Exit codes. Documented in `admiral help exit-codes`; add nothing here
-// without adding it there.
+// Exit codes are a contract with scripts: never renumber, and document any
+// addition for users. (`admiral help exit-codes` is planned, not yet written.)
 const (
 	ExitOK          = 0
 	ExitError       = 1   // runtime failure: server error, not found, failed run under --wait

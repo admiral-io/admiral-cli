@@ -234,9 +234,9 @@ func isAuthError(err error) bool {
 
 // localStatus describes the credential the CLI would present, from the
 // environment and the credentials file alone. It never resolves a
-// reference or refreshes a session; that is verification's job, and a
-// status that opened 1Password or called the token endpoint could not be
-// used to find out whether either was about to happen.
+// reference or refreshes a session: that is verification's job, and
+// --no-verify must be able to report the credential without triggering
+// either.
 func localStatus(opts *client.Options) authStatus {
 	st := authStatus{Server: opts.ServerAddr}
 

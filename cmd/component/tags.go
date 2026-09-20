@@ -14,17 +14,17 @@ import (
 )
 
 // Tags a publish applies after the bytes are in, each set on its own so
-// that one refused tag never takes the publish down with it.
+// one refused tag never takes the publish down with it.
 //
 // A commit tag (sha-<short>) is set only when this publish created the
-// revision: it then reads as "the commits that produced this", not as
-// every commit that happened to see it.
+// revision, so it reads as "the commit that produced this", not every
+// commit that happened to see it.
 //
-// A chart's own version (Chart.yaml: version) is its semver event, the way
-// chart-releaser treats it, and is applied as an immutable tag. Leniently:
-// when the version already names different bytes, because the chart changed
-// and nobody bumped it, the publish stands under its floating tags and the
-// refusal is printed as a nudge rather than a failure.
+// A chart's own version (Chart.yaml: version) is applied as an immutable
+// tag, the way chart-releaser treats it. Leniently: when the version already
+// names different bytes (the chart changed and nobody bumped it), the
+// publish stands under its floating tags and the refusal is a nudge, not a
+// failure.
 
 // semverPattern is the shape the registry treats as immutable.
 var semverPattern = regexp.MustCompile(`^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$`)
