@@ -55,6 +55,13 @@ func TestEnum(t *testing.T) {
 	_, err = exec(cmd, "--phase", "destroy")
 	require.ErrorContains(t, err, "must be one of plan, apply")
 	require.Contains(t, cmd.Flags().Lookup("phase").Usage, "plan, apply")
+
+	// The flag completes from its own list (style guide §1.5).
+	fn, ok := cmd.GetFlagCompletionFunc("phase")
+	require.True(t, ok, "enum flag registers a completion")
+	got, directive := fn(cmd, nil, "p")
+	require.Equal(t, []string{"plan"}, got)
+	require.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
 }
 
 // Scope never comes from the shell: ADMIRAL_APP and ADMIRAL_ENV were

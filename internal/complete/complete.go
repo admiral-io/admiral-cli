@@ -23,6 +23,7 @@ import (
 	sdkclient "go.admiral.io/sdk/client"
 	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
 	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
+	registryv1 "go.admiral.io/sdk/proto/admiral/api/registry/v1"
 )
 
 // Func is cobra's completion signature, shared by ValidArgsFunction and
@@ -66,6 +67,21 @@ func First(f Func) Func {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
 		return f(cmd, args, toComplete)
+	}
+}
+
+// Static offers a fixed list of values, for enum flags (style guide §1.5).
+// No client is built and nothing is filtered by the server, so it is safe
+// on commands that never talk to it.
+func Static(values ...string) Func {
+	return func(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		var out []string
+		for _, v := range values {
+			if strings.HasPrefix(v, toComplete) {
+				out = append(out, v)
+			}
+		}
+		return out, cobra.ShellCompDirectiveNoFileComp
 	}
 }
 
@@ -136,21 +152,90 @@ func NewEnv(opts *client.Options) Func {
 	}
 }
 
+// Components offers registry component names.
+func Components(opts *client.Options) Func {
+	return func(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return withClient(cmd, opts, toComplete, func(ctx context.Context, c sdkclient.AdmiralClient) ([]Candidate, error) {
+			return components(ctx, c)
+		})
+	}
+}
+
+// Refs offers component references in the NAME:TAG form. Before the colon
+// it offers component names as "cloud-sql:" with no trailing space, so the
+// next Tab completes the tag; after the colon it offers the tags the
+// component carries as "cloud-sql:v1.2.0". A NAME@DIGEST reference is left
+// alone: nobody tab-completes a digest (style guide §1.5).
+func Refs(opts *client.Options) Func {
+	return func(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if strings.Contains(toComplete, "@") {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		name, _, hasTag := strings.Cut(toComplete, ":")
+		if !hasTag {
+			out, directive := Components(opts)(cmd, nil, toComplete)
+			return withSuffix(out, ":"), noSpace(directive)
+		}
+		return withClient(cmd, opts, toComplete, func(ctx context.Context, c sdkclient.AdmiralClient) ([]Candidate, error) {
+			resp, err := c.Registry().GetComponent(ctx, &registryv1.GetComponentRequest{Name: name})
+			if err != nil {
+				return nil, err
+			}
+			out := make([]Candidate, 0, len(resp.Component.Tags))
+			for _, t := range resp.Component.Tags {
+				out = append(out, Candidate{Name: name + ":" + t.Name})
+			}
+			return out, nil
+		})
+	}
+}
+
+// components lists every component in the registry.
+func components(ctx context.Context, c sdkclient.AdmiralClient) ([]Candidate, error) {
+	var out []Candidate
+	err := paged(func(token string) (string, error) {
+		resp, err := c.Registry().ListComponents(ctx, &registryv1.ListComponentsRequest{
+			PageSize:  pageSize,
+			PageToken: token,
+		})
+		if err != nil {
+			return "", err
+		}
+		for _, comp := range resp.Components {
+			out = append(out, Candidate{Name: comp.Name, Description: comp.Description})
+		}
+		return resp.NextPageToken, nil
+	}, &out)
+	return out, err
+}
+
 // appPrefixes offers application names with a trailing slash and tells
 // the shell not to add a space, so the next Tab completes the environment.
 func appPrefixes(cmd *cobra.Command, opts *client.Options, toComplete string) ([]string, cobra.ShellCompDirective) {
 	out, directive := Apps(opts)(cmd, nil, toComplete)
-	for i, s := range out {
+	return withSuffix(out, "/"), noSpace(directive)
+}
+
+// withSuffix appends suffix to each candidate's name, keeping the
+// description cobra shows after the tab.
+func withSuffix(candidates []string, suffix string) []string {
+	for i, s := range candidates {
 		name, desc, _ := strings.Cut(s, "\t")
-		out[i] = name + "/"
+		candidates[i] = name + suffix
 		if desc != "" {
-			out[i] += "\t" + desc
+			candidates[i] += "\t" + desc
 		}
 	}
+	return candidates
+}
+
+// noSpace tells the shell not to add a space after a successful prefix
+// completion, so the next Tab continues the same argument.
+func noSpace(directive cobra.ShellCompDirective) cobra.ShellCompDirective {
 	if directive == cobra.ShellCompDirectiveNoFileComp {
 		directive |= cobra.ShellCompDirectiveNoSpace
 	}
-	return out, directive
+	return directive
 }
 
 // envsIn lists the environments of app (a name or ID).

@@ -7,6 +7,7 @@ import (
 
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
+	"go.admiral.io/cli/internal/complete"
 	"go.admiral.io/cli/internal/filter"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
@@ -57,16 +58,15 @@ func newRevisionListCmd(opts *client.Options) *cobra.Command {
 
   # Full digests
   admiral component revision list cloud-sql -o wide`,
-		Args: flags.ExactArgs(1),
+		Args:              flags.ExactArgs(1),
+		ValidArgsFunction: complete.First(complete.Components(opts)),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var f string
 			if status != "" {
-				want := strings.ToUpper(status)
-				if _, ok := registryv1.RevisionStatus_value[want]; !ok || want == "REVISION_STATUS_UNSPECIFIED" {
-					return cmderr.Usage("unknown status %q; use published or deprecated", status)
-				}
+				// The flag has already refused anything but the two words;
+				// the server's enum names are their upper-case forms.
 				var err error
-				if f, err = filter.Eq("status", want); err != nil {
+				if f, err = filter.Eq("status", strings.ToUpper(status)); err != nil {
 					return err
 				}
 			}
@@ -98,7 +98,7 @@ func newRevisionListCmd(opts *client.Options) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&status, "status", "", "only revisions in this status: published or deprecated")
+	flags.Enum(cmd, &status, "status", "", "only revisions in this status", "published", "deprecated")
 	cmd.Flags().Int32Var(&pageSize, "page-size", 50, "maximum number of results per page")
 	cmd.Flags().StringVar(&pageToken, "page-token", "", "pagination token from a previous response")
 
@@ -114,7 +114,8 @@ func newRevisionGetCmd(opts *client.Options) *cobra.Command {
 
   # The contract, provenance and findings
   admiral component revision get cloud-sql:v1.2.0 -o yaml`,
-		Args: flags.ExactArgs(1),
+		Args:              flags.ExactArgs(1),
+		ValidArgsFunction: complete.First(complete.Refs(opts)),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name, ref, err := splitRef(args[0])
 			if err != nil {

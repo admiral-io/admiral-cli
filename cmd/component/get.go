@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"go.admiral.io/cli/internal/client"
+	"go.admiral.io/cli/internal/complete"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
 	registryv1 "go.admiral.io/sdk/proto/admiral/api/registry/v1"
@@ -17,7 +18,8 @@ func newGetCmd(opts *client.Options) *cobra.Command {
 
   # The full object, tags with their digests
   admiral component get cloud-sql -o yaml`,
-		Args: flags.ExactArgs(1),
+		Args:              flags.ExactArgs(1),
+		ValidArgsFunction: complete.First(complete.Components(opts)),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {

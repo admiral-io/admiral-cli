@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"go.admiral.io/cli/internal/cmderr"
+	"go.admiral.io/cli/internal/complete"
 )
 
 // enumValue is a pflag.Value restricted to a fixed set of strings. An
@@ -29,13 +30,14 @@ func (e *enumValue) Set(v string) error {
 }
 
 // Enum registers a string flag that only accepts one of allowed. The usage
-// text is suffixed with the accepted values so help and errors agree.
+// text is suffixed with the accepted values so help and errors agree, and
+// the flag completes from the same list (style guide §1.5).
 func Enum(cmd *cobra.Command, dest *string, name, def, usage string, allowed ...string) {
 	*dest = def
 	u := fmt.Sprintf("%s: %s", usage, strings.Join(allowed, ", "))
-	if def == "" {
-		cmd.Flags().Var(&enumValue{dest: dest, allowed: allowed}, name, u)
-		return
+	if def != "" {
+		u += " (default " + def + ")"
 	}
-	cmd.Flags().Var(&enumValue{dest: dest, allowed: allowed}, name, u+" (default "+def+")")
+	cmd.Flags().Var(&enumValue{dest: dest, allowed: allowed}, name, u)
+	complete.Flag(cmd, name, complete.Static(allowed...))
 }

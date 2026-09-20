@@ -112,7 +112,9 @@ func TestSplitRef(t *testing.T) {
 	require.EqualError(t, err, `"cloud-sql" names no revision; use <name>:<tag> or <name>@<digest>`)
 	assert.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 
+	// --status is an enum flag: the flag itself refuses the value, before
+	// RunE, and completes from the same list.
 	_, err = run(t, "revision", "list", "cloud-sql", "--status", "retired")
-	require.EqualError(t, err, `unknown status "retired"; use published or deprecated`)
+	require.ErrorContains(t, err, "must be one of published, deprecated")
 	assert.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 }

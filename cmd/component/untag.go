@@ -7,6 +7,7 @@ import (
 
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
+	"go.admiral.io/cli/internal/complete"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/input"
 	"go.admiral.io/cli/internal/output"
@@ -28,7 +29,8 @@ digest. A semver tag (v1.2.0) is immutable and cannot be removed; that is
 what makes it a release.`,
 		Example: `  admiral component untag cloud-sql:dev
   admiral component untag cloud-sql:sha-3f9a2c1 --force`,
-		Args: flags.ExactArgs(1),
+		Args:              flags.ExactArgs(1),
+		ValidArgsFunction: complete.First(complete.Refs(opts)),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name, tag, err := splitRef(args[0])
 			if err != nil {
