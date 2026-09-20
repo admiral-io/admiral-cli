@@ -6,6 +6,7 @@ import (
 
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
+	"go.admiral.io/cli/internal/complete"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
 	"go.admiral.io/cli/internal/resolve"
@@ -25,18 +26,27 @@ func newUpdateCmd(opts *client.Options) *cobra.Command {
 		Short: "Update an environment",
 		Long:  `Update an environment's mutable fields: name, description, labels.`,
 		Example: `  # Update description
-  admiral env update staging --app billing --description "US East staging"
+  admiral env update billing/staging --description "US East staging"
 
   # Add or update a label
-  admiral env update staging --app billing --label tier=staging
+  admiral env update billing/staging --label tier=staging
 
   # Remove a label (kubectl-style key-)
-  admiral env update staging --app billing --label legacy-
+  admiral env update billing/staging --label legacy-
+
+  # By name, scoped with --app
+  admiral env update staging --app billing --label tier=staging
 
   # Update by UUID
   admiral env update 550e8400-e29b-41d4-a716-446655440000 --description "..."`,
-		Args: flags.ExactArgs(1),
+		Args:              flags.ExactArgs(1),
+		ValidArgsFunction: complete.First(complete.Envs(opts)),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			app, name, err := flags.EnvTarget(cmd, appName, args[0])
+			if err != nil {
+				return err
+			}
+
 			var paths []string
 			if cmd.Flags().Changed("name") {
 				paths = append(paths, "name")
@@ -57,7 +67,7 @@ func newUpdateCmd(opts *client.Options) *cobra.Command {
 			}
 			defer c.Close() //nolint:errcheck
 
-			envID, err := resolve.Environment(cmd.Context(), c.Environment(), c.Application(), appName, args[0])
+			envID, err := resolve.Environment(cmd.Context(), c.Environment(), c.Application(), app, name)
 			if err != nil {
 				return err
 			}

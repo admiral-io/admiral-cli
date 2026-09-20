@@ -151,6 +151,16 @@ func Login(ctx context.Context, opts LoginOptions) (*Result, error) {
 	// Public client: client_id goes in the form body, never HTTP Basic.
 	endpoint.AuthStyle = oauth2.AuthStyleInParams
 
+	// The revocation endpoint is not part of oauth2.Endpoint, so read it from
+	// the discovery document and store it with the session: logout then hits
+	// the provider's real endpoint instead of guessing a path.
+	var meta struct {
+		RevocationEndpoint string `json:"revocation_endpoint"`
+	}
+	if err := provider.Claims(&meta); err != nil {
+		slog.Debug("could not read provider metadata for the revocation endpoint", "error", err)
+	}
+
 	oc := &oauth2.Config{
 		ClientID:    opts.ClientID,
 		Endpoint:    endpoint,
@@ -257,15 +267,16 @@ func Login(ctx context.Context, opts LoginOptions) (*Result, error) {
 	granted := resourceScopes(token)
 
 	cred := &credentials.Credential{
-		Kind:         credentials.KindSession,
-		AccessToken:  token.AccessToken,
-		RefreshToken: token.RefreshToken,
-		Expiry:       token.Expiry,
-		Issuer:       opts.Issuer,
-		ClientID:     opts.ClientID,
-		TokenURL:     endpoint.TokenURL,
-		Email:        claims.Email,
-		Scopes:       granted,
+		Kind:          credentials.KindSession,
+		AccessToken:   token.AccessToken,
+		RefreshToken:  token.RefreshToken,
+		Expiry:        token.Expiry,
+		Issuer:        opts.Issuer,
+		ClientID:      opts.ClientID,
+		TokenURL:      endpoint.TokenURL,
+		RevocationURL: meta.RevocationEndpoint,
+		Email:         claims.Email,
+		Scopes:        granted,
 	}
 	if err := credentials.Save(opts.ConfigDir, cred); err != nil {
 		return nil, err

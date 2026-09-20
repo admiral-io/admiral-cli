@@ -47,9 +47,17 @@ twice yields the same revision, so a publish-everything CI step is safe.
 
 Terraform modules are closed before upload: every module call whose source
 is a local path outside the directory is copied into vendor/ and the call
-rewritten to point there, recursively. The working copy is never modified.
-Remote sources (registry addresses, git URLs) are not fetched yet; vendor
-them into the tree first.
+rewritten to point there, recursively. Remote sources are closed the same
+way — a registry address, git URL or archive URL is fetched, vendored, and
+what the constraint resolved to (a version, a commit, a digest) is recorded
+as a pin, so the revision cannot drift. Helm charts are closed like 'helm
+dependency build': declared dependencies land under charts/ at the version
+Chart.lock pinned, which is why a chart with dependencies needs one. The
+working copy is never modified.
+
+Sources go-getter supports but this does not (s3::, gcs::, hg::) still have
+to be vendored into the tree first, as do sources built from a variable or
+a local rather than a literal string.
 
 The component is created on first publish, named after the directory
 unless --name says otherwise. --tag names the revision; a semver tag can be

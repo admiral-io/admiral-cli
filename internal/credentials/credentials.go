@@ -106,11 +106,17 @@ type Credential struct {
 	AccessToken  string    `json:"access_token,omitempty"`
 	RefreshToken string    `json:"refresh_token,omitempty"`
 	Expiry       time.Time `json:"expiry,omitzero"`
-	Issuer       string    `json:"issuer,omitempty"`    // for revocation on logout
+	Issuer       string    `json:"issuer,omitempty"`    // identifies the provider; also the discovery fallback on logout
 	ClientID     string    `json:"client_id,omitempty"` // public client id sent on refresh
 	TokenURL     string    `json:"token_url,omitempty"` // avoids OIDC discovery on refresh
-	Email        string    `json:"email,omitempty"`     // shown by `auth status`
-	Scopes       []string  `json:"scopes,omitempty"`    // resource scopes the session was narrowed to
+
+	// RevocationURL is the provider's RFC 7009 endpoint, discovered at login,
+	// so logout revokes the refresh token without a second discovery round
+	// trip. Empty for a session stored before this was recorded.
+	RevocationURL string `json:"revocation_url,omitempty"`
+
+	Email  string   `json:"email,omitempty"`  // shown by `auth status`
+	Scopes []string `json:"scopes,omitempty"` // resource scopes the session was narrowed to
 }
 
 // ResolveToken returns the credential to use for API calls. The environment
