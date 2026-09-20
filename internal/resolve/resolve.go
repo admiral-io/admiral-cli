@@ -22,7 +22,6 @@ import (
 	credentialv1 "go.admiral.io/sdk/proto/admiral/api/credential/v1"
 	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
 	registryv1 "go.admiral.io/sdk/proto/admiral/api/registry/v1"
-	sourcev1 "go.admiral.io/sdk/proto/admiral/api/source/v1"
 	userv1 "go.admiral.io/sdk/proto/admiral/api/user/v1"
 )
 
@@ -138,21 +137,6 @@ func Credential(ctx context.Context, c credentialv1.CredentialAPIClient, nameOrI
 		},
 		func(c *credentialv1.Credential) string { return c.Name },
 		func(c *credentialv1.Credential) string { return c.Id },
-	)
-}
-
-// Source resolves a source name or ID.
-func Source(ctx context.Context, c sourcev1.SourceAPIClient, nameOrID string) (string, error) {
-	return byName(ctx, "source", nameOrID, "", "source list", "",
-		func(ctx context.Context, f string) ([]*sourcev1.Source, error) {
-			resp, err := c.ListSources(ctx, &sourcev1.ListSourcesRequest{Filter: f})
-			if err != nil {
-				return nil, err
-			}
-			return resp.Sources, nil
-		},
-		func(s *sourcev1.Source) string { return s.Name },
-		func(s *sourcev1.Source) string { return s.Id },
 	)
 }
 

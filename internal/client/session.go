@@ -18,7 +18,6 @@ import (
 	invitationv1 "go.admiral.io/sdk/proto/admiral/api/invitation/v1"
 	registryv1 "go.admiral.io/sdk/proto/admiral/api/registry/v1"
 	runv1 "go.admiral.io/sdk/proto/admiral/api/run/v1"
-	sourcev1 "go.admiral.io/sdk/proto/admiral/api/source/v1"
 	tenantv1 "go.admiral.io/sdk/proto/admiral/api/tenant/v1"
 	userv1 "go.admiral.io/sdk/proto/admiral/api/user/v1"
 )
@@ -111,8 +110,6 @@ func (c *sessionClient) Registry() registryv1.RegistryAPIClient {
 }
 
 func (c *sessionClient) Run() runv1.RunAPIClient { return runv1.NewRunAPIClient(c.conn) }
-
-func (c *sessionClient) Source() sourcev1.SourceAPIClient { return sourcev1.NewSourceAPIClient(c.conn) }
 
 func (c *sessionClient) Tenant() tenantv1.TenantAPIClient { return tenantv1.NewTenantAPIClient(c.conn) }
 
