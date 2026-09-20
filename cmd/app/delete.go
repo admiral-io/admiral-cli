@@ -44,8 +44,10 @@ skip the prompt.`,
 				return err
 			}
 
+			// The confirmation is typed by name. Given an ID, look the name
+			// up so the user is not asked to type a UUID.
 			name := args[0]
-			if name == "" {
+			if resolve.IsUUID(name) {
 				resp, err := c.Application().GetApplication(cmd.Context(), &applicationv1.GetApplicationRequest{ApplicationId: id})
 				if err != nil {
 					return err
