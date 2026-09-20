@@ -20,6 +20,7 @@ build/
 dist/
 completions/
 manpages/
+buildkitd.toml
 
 # IDE
 .idea/
