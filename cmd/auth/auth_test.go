@@ -369,27 +369,6 @@ func TestStatus_NoVerifySkipsTheServer(t *testing.T) {
 	require.Empty(t, got.Error)
 }
 
-// `admiral whoami` still works for one release: same output, plus a
-// deprecation note on stderr so stdout stays parseable.
-func TestWhoami_IsDeprecatedAliasOfStatus(t *testing.T) {
-	opts := storeKey(t)
-	stubVerify(t, &userv1.User{Id: "u-1", Email: "m@x"}, nil)
-
-	cmd := NewWhoamiCmd(opts)
-	var out, errOut bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetErr(&errOut)
-	cmd.SetArgs(nil)
-	require.NoError(t, cmd.Execute())
-
-	var got authStatus
-	require.NoError(t, json.Unmarshal(out.Bytes(), &got))
-	require.True(t, got.Verified)
-	require.Equal(t, "m@x", got.User.Email)
-	require.Contains(t, errOut.String(), "deprecated")
-	require.True(t, cmd.Hidden, "must not appear in help")
-}
-
 func TestLogout_StoredReference(t *testing.T) {
 	opts := &client.Options{ConfigDir: t.TempDir()}
 	require.NoError(t, credentials.Save(opts.ConfigDir, &credentials.Credential{

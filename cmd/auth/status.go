@@ -188,21 +188,6 @@ it, so a script can gate on it.`,
 	return cmd
 }
 
-// NewWhoamiCmd is `admiral whoami`, which 'auth status' absorbed when it
-// started verifying against the server. It runs the same command and is
-// kept, deprecated and hidden, for one release so scripts keep working.
-func NewWhoamiCmd(opts *client.Options) *cobra.Command {
-	cmd := newStatusCmd(opts)
-	cmd.Use = "whoami"
-	cmd.Hidden = true
-	// Not cobra's Deprecated: that prints through OutOrStderr, which is
-	// stdout whenever an out writer is set, and stdout is for the answer.
-	cmd.PreRun = func(cmd *cobra.Command, _ []string) {
-		output.Writeln(cmd.ErrOrStderr(), "'admiral whoami' is deprecated; use 'admiral auth status'.")
-	}
-	return cmd
-}
-
 // storedIn renders the storage location for table output.
 func storedIn(st authStatus) string {
 	switch st.Storage {
