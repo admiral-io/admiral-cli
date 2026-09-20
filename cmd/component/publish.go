@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"go.admiral.io/bundle"
-	"go.admiral.io/bundle/gitcmd"
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/flags"
@@ -166,7 +165,7 @@ component. This is the form CI runs on every push.`,
 func pack(ctx context.Context, p *output.Printer, abs, display string) (*bundle.Packed, error) {
 	packed, err := bundle.PackContext(ctx, abs, bundle.Options{
 		Credentials: bundle.NewAmbientCredentials(),
-		Git:         &gitcmd.Transport{Repo: gitcmd.DescribeRepo(ctx, abs)},
+		Git:         &bundle.Git{Repo: bundle.OpenRepo(abs)},
 	})
 	if err != nil {
 		return nil, err
@@ -201,7 +200,7 @@ type publishRequest struct {
 // publishOne uploads a packed component and reports the outcome and the
 // findings on stderr. The caller decides how to print the revision.
 func publishOne(cmd *cobra.Command, p *output.Printer, c sdkclient.AdmiralClient, req publishRequest) (*registryv1.PublishComponentResponse, error) {
-	prov := bundle.Describe(cmd.Context(), req.dir)
+	prov := bundle.Describe(req.dir)
 	if prov.Dirty {
 		output.Writef(p.Err(), "Working copy has uncommitted changes; the revision will say so\n")
 	}
