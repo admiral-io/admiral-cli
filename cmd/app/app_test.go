@@ -8,6 +8,7 @@ import (
 
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
+	"go.admiral.io/cli/internal/credentials"
 )
 
 func run(t *testing.T, args ...string) (string, error) {
@@ -80,4 +81,15 @@ func TestDeleteWithoutForceFailsBeforeNetwork(t *testing.T) {
 	_, err := run(t, "delete", "shop")
 	require.EqualError(t, err, "--force required when not running interactively")
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
+}
+
+// --all walks every page and contradicts --page-token; the refusal is a
+// usage error before any network use.
+func TestListAllExcludesPageToken(t *testing.T) {
+	_, err := run(t, "list", "--all", "--page-token", "x")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "[all page-token]")
+
+	_, err = run(t, "list", "--all")
+	require.ErrorIs(t, err, credentials.ErrNotAuthenticated, "--all alone proceeds to the client")
 }

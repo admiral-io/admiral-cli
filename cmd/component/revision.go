@@ -43,9 +43,8 @@ them.`,
 
 func newRevisionListCmd(opts *client.Options) *cobra.Command {
 	var (
-		status    string
-		pageSize  int32
-		pageToken string
+		status string
+		paging flags.PagingOptions
 	)
 
 	cmd := &cobra.Command{
@@ -81,8 +80,14 @@ func newRevisionListCmd(opts *client.Options) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := c.Registry().ListRevisions(cmd.Context(), &registryv1.ListRevisionsRequest{
-				ComponentId: componentID, Filter: f, PageSize: pageSize, PageToken: pageToken,
+			revs, next, err := flags.Pages(paging, func(token string) ([]*registryv1.Revision, string, error) {
+				resp, err := c.Registry().ListRevisions(cmd.Context(), &registryv1.ListRevisionsRequest{
+					ComponentId: componentID, Filter: f, PageSize: paging.PageSize, PageToken: token,
+				})
+				if err != nil {
+					return nil, "", err
+				}
+				return resp.Revisions, resp.NextPageToken, nil
 			})
 			if err != nil {
 				return err
@@ -91,16 +96,15 @@ func newRevisionListCmd(opts *client.Options) *cobra.Command {
 			p := output.NewPrinter(cmd, opts.OutputFormat)
 			return p.PrintList(output.List{
 				Kind:          "revisions",
-				Items:         output.Messages(resp.Revisions),
-				Name:          func(i int) string { return args[0] + "@" + resp.Revisions[i].Digest },
-				NextPageToken: resp.NextPageToken,
-			}, revisionTable.Render(p, resp.Revisions...))
+				Items:         output.Messages(revs),
+				Name:          func(i int) string { return args[0] + "@" + revs[i].Digest },
+				NextPageToken: next,
+			}, revisionTable.Render(p, revs...))
 		},
 	}
 
 	flags.Enum(cmd, &status, "status", "", "only revisions in this status", "published", "deprecated")
-	cmd.Flags().Int32Var(&pageSize, "page-size", 50, "maximum number of results per page")
-	cmd.Flags().StringVar(&pageToken, "page-token", "", "pagination token from a previous response")
+	flags.Paging(cmd, &paging)
 
 	return cmd
 }

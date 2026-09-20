@@ -125,7 +125,7 @@ func TestPrintList_NextPageTokenOnStderrInEveryFormat(t *testing.T) {
 		l := List{Kind: "w", Items: items("a"), NextPageToken: "tok123"}
 		l.Name = nameOf(l)
 		require.NoError(t, p.PrintList(l, func(w *tabwriter.Writer) { Writeln(w, "a") }))
-		require.Equal(t, "next page token: tok123\n", errOut.String(), "format %s", f)
+		require.Equal(t, "next page token: tok123 (pass it with --page-token, or use --all)\n", errOut.String(), "format %s", f)
 		require.NotContains(t, out.String(), "tok123", "format %s", f)
 	}
 }

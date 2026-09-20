@@ -24,20 +24,25 @@ func isAuthError(err error) bool {
 	return ok && s.Code() == codes.Unauthenticated
 }
 
-// isRequiredFlagError recognizes cobra's own "required flag(s) ... not set",
-// which does not pass through the flag error func.
-func isRequiredFlagError(err error) bool {
-	return strings.HasPrefix(err.Error(), "required flag(s)")
+// isCobraFlagError recognizes the flag validation errors cobra raises
+// itself, which do not pass through the flag error func: "required flag(s)
+// ... not set" and the flag-group checks behind MarkFlagsMutuallyExclusive,
+// MarkFlagsRequiredTogether and MarkFlagsOneRequired.
+func isCobraFlagError(err error) bool {
+	msg := err.Error()
+	return strings.HasPrefix(msg, "required flag(s)") ||
+		strings.HasPrefix(msg, "if any flags in the group") ||
+		strings.HasPrefix(msg, "at least one of the flags in the group")
 }
 
 // exitCode maps err to the process exit status: cmderr codes when present,
-// 4 for anything that needs a sign-in, 2 for a missing required flag,
+// 4 for anything that needs a sign-in, 2 for a flag mistake cobra caught,
 // otherwise 1.
 func exitCode(err error) int {
 	if isAuthError(err) {
 		return cmderr.ExitAuth
 	}
-	if isRequiredFlagError(err) {
+	if isCobraFlagError(err) {
 		return cmderr.ExitUsage
 	}
 	return cmderr.Code(err)

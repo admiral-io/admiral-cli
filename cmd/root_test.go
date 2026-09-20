@@ -318,6 +318,7 @@ func TestRoot_ExitCodes(t *testing.T) {
 		{"permission denied", status.Error(codes.PermissionDenied, "scope"), cmderr.ExitError, []string{"Error: permission denied: scope", cmderr.ScopeHint}},
 		{"plain error", errors.New("boom"), cmderr.ExitError, []string{"Error: boom"}},
 		{"required flag", errors.New(`required flag(s) "app" not set`), cmderr.ExitUsage, []string{"required flag"}},
+		{"exclusive flags", errors.New("if any flags in the group [all page-token] are set none of the others can be; [all page-token] were all set"), cmderr.ExitUsage, []string{"[all page-token]"}},
 		{"canceled", context.Canceled, cmderr.ExitInterrupted, []string{"Interrupted."}},
 		{"wrapped canceled", fmt.Errorf("prompt canceled: %w", context.Canceled), cmderr.ExitInterrupted, []string{"Interrupted."}},
 	}

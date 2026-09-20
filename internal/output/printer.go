@@ -97,7 +97,7 @@ func (p *Printer) PrintList(l List, tableFn func(w *tabwriter.Writer)) error {
 		return err
 	}
 	if l.NextPageToken != "" {
-		Writef(p.IO.Err, "next page token: %s\n", l.NextPageToken)
+		Writef(p.IO.Err, "next page token: %s (pass it with --page-token, or use --all)\n", l.NextPageToken)
 	}
 	return nil
 }
