@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"os"
 	"strings"
 	"testing"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"go.admiral.io/cli/internal/cmderr"
+	"go.admiral.io/cli/internal/iostreams"
 )
 
 // newCmd builds a minimal *cobra.Command with the given stdin and buffered
@@ -33,6 +35,21 @@ func TestSecret_StdinFlagReadsAllOfAPipe(t *testing.T) {
 	got, err := Secret(newCmd(strings.NewReader("-----BEGIN KEY-----\nline2\n-----END KEY-----\r\n")), "private key", true)
 	require.NoError(t, err)
 	require.Equal(t, "-----BEGIN KEY-----\nline2\n-----END KEY-----", got, "multi-line material is preserved; only the trailing CR/LF is trimmed")
+}
+
+// The flag was given but stdin is a terminal that must not be prompted (an
+// agent is driving): the remedy is to pipe the value, not a flag that is
+// already set.
+func TestSecret_FlagOnANonInteractiveTerminal(t *testing.T) {
+	t.Setenv("ADMIRAL_NO_INPUT", "1")
+	cmd := newCmd(strings.NewReader(""))
+	cmd.SetIn(os.Stdin) // a TTY when the test runs in one, a pipe otherwise
+	if !iostreams.FromCommand(cmd).IsStdinTTY() {
+		t.Skip("needs a terminal on stdin")
+	}
+	_, err := Secret(cmd, "API key", true)
+	require.EqualError(t, err, "cannot prompt for API key when not running interactively; pipe it on stdin")
+	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 }
 
 func TestSecret_WithoutFlagOnAPipeIsUsageError(t *testing.T) {

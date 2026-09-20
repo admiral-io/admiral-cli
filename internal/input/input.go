@@ -61,7 +61,9 @@ func PromptLine(cmd *cobra.Command, label string, sensitive bool) (string, error
 //     so multi-line material such as PEM keys stays intact);
 //   - --<label>-stdin on a terminal, or no flag in an interactive session:
 //     prompt with echo off;
-//   - otherwise: a usage error naming --<label>-stdin.
+//   - otherwise: a usage error. Without the flag it names --<label>-stdin;
+//     with the flag but a terminal that must not be prompted (an agent
+//     driving the CLI, ADMIRAL_NO_INPUT) it says to pipe the value.
 func Secret(cmd *cobra.Command, label string, fromStdin bool) (string, error) {
 	io := iostreams.FromCommand(cmd)
 	if fromStdin && !io.IsStdinTTY() {
@@ -73,6 +75,9 @@ func Secret(cmd *cobra.Command, label string, fromStdin bool) (string, error) {
 	}
 	if io.Interactive() {
 		return PromptLine(cmd, label, true)
+	}
+	if fromStdin {
+		return "", cmderr.Usage("cannot prompt for %s when not running interactively; pipe it on stdin", label)
 	}
 	return "", cmderr.Usage("--%s-stdin required when not running interactively", label)
 }
