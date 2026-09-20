@@ -7,9 +7,12 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -19,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"go.admiral.io/cli/internal/credentials"
+	"go.admiral.io/cli/internal/output"
 )
 
 // fakeIdP is a minimal OIDC provider: discovery, JWKS, an authorize endpoint
@@ -31,12 +35,32 @@ type fakeIdP struct {
 	clientID string
 	code     string
 
+	// hideRevocation drops revocation_endpoint from the discovery document,
+	// as a provider that does not support RFC 7009 would.
+	hideRevocation bool
+
 	// captured from the client for assertions
 	authorizeQuery url.Values
 	tokenForm      url.Values
 	tokenAuthHdr   string
 	revokeForm     url.Values
 }
+
+// captureWarnings redirects the CLI's warning log for one test, so a test can
+// assert on what the user is told.
+func captureWarnings(t *testing.T) *strings.Builder {
+	t.Helper()
+	var buf strings.Builder
+	prev := slog.Default()
+	slog.SetDefault(slog.New(output.NewLogHandler(&buf, slog.LevelWarn)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
+}
+
+// revokePath is where the fake provider accepts revocation requests.
+const revokePath = "/custom/revocation"
+
+func (f *fakeIdP) revocationURL() string { return f.srv.URL + revokePath }
 
 func newFakeIdP(t *testing.T) *fakeIdP {
 	t.Helper()
@@ -47,14 +71,18 @@ func newFakeIdP(t *testing.T) *fakeIdP {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		doc := map[string]any{
 			"issuer":                                f.srv.URL,
 			"authorization_endpoint":                f.srv.URL + "/oauth2/authorize",
 			"token_endpoint":                        f.srv.URL + "/oauth2/token",
 			"jwks_uri":                              f.srv.URL + "/oauth2/jwks",
 			"id_token_signing_alg_values_supported": []string{"RS256"},
 			"code_challenge_methods_supported":      []string{"S256"},
-		})
+		}
+		if !f.hideRevocation {
+			doc["revocation_endpoint"] = f.revocationURL()
+		}
+		_ = json.NewEncoder(w).Encode(doc)
 	})
 	mux.HandleFunc("/oauth2/jwks", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(jose.JSONWebKeySet{Keys: []jose.JSONWebKey{{
@@ -101,7 +129,10 @@ func newFakeIdP(t *testing.T) *fakeIdP {
 			"scope":         f.authorizeQuery.Get("scope"), // granted == requested
 		})
 	})
-	mux.HandleFunc("/oauth2/revoke", func(w http.ResponseWriter, r *http.Request) {
+	// Deliberately not /oauth2/revoke: only a client that reads the endpoint
+	// out of the discovery document finds this, the way real providers differ
+	// (Auth0 uses /oauth/revoke, Google a different host entirely).
+	mux.HandleFunc(revokePath, func(w http.ResponseWriter, r *http.Request) {
 		require.NoError(t, r.ParseForm())
 		f.revokeForm = r.Form
 		w.WriteHeader(http.StatusOK)
@@ -171,6 +202,7 @@ func TestLogin_EndToEnd(t *testing.T) {
 	require.Equal(t, idp.srv.URL, sess.Issuer)
 	require.Equal(t, idp.clientID, sess.ClientID)
 	require.Equal(t, idp.srv.URL+"/oauth2/token", sess.TokenURL)
+	require.Equal(t, idp.revocationURL(), sess.RevocationURL, "discovered at login so logout need not guess")
 	require.Equal(t, "martin@example.com", sess.Email)
 	require.WithinDuration(t, time.Now().Add(15*time.Minute), sess.Expiry, 10*time.Second)
 	require.Empty(t, sess.Scopes)
@@ -281,6 +313,32 @@ func TestLogout_RevokesAndDeletes(t *testing.T) {
 	idp := newFakeIdP(t)
 	dir := t.TempDir()
 	require.NoError(t, credentials.Save(dir, &credentials.Credential{
+		Kind:          credentials.KindSession,
+		AccessToken:   "jwt",
+		RefreshToken:  "refresh-1",
+		Issuer:        idp.srv.URL,
+		ClientID:      idp.clientID,
+		RevocationURL: idp.revocationURL(),
+	}))
+
+	res, err := Logout(context.Background(), dir)
+	require.NoError(t, err)
+	require.Equal(t, LogoutResult{Kind: credentials.KindSession, Removed: true}, res)
+
+	require.Equal(t, "refresh-1", idp.revokeForm.Get("token"))
+	require.Equal(t, "refresh_token", idp.revokeForm.Get("token_type_hint"))
+	require.Equal(t, idp.clientID, idp.revokeForm.Get("client_id"))
+
+	_, err = credentials.Load(dir)
+	require.Error(t, err)
+}
+
+// A session stored before the endpoint was recorded carries only the issuer.
+// Logout discovers the endpoint rather than assuming a path.
+func TestLogout_DiscoversEndpointForOlderSession(t *testing.T) {
+	idp := newFakeIdP(t)
+	dir := t.TempDir()
+	require.NoError(t, credentials.Save(dir, &credentials.Credential{
 		Kind:         credentials.KindSession,
 		AccessToken:  "jwt",
 		RefreshToken: "refresh-1",
@@ -288,13 +346,54 @@ func TestLogout_RevokesAndDeletes(t *testing.T) {
 		ClientID:     idp.clientID,
 	}))
 
-	kind, err := Logout(context.Background(), dir)
+	res, err := Logout(context.Background(), dir)
 	require.NoError(t, err)
-	require.Equal(t, credentials.KindSession, kind)
-
+	require.Equal(t, credentials.KindSession, res.Kind)
 	require.Equal(t, "refresh-1", idp.revokeForm.Get("token"))
-	require.Equal(t, "refresh_token", idp.revokeForm.Get("token_type_hint"))
-	require.Equal(t, idp.clientID, idp.revokeForm.Get("client_id"))
+}
+
+// Revocation is best effort: a provider that supports none still leaves the
+// user logged out locally.
+func TestLogout_ProviderWithoutRevocation(t *testing.T) {
+	warnings := captureWarnings(t)
+	idp := newFakeIdP(t)
+	idp.hideRevocation = true
+	dir := t.TempDir()
+	require.NoError(t, credentials.Save(dir, &credentials.Credential{
+		Kind:         credentials.KindSession,
+		AccessToken:  "jwt",
+		RefreshToken: "refresh-1",
+		Issuer:       idp.srv.URL,
+		ClientID:     idp.clientID,
+	}))
+
+	res, err := Logout(context.Background(), dir)
+	require.NoError(t, err)
+	require.Equal(t, credentials.KindSession, res.Kind)
+	require.Nil(t, idp.revokeForm)
+	require.Contains(t, warnings.String(), "was not revoked", "silence would imply the session was withdrawn")
+
+	_, err = credentials.Load(dir)
+	require.Error(t, err)
+}
+
+// An unreachable provider must not keep the credential on disk either.
+func TestLogout_UnreachableProvider(t *testing.T) {
+	warnings := captureWarnings(t)
+	dir := t.TempDir()
+	require.NoError(t, credentials.Save(dir, &credentials.Credential{
+		Kind:          credentials.KindSession,
+		AccessToken:   "jwt",
+		RefreshToken:  "refresh-1",
+		Issuer:        "http://127.0.0.1:1",
+		ClientID:      "admiral-cli",
+		RevocationURL: "http://127.0.0.1:1/revoke",
+	}))
+
+	res, err := Logout(context.Background(), dir)
+	require.NoError(t, err)
+	require.Equal(t, credentials.KindSession, res.Kind)
+	require.Contains(t, warnings.String(), "http://127.0.0.1:1", "the warning names the provider that was not reached")
 
 	_, err = credentials.Load(dir)
 	require.Error(t, err)
@@ -305,9 +404,9 @@ func TestLogout_APIKeyDoesNotRevoke(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, credentials.Save(dir, &credentials.Credential{Kind: credentials.KindAPIKey, APIKey: "admp_x"}))
 
-	kind, err := Logout(context.Background(), dir)
+	res, err := Logout(context.Background(), dir)
 	require.NoError(t, err)
-	require.Equal(t, credentials.KindAPIKey, kind)
+	require.Equal(t, credentials.KindAPIKey, res.Kind)
 	require.Nil(t, idp.revokeForm)
 
 	_, err = credentials.Load(dir)
@@ -315,9 +414,23 @@ func TestLogout_APIKeyDoesNotRevoke(t *testing.T) {
 }
 
 func TestLogout_NothingStored(t *testing.T) {
-	kind, err := Logout(context.Background(), t.TempDir())
+	res, err := Logout(context.Background(), t.TempDir())
 	require.NoError(t, err)
-	require.Empty(t, kind)
+	require.Equal(t, LogoutResult{}, res)
+}
+
+// A credentials file that cannot be parsed is still removed, and logout says
+// so: reporting "nothing was stored" would misdescribe what just happened.
+func TestLogout_UnreadableFileIsRemoved(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "credentials.json")
+	require.NoError(t, os.WriteFile(path, []byte("{not json"), 0600))
+
+	res, err := Logout(context.Background(), dir)
+	require.NoError(t, err)
+	require.Equal(t, LogoutResult{Removed: true}, res)
+
+	require.NoFileExists(t, path)
 }
 
 func TestLogin_TimesOutWaitingForBrowser(t *testing.T) {

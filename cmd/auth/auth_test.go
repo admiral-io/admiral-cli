@@ -145,6 +145,20 @@ func TestLogout_NothingStored(t *testing.T) {
 	require.Contains(t, stdout, "Not logged in")
 }
 
+// A file that cannot be parsed is removed, and the message says so: "Not
+// logged in" would claim there had been nothing to remove.
+func TestLogout_UnreadableFile(t *testing.T) {
+	opts := &client.Options{ConfigDir: t.TempDir()}
+	path := filepath.Join(opts.ConfigDir, "credentials.json")
+	require.NoError(t, os.WriteFile(path, []byte("{not json"), 0600))
+
+	stdout, err := run(t, opts, "", "logout")
+	require.NoError(t, err)
+	require.Contains(t, stdout, "unreadable credentials file")
+	require.NotContains(t, stdout, "Not logged in")
+	require.NoFileExists(t, path)
+}
+
 func TestStatus(t *testing.T) {
 	cases := []struct {
 		name   string

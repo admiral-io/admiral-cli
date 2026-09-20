@@ -21,16 +21,20 @@ if set, is not affected.`,
   admiral auth logout`,
 		Args: flags.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			kind, err := internalauth.Logout(cmd.Context(), opts.ConfigDir)
+			res, err := internalauth.Logout(cmd.Context(), opts.ConfigDir)
 			if err != nil {
 				return err
 			}
-			switch kind {
-			case "":
+			switch {
+			case !res.Removed:
 				output.Writeln(cmd.OutOrStdout(), "Not logged in.")
-			case credentials.KindAPIKey:
+			case res.Kind == "":
+				// The file was there but unreadable, so what it held is
+				// unknown. It is gone; say that rather than "not logged in".
+				output.Writeln(cmd.OutOrStdout(), "Removed an unreadable credentials file. Run 'admiral auth login' to sign in again.")
+			case res.Kind == credentials.KindAPIKey:
 				output.Writeln(cmd.OutOrStdout(), "Stored API key removed.")
-			case credentials.KindAPIKeyRef:
+			case res.Kind == credentials.KindAPIKeyRef:
 				output.Writeln(cmd.OutOrStdout(), "Stored API key reference removed. The key itself is untouched in its store.")
 			default:
 				output.Writeln(cmd.OutOrStdout(), "Logged out.")
