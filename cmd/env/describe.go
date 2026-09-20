@@ -93,21 +93,39 @@ describe is a human view. Use 'env get -o json' for the raw record.`,
 			// sections below are assembled from further reads. A section
 			// whose read fails (missing scope, endpoint not served) is
 			// rendered as unavailable rather than failing the describe.
+			// The four reads are independent; the diffs depend on the
+			// open change sets, so they fan out from that read once it
+			// returns. Every section keeps its own error, so nothing here
+			// returns one and the group is only a way to wait.
 			var sec envSections
-			compResp, err := c.Environment().ListEnvironmentComponents(ctx, &environmentv1.ListEnvironmentComponentsRequest{
-				EnvironmentId: envID,
+			g, gctx := errgroup.WithContext(ctx)
+			g.Go(func() error {
+				compResp, err := c.Environment().ListEnvironmentComponents(gctx, &environmentv1.ListEnvironmentComponentsRequest{
+					EnvironmentId: envID,
+				})
+				if err != nil {
+					sec.compsErr = err
+				} else {
+					sec.comps = compResp.Components
+				}
+				return nil
 			})
-			if err != nil {
-				sec.compsErr = err
-			} else {
-				sec.comps = compResp.Components
-			}
-			sec.runs, sec.runsErr = listRecentRuns(ctx, c, e.ApplicationId, envID)
-			sec.openCS, sec.openCSErr = listOpenChangeSets(ctx, c, e.ApplicationId, envID)
-			sec.vars, sec.varsErr = listAllVariables(ctx, c, envID)
-			if sec.openCSErr == nil {
-				sec.diffs = loadPendingDiffs(ctx, c, sec.openCS)
-			}
+			g.Go(func() error {
+				sec.runs, sec.runsErr = listRecentRuns(gctx, c, e.ApplicationId, envID)
+				return nil
+			})
+			g.Go(func() error {
+				sec.openCS, sec.openCSErr = listOpenChangeSets(gctx, c, e.ApplicationId, envID)
+				if sec.openCSErr == nil {
+					sec.diffs = loadPendingDiffs(gctx, c, sec.openCS)
+				}
+				return nil
+			})
+			g.Go(func() error {
+				sec.vars, sec.varsErr = listAllVariables(gctx, c, envID)
+				return nil
+			})
+			_ = g.Wait() // nothing returns an error
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
 			return p.PrintDescribe(describeEnv(e, app, sec),
