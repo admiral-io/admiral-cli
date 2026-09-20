@@ -221,7 +221,7 @@ func (p *Printer) PrintDescribe(d *Describe, getCommand string) error {
 // PrintStatus renders a status-style view: the Describe layout on a
 // terminal, and v as JSON or YAML under -o json|yaml. v may be a proto
 // message (rendered through protojson) or any Go value with json tags.
-// Used by whoami, auth status, config list, agent status and similar
+// Used by auth status, config list, agent status and similar
 // commands whose answer is a document rather than a resource row.
 func (p *Printer) PrintStatus(v any, d *Describe) error {
 	switch p.Format {

@@ -251,7 +251,7 @@ Documentation: https://admiral.io/docs`,
 		componentcmd.NewComponentCmd(&clientOpts).Cmd,
 		authcmd.NewAuthCmd(&clientOpts).Cmd,
 		configcmd.NewConfigCmd(&clientOpts).Cmd,
-		newWhoamiCmd(&clientOpts),
+		authcmd.NewWhoamiCmd(&clientOpts),
 		newCompletionCmd(),
 		newVersionCmd(ver),
 	)
