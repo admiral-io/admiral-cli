@@ -48,8 +48,9 @@ enforces the narrowed set on every call. Scopes are fixed for the life of the
 session, so run 'admiral auth login' again to change them.
 
 Either way the credential lands in credentials.json inside the config
-directory, readable only by you. If ADMIRAL_API_KEY is set, it takes
-precedence over whatever is stored.`,
+directory, readable only by you, replacing whatever was there; a browser
+session being replaced is revoked at the identity provider, as logout does.
+If ADMIRAL_API_KEY is set, it takes precedence over whatever is stored.`,
 		Example: `  # Browser login
   admiral auth login
 
@@ -154,7 +155,7 @@ func loginWithToken(cmd *cobra.Command, opts *client.Options) error {
 		return fmt.Errorf("invalid API key: %w (expected a key such as admp_...)", err)
 	}
 
-	if err := credentials.Save(opts.ConfigDir, cred); err != nil {
+	if err := internalauth.Store(cmd.Context(), opts.ConfigDir, cred); err != nil {
 		return err
 	}
 

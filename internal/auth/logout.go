@@ -53,19 +53,43 @@ func Logout(ctx context.Context, configDir string) (LogoutResult, error) {
 		return LogoutResult{Removed: true}, nil
 	}
 
-	if cred.Kind == credentials.KindSession && cred.RefreshToken != "" {
-		ctx, cancel := context.WithTimeout(ctx, revokeTimeout)
-		defer cancel()
-		revokeSession(ctx, cred)
-	}
+	revokeSession(ctx, cred, "logged out locally, but the session")
 	return LogoutResult{Kind: cred.Kind, Removed: true}, nil
 }
 
+// Store makes cred the active credential. A browser session it replaces is
+// revoked at the identity provider afterwards, best effort: without that,
+// signing in again (or storing an API key over a session) would leave a
+// refresh token that is gone from disk but still good until it expires.
+// The new credential is written first so an aborted revocation never costs
+// the sign-in that just succeeded.
+func Store(ctx context.Context, configDir string, cred *credentials.Credential) error {
+	prev, err := credentials.Load(configDir)
+	if err != nil {
+		prev = nil // nothing stored, or unreadable: nothing to revoke
+	}
+	if err := credentials.Save(configDir, cred); err != nil {
+		return err
+	}
+	if prev != nil && prev.RefreshToken != cred.RefreshToken {
+		revokeSession(ctx, prev, "signed in, but the previous session")
+	}
+	return nil
+}
+
 // revokeSession asks the identity provider to revoke the session's refresh
-// token. Failure is a warning, not an error: nothing can be done about it
-// locally, but staying silent would let the user believe a token that is
-// still usable elsewhere had been withdrawn.
-func revokeSession(ctx context.Context, cred *credentials.Credential) {
+// token; it is a no-op for any other credential. Failure is a warning, not
+// an error: nothing can be done about it locally, but staying silent would
+// let the user believe a token that is still usable elsewhere had been
+// withdrawn. subject opens the warning ("logged out locally, but the
+// session"), which continues "was not revoked at ...".
+func revokeSession(ctx context.Context, cred *credentials.Credential, subject string) {
+	if cred.Kind != credentials.KindSession || cred.RefreshToken == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, revokeTimeout)
+	defer cancel()
+
 	endpoint, err := revocationEndpoint(ctx, cred)
 	if err == nil {
 		if err = revoke(ctx, endpoint, cred.ClientID, cred.RefreshToken); err == nil {
@@ -73,14 +97,14 @@ func revokeSession(ctx context.Context, cred *credentials.Credential) {
 		}
 		slog.Debug("refresh token revocation failed", "endpoint", endpoint, "error", err)
 	} else {
-		slog.Debug("no revocation endpoint for logout", "error", err)
+		slog.Debug("no revocation endpoint", "error", err)
 	}
 
 	where := cred.Issuer
 	if where == "" {
 		where = "the identity provider"
 	}
-	slog.Warn(fmt.Sprintf("logged out locally, but the session was not revoked at %s and stays valid until it expires", where),
+	slog.Warn(fmt.Sprintf("%s was not revoked at %s and stays valid until it expires", subject, where),
 		"error", err)
 }
 

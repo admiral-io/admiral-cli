@@ -278,7 +278,7 @@ func Login(ctx context.Context, opts LoginOptions) (*Result, error) {
 		Email:         claims.Email,
 		Scopes:        granted,
 	}
-	if err := credentials.Save(opts.ConfigDir, cred); err != nil {
+	if err := Store(ctx, opts.ConfigDir, cred); err != nil {
 		return nil, err
 	}
 
