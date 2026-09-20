@@ -15,9 +15,8 @@ import (
 
 func newListCmd(opts *client.Options) *cobra.Command {
 	var (
-		appName   string
-		pageSize  int32
-		pageToken string
+		appName string
+		paging  flags.PagingOptions
 	)
 
 	cmd := &cobra.Command{
@@ -54,14 +53,20 @@ func newListCmd(opts *client.Options) *cobra.Command {
 				return err
 			}
 
-			filter, err := filter.Eq("application_id", resolvedAppID)
+			byApp, err := filter.Eq("application_id", resolvedAppID)
 			if err != nil {
 				return err
 			}
-			resp, err := c.Environment().ListEnvironments(cmd.Context(), &environmentv1.ListEnvironmentsRequest{
-				Filter:    filter,
-				PageSize:  pageSize,
-				PageToken: pageToken,
+			envs, next, err := flags.Pages(paging, func(token string) ([]*environmentv1.Environment, string, error) {
+				resp, err := c.Environment().ListEnvironments(cmd.Context(), &environmentv1.ListEnvironmentsRequest{
+					Filter:    byApp,
+					PageSize:  paging.PageSize,
+					PageToken: token,
+				})
+				if err != nil {
+					return nil, "", err
+				}
+				return resp.Environments, resp.NextPageToken, nil
 			})
 			if err != nil {
 				return err
@@ -70,16 +75,15 @@ func newListCmd(opts *client.Options) *cobra.Command {
 			p := output.NewPrinter(cmd, opts.OutputFormat)
 			return p.PrintList(output.List{
 				Kind:          "environments",
-				Items:         output.Messages(resp.Environments),
-				Name:          func(i int) string { return resp.Environments[i].Name },
-				NextPageToken: resp.NextPageToken,
-			}, envTable.Render(p, resp.Environments...))
+				Items:         output.Messages(envs),
+				Name:          func(i int) string { return envs[i].Name },
+				NextPageToken: next,
+			}, envTable.Render(p, envs...))
 		},
 	}
 
 	flags.App(cmd, &appName, opts)
-	cmd.Flags().Int32Var(&pageSize, "page-size", 50, "maximum number of results per page")
-	cmd.Flags().StringVar(&pageToken, "page-token", "", "pagination token from a previous response")
+	flags.Paging(cmd, &paging)
 
 	return cmd
 }

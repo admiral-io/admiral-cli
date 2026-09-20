@@ -11,8 +11,7 @@ import (
 
 func newListCmd(opts *client.Options) *cobra.Command {
 	var (
-		pageSize  int32
-		pageToken string
+		paging    flags.PagingOptions
 		labelStrs []string
 	)
 
@@ -26,7 +25,10 @@ func newListCmd(opts *client.Options) *cobra.Command {
   # List with label filter
   admiral app list --label team=platform
 
-  # Paginated listing
+  # Every application, however many pages the server splits them into
+  admiral app list --all -o name
+
+  # One page at a time
   admiral app list --page-size 10`,
 		Args: flags.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -41,10 +43,16 @@ func newListCmd(opts *client.Options) *cobra.Command {
 			}
 			defer c.Close() //nolint:errcheck // best-effort cleanup
 
-			resp, err := c.Application().ListApplications(cmd.Context(), &applicationv1.ListApplicationsRequest{
-				PageSize:  pageSize,
-				PageToken: pageToken,
-				Filter:    filter,
+			apps, next, err := flags.Pages(paging, func(token string) ([]*applicationv1.Application, string, error) {
+				resp, err := c.Application().ListApplications(cmd.Context(), &applicationv1.ListApplicationsRequest{
+					PageSize:  paging.PageSize,
+					PageToken: token,
+					Filter:    filter,
+				})
+				if err != nil {
+					return nil, "", err
+				}
+				return resp.Applications, resp.NextPageToken, nil
 			})
 			if err != nil {
 				return err
@@ -53,15 +61,14 @@ func newListCmd(opts *client.Options) *cobra.Command {
 			p := output.NewPrinter(cmd, opts.OutputFormat)
 			return p.PrintList(output.List{
 				Kind:          "applications",
-				Items:         output.Messages(resp.Applications),
-				Name:          func(i int) string { return resp.Applications[i].Name },
-				NextPageToken: resp.NextPageToken,
-			}, appTable.Render(p, resp.Applications...))
+				Items:         output.Messages(apps),
+				Name:          func(i int) string { return apps[i].Name },
+				NextPageToken: next,
+			}, appTable.Render(p, apps...))
 		},
 	}
 
-	cmd.Flags().Int32Var(&pageSize, "page-size", 50, "maximum number of results per page")
-	cmd.Flags().StringVar(&pageToken, "page-token", "", "pagination token from a previous response")
+	flags.Paging(cmd, &paging)
 	flags.Label(cmd, &labelStrs, "filter by label (key=value, repeatable)")
 
 	return cmd

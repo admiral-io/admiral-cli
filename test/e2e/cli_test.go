@@ -37,7 +37,15 @@ func newCLI(t *testing.T) *CLI {
 // dir. It skips the test when no stack is configured.
 func newServerCLI(t *testing.T) *CLI {
 	t.Helper()
-	server, apiKey := serverStack(t)
+	_, apiKey := serverStack(t)
+	return newServerCLIWithKey(t, apiKey)
+}
+
+// newServerCLIWithKey is newServerCLI presenting apiKey instead of the
+// stack's own, for the rejected-credential path.
+func newServerCLIWithKey(t *testing.T, apiKey string) *CLI {
+	t.Helper()
+	server, _ := serverStack(t)
 	c := newCLI(t)
 	c.env = append(c.env, "ADMIRAL_SERVER="+server, "ADMIRAL_API_KEY="+apiKey)
 	if os.Getenv("ADMIRAL_PLAINTEXT") != "" {

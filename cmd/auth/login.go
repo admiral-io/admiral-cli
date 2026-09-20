@@ -133,12 +133,18 @@ var errNoBrowser = errors.New("browser launch disabled")
 // the active credential. A reference is resolved once now so problems with
 // the store surface immediately, but only the reference is persisted.
 func loginWithToken(cmd *cobra.Command, opts *client.Options) error {
-	if isTerminal(cmd) {
+	_, terminal := input.ReaderIsTerminal(cmd.InOrStdin())
+	if terminal {
 		output.Writef(cmd.ErrOrStderr(), "Paste your Admiral API key or an op:// reference (input is hidden).\n")
 	}
 	in, err := input.Secret(cmd, "API key", true)
 	if err != nil {
 		return fmt.Errorf("reading API key: %w", err)
+	}
+	// An empty pipe is a wiring mistake in the calling script, not a bad
+	// key: say so as a usage error rather than "auth token is empty".
+	if in == "" && !terminal {
+		return cmderr.Usage("no API key on stdin")
 	}
 
 	cred := &credentials.Credential{Kind: credentials.KindAPIKey, APIKey: in}
@@ -175,9 +181,4 @@ func refuseIfEnvKeySet() error {
 		return nil
 	}
 	return fmt.Errorf("the value of the %s environment variable is being used for authentication.\nTo have the CLI store a credential instead, first clear it from the environment", credentials.EnvAPIKey)
-}
-
-func isTerminal(cmd *cobra.Command) bool {
-	f, ok := cmd.InOrStdin().(interface{ Fd() uintptr })
-	return ok && input.IsTerminal(f.Fd())
 }

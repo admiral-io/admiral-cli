@@ -195,9 +195,13 @@ func Login(ctx context.Context, opts LoginOptions) (*Result, error) {
 			deliver(callback{err: fmt.Errorf("authorization denied: %s: %s", code, desc)})
 			return
 		}
+		// A request carrying the wrong state is not ours: a stray browser
+		// prefetch, or a page probing loopback ports. It gets an error page
+		// but does not end the login, which keeps waiting for the real
+		// callback (gh does the same). Only the user or the timeout ends it.
 		if q.Get("state") != state {
-			renderError(w, http.StatusBadRequest, "State mismatch. Please run the login command again.")
-			deliver(callback{err: errors.New("state mismatch in login callback")})
+			slog.Debug("ignoring login callback with mismatched state", "remote", r.RemoteAddr)
+			renderError(w, http.StatusBadRequest, "This sign-in link is not for the current login attempt. Return to the terminal and try again.")
 			return
 		}
 		code := q.Get("code")

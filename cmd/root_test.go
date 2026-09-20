@@ -24,6 +24,7 @@ import (
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/credentials"
+	"go.admiral.io/cli/internal/iostreams"
 	"go.admiral.io/cli/internal/output"
 	"go.admiral.io/cli/internal/version"
 )
@@ -38,7 +39,10 @@ func TestHangHelper(t *testing.T) {
 	if os.Getenv(hangHelperEnv) == "" {
 		t.Skip("helper for TestSecondInterruptKills")
 	}
-	root := newRootCmd(version.GetVersion(), os.Exit)
+	root, err := newRootCmd(version.GetVersion(), os.Exit)
+	if err != nil {
+		panic(err)
+	}
 	root.cmd.AddCommand(&cobra.Command{
 		Use: "hang",
 		RunE: func(*cobra.Command, []string) error {
@@ -105,7 +109,8 @@ func runRoot(t *testing.T, args []string, env map[string]string) (root *rootCmd,
 	}
 
 	code = -1
-	root = newRootCmd(version.GetVersion(), func(c int) { code = c })
+	root, err := newRootCmd(version.GetVersion(), func(c int) { code = c })
+	require.NoError(t, err)
 	var out, errOut bytes.Buffer
 	root.cmd.SetOut(&out)
 	root.cmd.SetErr(&errOut)
@@ -115,16 +120,17 @@ func runRoot(t *testing.T, args []string, env map[string]string) (root *rootCmd,
 
 // runRootWith adds a subcommand that returns err and runs it, to drive
 // Execute's error reporting with a known error.
-func runRootWith(t *testing.T, err error) (stderr string, code int) {
+func runRootWith(t *testing.T, fail error) (stderr string, code int) {
 	t.Helper()
 	for _, k := range []string{envServer, envAuthServer, envClientID, envTimeout, "ADMIRAL_NO_INPUT"} {
 		t.Setenv(k, "")
 	}
 	code = -1
-	root := newRootCmd(version.GetVersion(), func(c int) { code = c })
+	root, err := newRootCmd(version.GetVersion(), func(c int) { code = c })
+	require.NoError(t, err)
 	root.cmd.AddCommand(&cobra.Command{
 		Use:  "probe",
-		RunE: func(*cobra.Command, []string) error { return err },
+		RunE: func(*cobra.Command, []string) error { return fail },
 	})
 	var errOut bytes.Buffer
 	root.cmd.SetOut(io.Discard)
@@ -312,6 +318,7 @@ func TestRoot_ExitCodes(t *testing.T) {
 		{"permission denied", status.Error(codes.PermissionDenied, "scope"), cmderr.ExitError, []string{"Error: permission denied: scope", cmderr.ScopeHint}},
 		{"plain error", errors.New("boom"), cmderr.ExitError, []string{"Error: boom"}},
 		{"required flag", errors.New(`required flag(s) "app" not set`), cmderr.ExitUsage, []string{"required flag"}},
+		{"exclusive flags", errors.New("if any flags in the group [all page-token] are set none of the others can be; [all page-token] were all set"), cmderr.ExitUsage, []string{"[all page-token]"}},
 		{"canceled", context.Canceled, cmderr.ExitInterrupted, []string{"Interrupted."}},
 		{"wrapped canceled", fmt.Errorf("prompt canceled: %w", context.Canceled), cmderr.ExitInterrupted, []string{"Interrupted."}},
 	}
@@ -330,4 +337,80 @@ func TestRoot_ExitCodes(t *testing.T) {
 		require.Equal(t, -1, code)
 		require.Empty(t, stderr)
 	})
+}
+
+func TestRoot_WarnsAboutCorruptConfig(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"server": `), 0600))
+
+	_, _, stderr, code := runRoot(t, []string{"--config-dir", dir, "version"}, nil)
+	require.Equal(t, -1, code, "a corrupt file does not stop the command")
+	require.Contains(t, stderr, "Warning: ")
+	require.Contains(t, stderr, "config")
+}
+
+func TestRoot_WarnsWhenConfigWeakensTLS(t *testing.T) {
+	cases := []struct {
+		name   string
+		key    string
+		server string
+		warn   bool
+	}{
+		{"insecure to a remote host", "insecure", "api.example.test:443", true},
+		{"plaintext to a remote host", "plaintext", "api.example.test:80", true},
+		{"plaintext to localhost", "plaintext", "localhost:8080", false},
+		{"insecure to a loopback IP", "insecure", "127.0.0.1:8443", false},
+		{"insecure to IPv6 loopback", "insecure", "[::1]:8443", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeConfig(t, dir, map[string]string{tc.key: "true", "server": tc.server})
+			_, _, stderr, code := runRoot(t, []string{"--config-dir", dir, "version"}, nil)
+			require.Equal(t, -1, code)
+			if tc.warn {
+				require.Contains(t, stderr, "config.json sets "+tc.key+"=true")
+				require.Contains(t, stderr, "admiral config unset "+tc.key)
+			} else {
+				require.Empty(t, stderr)
+			}
+		})
+	}
+
+	t.Run("the flag is not warned about", func(t *testing.T) {
+		dir := t.TempDir()
+		writeConfig(t, dir, map[string]string{"server": "api.example.test:443"})
+		_, _, stderr, code := runRoot(t, []string{"--config-dir", dir, "--insecure", "version"}, nil)
+		require.Equal(t, -1, code)
+		require.Empty(t, stderr)
+	})
+}
+
+// --no-input reaches prompts through the Streams on the context, not the
+// environment: after the run, the variable is untouched.
+func TestRoot_NoInputDoesNotTouchEnvironment(t *testing.T) {
+	t.Setenv("ADMIRAL_NO_INPUT", "")
+	t.Setenv("ADMIRAL_FORCE_INTERACTIVE", "1")
+
+	probe := func(args ...string) *iostreams.Streams {
+		root, err := newRootCmd(version.GetVersion(), func(int) {})
+		require.NoError(t, err)
+		var seen *iostreams.Streams
+		root.cmd.AddCommand(&cobra.Command{
+			Use: "probe",
+			RunE: func(cmd *cobra.Command, _ []string) error {
+				seen = iostreams.FromCommand(cmd)
+				return nil
+			},
+		})
+		root.cmd.SetOut(io.Discard)
+		root.cmd.SetErr(io.Discard)
+		root.Execute(append([]string{"--config-dir", t.TempDir()}, append(args, "probe")...))
+		require.NotNil(t, seen)
+		return seen
+	}
+
+	require.False(t, probe("--no-input").Interactive())
+	require.Empty(t, os.Getenv("ADMIRAL_NO_INPUT"))
+	require.True(t, probe().Interactive(), "without the flag the forced-interactive session prompts")
 }

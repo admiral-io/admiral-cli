@@ -36,6 +36,11 @@ reversible.`,
 		Args:              flags.ExactArgs(1),
 		ValidArgsFunction: complete.First(complete.Components(opts)),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Before any network use: a run that cannot confirm and did not
+			// pass --force fails here, in milliseconds, with the usage error.
+			if err := input.RequireInteractiveOrForce(cmd, force); err != nil {
+				return err
+			}
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
 				return err

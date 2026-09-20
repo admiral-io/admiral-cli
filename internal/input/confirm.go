@@ -1,7 +1,6 @@
 package input
 
 import (
-	"bufio"
 	"fmt"
 	"io"
 	"strings"
@@ -23,23 +22,20 @@ var ErrCanceled = &cmderr.Error{Err: fmt.Errorf("canceled"), Code: cmderr.ExitEr
 // prompt is a question without the trailing "?": "Delete environment
 // shop/staging". Declining returns ErrCanceled.
 func Confirm(cmd *cobra.Command, force bool, prompt string) error {
-	if force {
-		return nil
+	if err := RequireInteractiveOrForce(cmd, force); err != nil || force {
+		return err
 	}
-	io := iostreams.FromCommand(cmd)
-	if !io.Interactive() {
-		return notInteractive()
-	}
-	fmt.Fprintf(io.Err, "%s? [y/N] ", prompt)
-	reply, err := readLine(io.In)
+	ios := iostreams.FromCommand(cmd)
+	fmt.Fprintf(ios.Err, "%s? [y/N] ", prompt)
+	reply, err := readLine(ios)
 	if err != nil {
 		return fmt.Errorf("read confirmation: %w", err)
 	}
-	switch strings.ToLower(strings.TrimSpace(reply)) {
+	switch strings.ToLower(reply) {
 	case "y", "yes":
 		return nil
 	default:
-		fmt.Fprintln(io.Err, "canceled")
+		fmt.Fprintln(ios.Err, "canceled")
 		return ErrCanceled
 	}
 }
@@ -49,39 +45,43 @@ func Confirm(cmd *cobra.Command, force bool, prompt string) error {
 // environments.") and requires the user to type name verbatim. Skipped when
 // force is true; a usage error when not interactive.
 func ConfirmName(cmd *cobra.Command, force bool, warning, name string) error {
-	if force {
-		return nil
+	if err := RequireInteractiveOrForce(cmd, force); err != nil || force {
+		return err
 	}
-	io := iostreams.FromCommand(cmd)
-	if !io.Interactive() {
-		return notInteractive()
-	}
+	ios := iostreams.FromCommand(cmd)
 	if warning != "" {
-		fmt.Fprintln(io.Err, warning)
+		fmt.Fprintln(ios.Err, warning)
 	}
-	fmt.Fprintf(io.Err, "Type %s to confirm: ", name)
-	reply, err := readLine(io.In)
+	fmt.Fprintf(ios.Err, "Type %s to confirm: ", name)
+	reply, err := readLine(ios)
 	if err != nil {
 		return fmt.Errorf("read confirmation: %w", err)
 	}
-	if strings.TrimSpace(reply) != name {
-		fmt.Fprintln(io.Err, "canceled")
+	if reply != name {
+		fmt.Fprintln(ios.Err, "canceled")
 		return ErrCanceled
 	}
 	return nil
 }
 
-// notInteractive is the error for a prompt that cannot be shown. It names the
-// flag that answers the prompt.
-func notInteractive() error {
+// RequireInteractiveOrForce is the check Confirm and ConfirmName make,
+// exposed so a command can make it first: before signing in, dialing, or
+// resolving names. A CI job that forgot --force then fails in
+// milliseconds with the usage error (exit 2) rather than after a round of
+// RPCs, or with exit 4 because it was not signed in either.
+func RequireInteractiveOrForce(cmd *cobra.Command, force bool) error {
+	if force || iostreams.FromCommand(cmd).Interactive() {
+		return nil
+	}
 	return cmderr.Usage("--force required when not running interactively")
 }
 
-func readLine(in io.Reader) (string, error) {
-	r := bufio.NewReader(in)
-	line, err := r.ReadString('\n')
+// readLine reads one answer through the Streams' shared reader, without
+// its line ending or surrounding space.
+func readLine(ios *iostreams.Streams) (string, error) {
+	line, err := ios.LineReader().ReadString('\n')
 	if err != nil && err != io.EOF {
 		return "", err
 	}
-	return line, nil
+	return strings.TrimSpace(line), nil
 }

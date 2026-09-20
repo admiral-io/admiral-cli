@@ -211,16 +211,8 @@ func storedIn(st authStatus) string {
 	case "1password":
 		return "1Password (" + st.Ref + ")"
 	default:
-		return tildify(st.Path)
+		return output.Tildify(st.Path)
 	}
-}
-
-// tildify shortens a path under $HOME to ~/... for display.
-func tildify(p string) string {
-	if home, err := os.UserHomeDir(); err == nil && home != "" && strings.HasPrefix(p, home+string(os.PathSeparator)) {
-		return "~" + p[len(home):]
-	}
-	return p
 }
 
 // isAuthError reports whether err means the credential is not usable, as

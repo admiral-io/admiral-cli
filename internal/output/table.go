@@ -2,6 +2,7 @@ package output
 
 import (
 	"fmt"
+	"os"
 	"slices"
 	"sort"
 	"strings"
@@ -111,13 +112,13 @@ func HumanDuration(d time.Duration) string {
 	} else if hours < 24*365*2 {
 		return fmt.Sprintf("%dd", hours/24)
 	} else if hours < 24*365*8 {
-		dy := int(hours/24) % 365
+		dy := hours / 24 % 365
 		if dy == 0 {
 			return fmt.Sprintf("%dy", hours/24/365)
 		}
 		return fmt.Sprintf("%dy%dd", hours/24/365, dy)
 	}
-	return fmt.Sprintf("%dy", int(hours/24/365))
+	return fmt.Sprintf("%dy", hours/24/365)
 }
 
 // FormatLabels returns a comma-separated key=value string from a label map,
@@ -196,4 +197,12 @@ func OrEmpty(s string) string {
 		return None
 	}
 	return s
+}
+
+// Tildify shortens a path under $HOME to ~/... for display.
+func Tildify(p string) string {
+	if home, err := os.UserHomeDir(); err == nil && home != "" && strings.HasPrefix(p, home+string(os.PathSeparator)) {
+		return "~" + p[len(home):]
+	}
+	return p
 }

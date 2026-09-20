@@ -76,8 +76,6 @@ func TestApp_RoundTrip(t *testing.T) {
 
 // A stack that answers but rejects the key: exit 4 with the remedy.
 func TestApp_RejectedKey(t *testing.T) {
-	server, _ := serverStack(t)
-	cli := newCLI(t)
-	cli.env = append(cli.env, "ADMIRAL_SERVER="+server, "ADMIRAL_API_KEY="+wellFormedKey)
+	cli := newServerCLIWithKey(t, wellFormedKey)
 	cli.Run("app", "list").Exits(exitAuth).StderrContains("Run 'admiral auth login'")
 }

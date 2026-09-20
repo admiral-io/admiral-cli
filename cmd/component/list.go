@@ -11,8 +11,7 @@ import (
 
 func newListCmd(opts *client.Options) *cobra.Command {
 	var (
-		pageSize  int32
-		pageToken string
+		paging    flags.PagingOptions
 		labelStrs []string
 	)
 
@@ -40,10 +39,16 @@ func newListCmd(opts *client.Options) *cobra.Command {
 			}
 			defer c.Close() //nolint:errcheck
 
-			resp, err := c.Registry().ListComponents(cmd.Context(), &registryv1.ListComponentsRequest{
-				Filter:    filter,
-				PageSize:  pageSize,
-				PageToken: pageToken,
+			comps, next, err := flags.Pages(paging, func(token string) ([]*registryv1.Component, string, error) {
+				resp, err := c.Registry().ListComponents(cmd.Context(), &registryv1.ListComponentsRequest{
+					Filter:    filter,
+					PageSize:  paging.PageSize,
+					PageToken: token,
+				})
+				if err != nil {
+					return nil, "", err
+				}
+				return resp.Components, resp.NextPageToken, nil
 			})
 			if err != nil {
 				return err
@@ -52,15 +57,14 @@ func newListCmd(opts *client.Options) *cobra.Command {
 			p := output.NewPrinter(cmd, opts.OutputFormat)
 			return p.PrintList(output.List{
 				Kind:          "components",
-				Items:         output.Messages(resp.Components),
-				Name:          func(i int) string { return resp.Components[i].Name },
-				NextPageToken: resp.NextPageToken,
-			}, componentTable.Render(p, resp.Components...))
+				Items:         output.Messages(comps),
+				Name:          func(i int) string { return comps[i].Name },
+				NextPageToken: next,
+			}, componentTable.Render(p, comps...))
 		},
 	}
 
-	cmd.Flags().Int32Var(&pageSize, "page-size", 50, "maximum number of results per page")
-	cmd.Flags().StringVar(&pageToken, "page-token", "", "pagination token from a previous response")
+	flags.Paging(cmd, &paging)
 	flags.Label(cmd, &labelStrs, "filter by label (key=value, repeatable)")
 
 	return cmd

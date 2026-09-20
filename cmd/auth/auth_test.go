@@ -86,12 +86,15 @@ func TestLoginWithAPIKey_RejectsMalformed(t *testing.T) {
 	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
+// An empty pipe is a wiring mistake in the calling script: a usage error
+// naming stdin, not a complaint about the key's format.
 func TestLoginWithAPIKey_EmptyInput(t *testing.T) {
 	os.Unsetenv(credentials.EnvAPIKey)
 	opts := &client.Options{ConfigDir: t.TempDir()}
 
 	_, err := run(t, opts, "", "login", "--with-token")
-	require.Error(t, err)
+	require.EqualError(t, err, "no API key on stdin")
+	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 }
 
 func TestLoginWithAPIKey_ReplacesSession(t *testing.T) {

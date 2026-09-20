@@ -118,3 +118,13 @@ func TestSplitRef(t *testing.T) {
 	require.ErrorContains(t, err, "must be one of published, deprecated")
 	assert.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 }
+
+func TestFormatSize_LargeValues(t *testing.T) {
+	assert.Equal(t, "1 PiB", formatSize(1<<50))
+	assert.Equal(t, "2 EiB", formatSize(1<<61))
+	assert.Equal(t, "8 EiB", formatSize(1<<63-1))
+}
+
+func TestFormatTags_EmptyIsPlaceholder(t *testing.T) {
+	assert.Equal(t, "", formatTags(nil), "the table supplies <none>")
+}

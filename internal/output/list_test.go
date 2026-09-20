@@ -26,7 +26,10 @@ func items(names ...string) []proto.Message {
 }
 
 func nameOf(l List) func(int) string {
-	return func(i int) string { return l.Items[i].(*structpb.Value).GetStringValue() }
+	return func(i int) string {
+		v, _ := l.Items[i].(*structpb.Value)
+		return v.GetStringValue()
+	}
 }
 
 func TestPrintList_Table(t *testing.T) {
@@ -122,7 +125,7 @@ func TestPrintList_NextPageTokenOnStderrInEveryFormat(t *testing.T) {
 		l := List{Kind: "w", Items: items("a"), NextPageToken: "tok123"}
 		l.Name = nameOf(l)
 		require.NoError(t, p.PrintList(l, func(w *tabwriter.Writer) { Writeln(w, "a") }))
-		require.Equal(t, "next page token: tok123\n", errOut.String(), "format %s", f)
+		require.Equal(t, "next page token: tok123 (pass it with --page-token, or use --all)\n", errOut.String(), "format %s", f)
 		require.NotContains(t, out.String(), "tok123", "format %s", f)
 	}
 }
@@ -187,4 +190,14 @@ func TestFormatEnum(t *testing.T) {
 	require.Equal(t, "destroy-plan", FormatEnumKebab(agentv1.JobType_JOB_TYPE_DESTROY_PLAN))
 	require.Equal(t, "ssh-key", FormatEnumKebab(credentialv1.CredentialType_CREDENTIAL_TYPE_SSH_KEY))
 	require.Equal(t, None, FormatEnumKebab(credentialv1.CredentialType_CREDENTIAL_TYPE_UNSPECIFIED))
+}
+
+// A list whose caller forgot Name fails with a message rather than a nil
+// dereference; an empty list still prints nothing.
+func TestPrintList_NameMissing(t *testing.T) {
+	var out, errOut bytes.Buffer
+	p := testPrinterErr(FormatName, &out, &errOut)
+	err := p.PrintList(List{Kind: "w", Items: items("prod")}, nil)
+	require.ErrorContains(t, err, "-o name is not supported")
+	require.Empty(t, out.String())
 }

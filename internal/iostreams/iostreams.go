@@ -6,6 +6,8 @@
 package iostreams
 
 import (
+	"bufio"
+	"context"
 	"io"
 	"os"
 	"strconv"
@@ -43,12 +45,34 @@ type Streams struct {
 
 	noInput      bool
 	colorEnabled bool
+	getenv       func(string) string
+
+	// lines is the one buffered reader every prompt in the process reads
+	// through, so bytes one prompt buffered past its newline are seen by
+	// the next instead of being lost with a throwaway bufio.Reader.
+	lines *bufio.Reader
 }
 
-// FromCommand builds Streams from cmd's reader and writers. cobra returns
-// os.Stdin/Stdout/Stderr unless a test has installed replacements, so the
-// TTY checks are real in a terminal and false under test or in a pipe.
+type ctxKey struct{}
+
+// WithStreams returns a context carrying s, which FromCommand then returns
+// for any command run under it. The root builds one Streams per process
+// and installs it this way, so a flag such as --no-input reaches every
+// prompt without touching the environment.
+func WithStreams(ctx context.Context, s *Streams) context.Context {
+	return context.WithValue(ctx, ctxKey{}, s)
+}
+
+// FromCommand returns the Streams installed on cmd's context, or builds one
+// from cmd's reader and writers. cobra returns os.Stdin/Stdout/Stderr
+// unless a test has installed replacements, so the TTY checks are real in
+// a terminal and false under test or in a pipe.
 func FromCommand(cmd *cobra.Command) *Streams {
+	if ctx := cmd.Context(); ctx != nil {
+		if s, ok := ctx.Value(ctxKey{}).(*Streams); ok {
+			return s
+		}
+	}
 	return New(cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr(), os.Getenv)
 }
 
@@ -67,6 +91,7 @@ func New(in io.Reader, out, err io.Writer, getenv func(string) string) *Streams 
 		inTTY:  isTerminal(in),
 		outTTY: isTerminal(out),
 		errTTY: isTerminal(err),
+		getenv: getenv,
 	}
 
 	// ADMIRAL_FORCE_TTY=<cols> renders as if stdout and stderr were a
@@ -83,7 +108,19 @@ func New(in io.Reader, out, err io.Writer, getenv func(string) string) *Streams 
 		s.errTTY = true
 	}
 
-	s.noInput = nonInteractiveEnv(getenv)
+	// ADMIRAL_FORCE_INTERACTIVE=1 is the same seam for prompts: the session
+	// counts as interactive whatever stdin is (a buffer under test) and
+	// whatever CI or agent markers the environment carries, and a prompt
+	// reads its answer cooked. Kept apart from ADMIRAL_FORCE_TTY so forcing
+	// output never invents a keyboard. Nothing in production sets it;
+	// --no-input (DisableInput) still wins.
+	if isSet(getenv("ADMIRAL_FORCE_INTERACTIVE")) {
+		s.inTTY = true
+		s.errTTY = true
+	} else {
+		s.noInput = nonInteractiveEnv(getenv)
+	}
+
 	s.colorEnabled = colorAllowed(getenv, s.outTTY)
 	return s
 }
@@ -96,6 +133,19 @@ func (s *Streams) IsStdoutTTY() bool { return s.outTTY }
 
 // IsStderrTTY reports whether stderr is an interactive terminal.
 func (s *Streams) IsStderrTTY() bool { return s.errTTY }
+
+// DisableInput marks the session non-interactive, as ADMIRAL_NO_INPUT would;
+// it is the --no-input flag's effect.
+func (s *Streams) DisableInput() { s.noInput = true }
+
+// LineReader returns the buffered reader prompts read their answers from.
+// It wraps In once and is shared by every prompt on these Streams.
+func (s *Streams) LineReader() *bufio.Reader {
+	if s.lines == nil {
+		s.lines = bufio.NewReader(s.In)
+	}
+	return s.lines
+}
 
 // Interactive reports whether a prompt may be shown: a person must be able
 // to read it (stderr is a TTY), type the answer (stdin is a TTY), and not
@@ -124,7 +174,7 @@ func (s *Streams) TerminalWidth() int {
 			return w
 		}
 	}
-	if v := os.Getenv("COLUMNS"); v != "" {
+	if v := s.getenv("COLUMNS"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			return n
 		}

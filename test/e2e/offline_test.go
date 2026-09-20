@@ -98,6 +98,14 @@ func TestAuthWithTokenLifecycle(t *testing.T) {
 		newCLI(t).WithStdin("not-a-key\n").Run("auth", "login", "--with-token").Exits(1).
 			StderrContains("invalid API key")
 	})
+	t.Run("empty pipe", func(t *testing.T) {
+		newCLI(t).WithStdin("").Run("auth", "login", "--with-token").Exits(exitUsage).
+			StderrContains("Error: no API key on stdin")
+	})
+	t.Run("delete without --force fails before sign-in", func(t *testing.T) {
+		newCLI(t).Run("app", "delete", "shop").Exits(exitUsage).
+			StderrContains("--force required when not running interactively")
+	})
 	t.Run("env key wins and refuses login", func(t *testing.T) {
 		c := newCLI(t)
 		c.env = append(c.env, "ADMIRAL_API_KEY="+wellFormedKey)

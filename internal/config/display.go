@@ -1,16 +1,9 @@
 package config
 
-import "strings"
-
 // DisplayValue returns the display string for a config key's raw value,
-// handling masking of sensitive keys and falling back to defaults.
+// falling back to the key's default. Nothing in config.json is secret
+// (credentials live in credentials.json), so values are shown as stored.
 func DisplayValue(key, raw string) string {
-	if IsSensitive(key) {
-		if raw != "" {
-			return maskSecret(raw)
-		}
-		return "(not set)"
-	}
 	if raw != "" {
 		return raw
 	}
@@ -18,14 +11,4 @@ func DisplayValue(key, raw string) string {
 		return d
 	}
 	return "(not set)"
-}
-
-// maskSecret preserves a recognized prefix (e.g. "admp_") and masks the
-// remainder with asterisks of matching length so the redacted form hints at
-// the original length without leaking the secret.
-func maskSecret(raw string) string {
-	if idx := strings.Index(raw, "_"); idx >= 0 && idx < len(raw)-1 {
-		return raw[:idx+1] + strings.Repeat("*", len(raw)-idx-1)
-	}
-	return strings.Repeat("*", len(raw))
 }
