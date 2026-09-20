@@ -50,8 +50,11 @@ func TestPositionalUsageErrors(t *testing.T) {
 func TestUUIDPositionalIsAccepted(t *testing.T) {
 	for _, verb := range []string{"get", "delete", "update"} {
 		args := []string{verb, "550e8400-e29b-41d4-a716-446655440000"}
-		if verb == "update" {
+		switch verb {
+		case "update":
 			args = append(args, "--description", "x")
+		case "delete":
+			args = append(args, "--force") // a piped run cannot confirm
 		}
 		_, err := run(t, args...)
 		require.Error(t, err)
@@ -67,5 +70,14 @@ func TestIDFlagIsGone(t *testing.T) {
 func TestUpdateCmd_RequiresAtLeastOneField(t *testing.T) {
 	_, err := run(t, "update", "billing-api")
 	require.ErrorContains(t, err, "at least one of --name, --label, or --description")
+	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
+}
+
+// A piped run without --force is refused as a usage error before any
+// sign-in or RPC, so a CI job that forgot the flag fails fast with exit 2
+// rather than exit 4 for not being signed in.
+func TestDeleteWithoutForceFailsBeforeNetwork(t *testing.T) {
+	_, err := run(t, "delete", "shop")
+	require.EqualError(t, err, "--force required when not running interactively")
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 }

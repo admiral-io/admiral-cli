@@ -2,9 +2,11 @@ package iostreams
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )
 
@@ -63,4 +65,38 @@ func TestColorPrecedence(t *testing.T) {
 	require.False(t, colorAllowed(env("TERM", "dumb"), true))
 	require.True(t, colorAllowed(env(), true))
 	require.False(t, colorAllowed(env(), false))
+}
+
+func TestForceInteractive(t *testing.T) {
+	s := New(strings.NewReader("y\n"), &bytes.Buffer{}, &bytes.Buffer{}, env("ADMIRAL_FORCE_INTERACTIVE", "1"))
+	require.True(t, s.IsStdinTTY())
+	require.True(t, s.Interactive())
+	require.False(t, s.IsStdoutTTY(), "forcing input does not force output")
+
+	s.DisableInput()
+	require.False(t, s.Interactive(), "--no-input wins over the forced keyboard")
+}
+
+func TestLineReaderIsShared(t *testing.T) {
+	s := New(strings.NewReader("first\nsecond\n"), &bytes.Buffer{}, &bytes.Buffer{}, env())
+	a, err := s.LineReader().ReadString('\n')
+	require.NoError(t, err)
+	b, err := s.LineReader().ReadString('\n')
+	require.NoError(t, err)
+	require.Equal(t, "first\n", a)
+	require.Equal(t, "second\n", b, "the second prompt sees what the first left buffered")
+}
+
+func TestFromCommand_UsesInstalledStreams(t *testing.T) {
+	installed := New(strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{}, env())
+	cmd := &cobra.Command{}
+	cmd.SetContext(WithStreams(context.Background(), installed))
+	require.Same(t, installed, FromCommand(cmd))
+
+	require.NotSame(t, installed, FromCommand(&cobra.Command{}), "no context: built fresh")
+}
+
+func TestTerminalWidth_ColumnsViaGetenv(t *testing.T) {
+	s := New(strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{}, env("COLUMNS", "132"))
+	require.Equal(t, 132, s.TerminalWidth())
 }

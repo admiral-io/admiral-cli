@@ -42,7 +42,7 @@ See 'admiral config --help' for what each key does.`,
 			if len(args) == 2 {
 				value = args[1]
 			} else {
-				v, err := input.PromptLine(cmd, key, config.IsSensitive(key))
+				v, err := input.PromptLine(cmd, key, false)
 				if err != nil {
 					return err
 				}

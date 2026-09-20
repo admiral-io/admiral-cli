@@ -11,7 +11,6 @@ package complete
 import (
 	"context"
 	"log/slog"
-	"os"
 	"strings"
 	"time"
 
@@ -290,9 +289,8 @@ func withClient(cmd *cobra.Command, opts *client.Options, toComplete string,
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	// The shell owns the terminal right now; nothing below may prompt.
-	_ = os.Setenv("ADMIRAL_NO_INPUT", "1")
-
+	// The shell owns the terminal right now. Nothing below prompts on its
+	// own, and the deadline above bounds a credential store that might.
 	c, err := newClient(ctx, opts)
 	if err != nil {
 		slog.Debug("completion: no client", "error", err)

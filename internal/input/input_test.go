@@ -72,7 +72,14 @@ func TestReadRawLine(t *testing.T) {
 		{"newline", "s3cret\n", "s3cret"},
 		{"backspace edits", "pa\x7fss\r", "pss"},
 		{"ctrl-u clears", "wrong\x15right\r", "right"},
-		{"other control bytes ignored", "a\x1bb\r", "ab"},
+		{"other control bytes ignored", "a\x01b\r", "ab"},
+		{"backspace removes a whole rune", "caf\xc3\xa9\x7f\r", "caf"},
+		{"backspace then more runes", "\xc3\x9f\x7fx\r", "x"},
+		{"arrow key is swallowed", "a\x1b[Ab\r", "ab"},
+		{"home key with parameter is swallowed", "a\x1b[1~b\r", "ab"},
+		{"ss3 sequence is swallowed", "a\x1bOPb\r", "ab"},
+		{"meta key is swallowed", "a\x1bbc\r", "ac"},
+		{"escape at end of input", "pasted\x1b", "pasted"},
 		{"eof ends a non-empty line", "pasted", "pasted"},
 	}
 	for _, tc := range cases {
@@ -98,4 +105,26 @@ func TestReadRawLine_CtrlDOnEmptyIsEOF(t *testing.T) {
 	got, err := readRawLine(strings.NewReader("ab\x04\r"))
 	require.NoError(t, err)
 	require.Equal(t, "ab", got, "Ctrl-D mid-line is ignored")
+}
+
+// Without a real terminal there is no echo to turn off, so a forced
+// interactive session reads the secret cooked; the prompt shape is the same.
+func TestPromptLine_InteractiveCooked(t *testing.T) {
+	t.Setenv("ADMIRAL_FORCE_INTERACTIVE", "1")
+	var errOut bytes.Buffer
+	cmd := newCmd(strings.NewReader("  hunter2  \n"))
+	cmd.SetErr(&errOut)
+
+	got, err := PromptLine(cmd, "password", true)
+	require.NoError(t, err)
+	require.Equal(t, "hunter2", got)
+	require.Equal(t, "Enter password: ", errOut.String())
+
+	cmd = newCmd(strings.NewReader("\n"))
+	_, err = PromptLine(cmd, "password", false)
+	require.EqualError(t, err, "value cannot be empty")
+
+	got, err = Secret(newCmd(strings.NewReader("s3cret\n")), "API key", true)
+	require.NoError(t, err)
+	require.Equal(t, "s3cret", got, "Secret prompts when the session is interactive")
 }

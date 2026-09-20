@@ -3,7 +3,9 @@ package cmd
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -21,6 +23,7 @@ import (
 	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/config"
 	"go.admiral.io/cli/internal/flags"
+	"go.admiral.io/cli/internal/iostreams"
 	"go.admiral.io/cli/internal/output"
 	"go.admiral.io/cli/internal/version"
 )
@@ -48,7 +51,13 @@ type rootCmd struct {
 }
 
 func Execute(version version.Version, exit func(int), args []string) {
-	newRootCmd(version, exit).Execute(args)
+	root, err := newRootCmd(version, exit)
+	if err != nil {
+		output.Writef(os.Stderr, "Error: %s\n", err)
+		exit(cmderr.ExitError)
+		return
+	}
+	root.Execute(args)
 }
 
 func (cmd *rootCmd) Execute(args []string) {
@@ -84,7 +93,7 @@ func (cmd *rootCmd) Execute(args []string) {
 	}
 }
 
-func newRootCmd(ver version.Version, exit func(int)) *rootCmd {
+func newRootCmd(ver version.Version, exit func(int)) (*rootCmd, error) {
 	var clientOpts client.Options
 
 	root := &rootCmd{
@@ -104,11 +113,16 @@ Documentation: https://admiral.io/docs`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			// --no-input is the flag form of ADMIRAL_NO_INPUT; iostreams reads
-			// the variable, so the flag just sets it for this process.
+			// One Streams for the process, carried on the context so every
+			// prompt and printer below shares it: --no-input reaches them
+			// without touching the environment, and two prompts read
+			// through one buffered reader.
+			streams := iostreams.FromCommand(cmd)
 			if root.noInput {
-				_ = os.Setenv("ADMIRAL_NO_INPUT", "1")
+				streams.DisableInput()
 			}
+			cmd.SetContext(iostreams.WithStreams(cmd.Context(), streams))
+
 			if root.verbose {
 				slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})))
 				slog.Debug("debug logs enabled")
@@ -124,7 +138,9 @@ Documentation: https://admiral.io/docs`,
 			// default.
 			settings, err := config.LoadSettings(root.configPath)
 			if err != nil {
-				slog.Debug("failed to load config", "error", err)
+				// Loud, not debug: a corrupt config.json would otherwise
+				// silently drop a `config set server …` the user relies on.
+				output.Writef(cmd.ErrOrStderr(), "Warning: %v; using defaults for the settings it holds.\n", err)
 			}
 			if settings.Get("token") != "" {
 				output.Writef(cmd.ErrOrStderr(), "Warning: config.json contains a 'token' entry that is no longer read. Remove it; credentials belong in credentials.json via 'admiral auth login'.\n")
@@ -156,14 +172,19 @@ Documentation: https://admiral.io/docs`,
 					clientOpts.Timeout = d
 				}
 			}
+			// TLS can be weakened from the file as well as by flag. A flag
+			// is typed each time; a file entry is easy to forget, so say
+			// so unless the target is the local machine anyway.
 			if !cmd.Flags().Changed("insecure") {
 				if v := settings.Get("insecure"); v == "true" {
 					clientOpts.Insecure = true
+					warnWeakTLS(cmd, "insecure", clientOpts.ServerAddr)
 				}
 			}
 			if !cmd.Flags().Changed("plaintext") {
 				if v := settings.Get("plaintext"); v == "true" {
 					clientOpts.PlainText = true
+					warnWeakTLS(cmd, "plaintext", clientOpts.ServerAddr)
 				}
 			}
 			if !cmd.Flags().Changed("output") {
@@ -192,8 +213,7 @@ Documentation: https://admiral.io/docs`,
 
 	defaultConfigPath, err := config.ConfigDir()
 	if err != nil {
-		slog.Error("failed to get default config path", "error", err)
-		os.Exit(1)
+		return nil, fmt.Errorf("locating the config directory: %w", err)
 	}
 
 	// Config flags
@@ -243,5 +263,26 @@ Documentation: https://admiral.io/docs`,
 	root.cmd = cmd
 	root.clientOpts = &clientOpts
 
-	return root
+	return root, nil
+}
+
+// warnWeakTLS tells the user that config.json, not a flag, turned off TLS
+// verification (insecure) or TLS itself (plaintext) for a server that is
+// not on this machine.
+func warnWeakTLS(cmd *cobra.Command, key, server string) {
+	host, _, err := net.SplitHostPort(server)
+	if err != nil {
+		host = server
+	}
+	if host == "localhost" || host == "" {
+		return
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return
+	}
+	effect := "the certificate of " + server + " is not verified"
+	if key == "plaintext" {
+		effect = "the connection to " + server + " is not encrypted"
+	}
+	output.Writef(cmd.ErrOrStderr(), "Warning: config.json sets %s=true, so %s; run 'admiral config unset %s' if that is not intended.\n", key, effect, key)
 }

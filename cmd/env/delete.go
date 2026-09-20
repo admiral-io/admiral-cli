@@ -39,6 +39,11 @@ func newDeleteCmd(opts *client.Options) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// Before any network use: a run that cannot confirm and did not
+			// pass --force fails here, in milliseconds, with the usage error.
+			if err := input.RequireInteractiveOrForce(cmd, force); err != nil {
+				return err
+			}
 
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
