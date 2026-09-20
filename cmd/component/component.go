@@ -31,8 +31,8 @@ References: NAME:TAG (cloud-sql:v1.2.0) or NAME@DIGEST (cloud-sql@sha256:...).`,
 		Aliases:       []string{"components"},
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		Args:          flags.NoArgs,
 	}
+	flags.Group(cmd)
 
 	cmd.AddCommand(
 		newPublishCmd(opts),

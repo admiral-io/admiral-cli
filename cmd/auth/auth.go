@@ -30,8 +30,8 @@ The stored credential lives in credentials.json inside the config directory.
 If ADMIRAL_API_KEY is set, it takes precedence over the stored credential.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		Args:          flags.NoArgs,
 	}
+	flags.Group(cmd)
 
 	cmd.AddCommand(
 		newLoginCmd(opts),

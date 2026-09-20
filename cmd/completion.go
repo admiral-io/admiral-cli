@@ -1,10 +1,16 @@
 package cmd
 
 import (
-	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
+
+	"go.admiral.io/cli/internal/cmderr"
+	"go.admiral.io/cli/internal/flags"
 )
+
+// shells completion can generate a script for.
+var shells = []string{"bash", "zsh", "fish", "powershell"}
 
 func newCompletionCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -38,23 +44,24 @@ PowerShell:
   PS> admiral completion powershell > admiral.ps1
 `,
 		DisableFlagsInUseLine: true,
-		ValidArgs:             []string{"bash", "zsh", "fish", "powershell"},
-		Args:                  cobra.MatchAll(cobra.RangeArgs(0, 1), cobra.OnlyValidArgs),
+		ValidArgs:             shells,
+		Args:                  flags.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return cmd.Help()
 			}
+			out := cmd.OutOrStdout()
 			switch args[0] {
 			case "bash":
-				return cmd.Root().GenBashCompletion(os.Stdout)
+				return cmd.Root().GenBashCompletion(out)
 			case "zsh":
-				return cmd.Root().GenZshCompletion(os.Stdout)
+				return cmd.Root().GenZshCompletion(out)
 			case "fish":
-				return cmd.Root().GenFishCompletion(os.Stdout, true)
+				return cmd.Root().GenFishCompletion(out, true)
 			case "powershell":
-				return cmd.Root().GenPowerShellCompletionWithDesc(os.Stdout)
+				return cmd.Root().GenPowerShellCompletionWithDesc(out)
 			}
-			return nil
+			return cmderr.Usage("unknown shell %q; must be one of %s", args[0], strings.Join(shells, ", "))
 		},
 	}
 	return cmd

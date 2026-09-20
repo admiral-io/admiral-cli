@@ -29,8 +29,8 @@ A stored value applies whenever the matching flag or ADMIRAL_* environment
 variable is not given. Credentials are not configuration; see 'admiral auth'.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		Args:          flags.NoArgs,
 	}
+	flags.Group(cmd)
 
 	cmd.AddCommand(
 		newSetCmd(opts),

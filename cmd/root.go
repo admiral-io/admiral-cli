@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -73,14 +72,15 @@ func (cmd *rootCmd) Execute(args []string) {
 	}()
 
 	if err := cmd.cmd.ExecuteContext(ctx); err != nil {
+		stderr := cmd.cmd.ErrOrStderr()
 		if errors.Is(err, context.Canceled) || ctx.Err() != nil {
-			output.Writef(os.Stderr, "\nInterrupted.\n")
+			output.Writef(stderr, "\nInterrupted.\n")
 			cmd.exit(cmderr.ExitInterrupted)
 			return
 		}
-		output.Writef(os.Stderr, "Error: %s\n", formatError(err))
+		output.Writef(stderr, "Error: %s\n", formatError(err))
 		if hint := errorHint(err); hint != "" {
-			output.Writef(os.Stderr, "%s\n", hint)
+			output.Writef(stderr, "%s\n", hint)
 		}
 		cmd.exit(exitCode(err))
 	}
@@ -105,7 +105,6 @@ Documentation: https://admiral.io/docs`,
 		Version:       ver.String(),
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		Args:          flags.NoArgs,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			// --no-input is the flag form of ADMIRAL_NO_INPUT; iostreams reads
 			// the variable, so the flag just sets it for this process.
@@ -154,7 +153,7 @@ Documentation: https://admiral.io/docs`,
 				if v := os.Getenv(envTimeout); v != "" {
 					d, err := time.ParseDuration(v)
 					if err != nil {
-						return fmt.Errorf("invalid %s %q: %w", envTimeout, v, err)
+						return cmderr.Usage("invalid %s %q: %v", envTimeout, v, err)
 					}
 					clientOpts.Timeout = d
 				}
@@ -184,6 +183,7 @@ Documentation: https://admiral.io/docs`,
 			return nil
 		},
 	}
+	flags.Group(cmd)
 	cmd.SetVersionTemplate("{{.Version}}")
 
 	// A bad or unknown flag is a usage error: exit 2, one line, and a hint
