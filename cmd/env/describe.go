@@ -6,8 +6,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -377,20 +379,36 @@ func pendingVariableSides(v *changesetv1.VariableDiff) (string, string) {
 	return output.Truncate(oldStr, 40), output.Truncate(newStr, 40)
 }
 
+// diffConcurrency bounds how many DiffChangeSet calls run at once: enough
+// that an environment with many open change sets does not wait for them
+// one after another, few enough not to hammer the server.
+const diffConcurrency = 4
+
 // loadPendingDiffs fetches DiffChangeSet for each open changeset so describe
 // can render staged entries and variables under each cs header. Failures are
 // silent: a missing entry in the returned map is rendered as "no pending
 // changes" rather than a hard error, since describe is read-only and partial
 // info is more useful than no info.
 func loadPendingDiffs(ctx context.Context, c sdkclient.AdmiralClient, css []*changesetv1.ChangeSet) map[string]*changesetv1.ChangeSetDiff {
-	out := make(map[string]*changesetv1.ChangeSetDiff, len(css))
+	var (
+		mu  sync.Mutex
+		out = make(map[string]*changesetv1.ChangeSetDiff, len(css))
+	)
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(diffConcurrency)
 	for _, cs := range css {
-		resp, err := c.ChangeSet().DiffChangeSet(ctx, &changesetv1.DiffChangeSetRequest{ChangeSetId: cs.Id})
-		if err != nil {
-			continue
-		}
-		out[cs.Id] = resp.GetDiff()
+		g.Go(func() error {
+			resp, err := c.ChangeSet().DiffChangeSet(ctx, &changesetv1.DiffChangeSetRequest{ChangeSetId: cs.Id})
+			if err != nil {
+				return nil //nolint:nilerr // one missing diff must not hide the others
+			}
+			mu.Lock()
+			out[cs.Id] = resp.GetDiff()
+			mu.Unlock()
+			return nil
+		})
 	}
+	_ = g.Wait() // nothing returns an error
 	return out
 }
 

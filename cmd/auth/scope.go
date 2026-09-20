@@ -1,11 +1,11 @@
 package auth
 
 import (
-	"fmt"
 	"slices"
 	"sort"
 	"strings"
 
+	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/sdk/proto/admiral/scopes"
 )
 
@@ -37,7 +37,7 @@ func validateScopes(raw []string) ([]string, error) {
 				continue
 			}
 			if !slices.Contains(allowed, s) {
-				return nil, fmt.Errorf("unknown scope %q; valid scopes: %s", s, strings.Join(allowed, ", "))
+				return nil, cmderr.Usage("unknown scope %q; valid scopes: %s", s, strings.Join(allowed, ", "))
 			}
 			if !slices.Contains(out, s) {
 				out = append(out, s)

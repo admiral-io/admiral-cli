@@ -7,6 +7,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+
+	"go.admiral.io/cli/internal/cmderr"
 )
 
 const settingsFile = "config.json"
@@ -40,13 +42,14 @@ func LoadSettings(configDir string) (Settings, error) {
 	return s, nil
 }
 
-// Set persists a key-value pair.
+// Set persists a key-value pair. An unknown key or a value the key does
+// not accept is a usage error (exit 2).
 func Set(configDir, key, value string) error {
-	if !IsValidKey(key) {
-		return fmt.Errorf("unknown config key %q (valid keys: %v)", key, ValidKeys)
+	if err := CheckKey(key); err != nil {
+		return err
 	}
 	if IsBool(key) && value != "true" && value != "false" {
-		return fmt.Errorf("invalid value %q for %s: must be true or false", value, key)
+		return cmderr.Usage("invalid value %q for %s: must be true or false", value, key)
 	}
 
 	s, err := LoadSettings(configDir)
@@ -60,8 +63,8 @@ func Set(configDir, key, value string) error {
 
 // Unset removes a key from the config file.
 func Unset(configDir, key string) error {
-	if !IsValidKey(key) {
-		return fmt.Errorf("unknown config key %q (valid keys: %v)", key, ValidKeys)
+	if err := CheckKey(key); err != nil {
+		return err
 	}
 
 	s, err := LoadSettings(configDir)

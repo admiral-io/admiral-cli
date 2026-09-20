@@ -28,6 +28,20 @@ func MaximumNArgs(n int) cobra.PositionalArgs {
 	}
 }
 
+// RangeArgs validates that between least and most positional arguments
+// were given.
+func RangeArgs(least, most int) cobra.PositionalArgs {
+	return func(cmd *cobra.Command, args []string) error {
+		if len(args) < least {
+			return cmderr.UsageHint(helpHint(cmd), "missing argument: %s", cmd.Use)
+		}
+		if len(args) > most {
+			return cmderr.UsageHint(helpHint(cmd), "accepts at most %d arg(s), received %d", most, len(args))
+		}
+		return nil
+	}
+}
+
 // NoArgs validates that no positional arguments were given.
 func NoArgs(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
