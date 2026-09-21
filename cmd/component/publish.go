@@ -219,16 +219,21 @@ func publishOne(cmd *cobra.Command, p *output.Printer, c sdkclient.AdmiralClient
 	if err != nil {
 		return nil, err
 	}
-	rev := resp.Revision
-	if resp.Unchanged {
-		output.Writef(p.Err(), "%s already published as %s; nothing written\n", resp.Component.Name, shortDigest(rev.Digest))
+	reportPublished(p, resp.Component, resp.Revision, resp.Unchanged)
+	return resp, nil
+}
+
+// reportPublished says on stderr what the registry did with a revision,
+// and lists its findings.
+func reportPublished(p *output.Printer, comp *registryv1.Component, rev *registryv1.Revision, unchanged bool) {
+	if unchanged {
+		output.Writef(p.Err(), "%s already published as %s; nothing written\n", comp.Name, shortDigest(rev.Digest))
 	} else {
-		output.Writef(p.Err(), "Published %s@%s\n", resp.Component.Name, rev.Digest)
+		output.Writef(p.Err(), "Published %s@%s\n", comp.Name, rev.Digest)
 	}
 	for _, f := range rev.Findings {
 		output.Writef(p.Err(), "  %s %s: %s\n", strings.ToLower(f.Severity.String()), f.Source, f.Message)
 	}
-	return resp, nil
 }
 
 func kindEnum(kind string) registryv1.ComponentKind {

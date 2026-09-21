@@ -21,6 +21,7 @@ import (
 	"go.admiral.io/cli/internal/resolve"
 	sdkclient "go.admiral.io/sdk/client"
 	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
+	credentialv1 "go.admiral.io/sdk/proto/admiral/api/credential/v1"
 	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
 	registryv1 "go.admiral.io/sdk/proto/admiral/api/registry/v1"
 )
@@ -185,6 +186,30 @@ func Refs(opts *client.Options) Func {
 				out = append(out, Candidate{Name: name + ":" + t.Name})
 			}
 			return out, nil
+		})
+	}
+}
+
+// Credentials offers credential names, for a positional and for
+// --credential on a pull.
+func Credentials(opts *client.Options) Func {
+	return func(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return withClient(cmd, opts, toComplete, func(ctx context.Context, c sdkclient.AdmiralClient) ([]Candidate, error) {
+			var out []Candidate
+			err := paged(func(token string) (string, error) {
+				resp, err := c.Credential().ListCredentials(ctx, &credentialv1.ListCredentialsRequest{
+					PageSize:  pageSize,
+					PageToken: token,
+				})
+				if err != nil {
+					return "", err
+				}
+				for _, cr := range resp.Credentials {
+					out = append(out, Candidate{Name: cr.Name, Description: cr.Description})
+				}
+				return resp.NextPageToken, nil
+			}, &out)
+			return out, err
 		})
 	}
 }

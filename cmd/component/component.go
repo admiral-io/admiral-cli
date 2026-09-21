@@ -36,6 +36,7 @@ References: NAME:TAG (cloud-sql:v1.2.0) or NAME@DIGEST (cloud-sql@sha256:...).`,
 
 	cmd.AddCommand(
 		newPublishCmd(opts),
+		newPullCmd(opts),
 		newListCmd(opts),
 		newGetCmd(opts),
 		newTagCmd(opts),
