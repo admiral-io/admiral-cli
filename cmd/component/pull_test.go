@@ -48,9 +48,17 @@ func TestParseSourceReadsTheKindOffTheForm(t *testing.T) {
 		git := src.GetGitTree()
 		require.NotNil(t, git, u)
 		assert.NotContains(t, git.Url, "git::")
+		assert.Contains(t, git.Url, "://", "the API takes a URI")
 		assert.Equal(t, "v2", git.Ref)
 		assert.Equal(t, "modules/vpc", git.Path)
 	}
+
+	src, err = parseSource("git@github.com:admiral-io/admiral-infra.git", sourceFlags{})
+	require.NoError(t, err)
+	assert.Equal(t, "ssh://git@github.com/admiral-io/admiral-infra.git", src.GetGitTree().Url)
+	src, err = parseSource("deploy@git.acme.example:/srv/infra.git", sourceFlags{})
+	require.NoError(t, err)
+	assert.Equal(t, "ssh://deploy@git.acme.example/srv/infra.git", src.GetGitTree().Url)
 
 	src, err = parseSource("https://github.com/acme/infra/archive/refs/tags/v1.tar.gz", sourceFlags{})
 	require.NoError(t, err)

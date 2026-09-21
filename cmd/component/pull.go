@@ -2,6 +2,7 @@ package component
 
 import (
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -209,7 +210,7 @@ func parseSource(arg string, f sourceFlags) (*registryv1.PullSource, error) {
 			return nil, cmderr.Usage("a git repository is pinned with --ref, not --version")
 		}
 		return &registryv1.PullSource{Source: &registryv1.PullSource_GitTree_{GitTree: &registryv1.PullSource_GitTree{
-			Url: strings.TrimPrefix(arg, "git::"), Ref: f.ref, Path: f.path,
+			Url: gitURL(arg), Ref: f.ref, Path: f.path,
 		}}}, nil
 
 	case isArchive(arg):
@@ -240,8 +241,21 @@ func parseSource(arg string, f sourceFlags) (*registryv1.PullSource, error) {
 		"cannot tell what %q is", arg)
 }
 
+// scpLike is the shorthand GitHub hands out, git@github.com:acme/infra.git.
+var scpLike = regexp.MustCompile(`^([^@/:]+@[^:/]+):(.+)$`)
+
+// gitURL is the source as the URI the API takes: the go-getter prefix
+// dropped, the scp shorthand as ssh://.
+func gitURL(s string) string {
+	s = strings.TrimPrefix(s, "git::")
+	if m := scpLike.FindStringSubmatch(s); m != nil {
+		return "ssh://" + m[1] + "/" + strings.TrimLeft(m[2], "/")
+	}
+	return s
+}
+
 func isGit(s string) bool {
-	if strings.HasPrefix(s, "git::") || strings.HasPrefix(s, "ssh://") || strings.HasPrefix(s, "git@") {
+	if strings.HasPrefix(s, "git::") || strings.HasPrefix(s, "ssh://") || scpLike.MatchString(s) {
 		return true
 	}
 	u, err := url.Parse(s)
