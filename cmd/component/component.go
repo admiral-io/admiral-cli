@@ -12,7 +12,7 @@ type ComponentCmd struct {
 }
 
 // NewComponentCmd is the registry: what has been published, addressed by
-// name and tag. Publish, tag and deprecate act here; add, update and copy
+// name and tag. Publish, tag, deprecate and revoke act here; add, update and copy
 // act inside a change set, on the other thing called a component.
 func NewComponentCmd(opts *client.Options) *ComponentCmd {
 	root := &ComponentCmd{}
@@ -41,7 +41,9 @@ References: NAME:TAG (cloud-sql:v1.2.0) or NAME@DIGEST (cloud-sql@sha256:...).`,
 		newGetCmd(opts),
 		newTagCmd(opts),
 		newUntagCmd(opts),
-		newDeprecateCmd(opts),
+		newStatusCmd(opts, deprecateVerb),
+		newStatusCmd(opts, revokeVerb),
+		newStatusCmd(opts, restoreVerb),
 		newRevisionCmd(opts),
 	)
 
