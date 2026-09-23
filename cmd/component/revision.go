@@ -24,9 +24,9 @@ func newRevisionCmd(opts *client.Options) *cobra.Command {
 		Long: `Inspect a component's revisions.
 
 A revision is one published set of bytes, identified by digest. Tags point
-at revisions; a revision may carry several tags or none. Deprecated
-revisions stay listed, marked as such, because environments may still run
-them.`,
+at revisions; a revision may carry several tags or none. Deprecated and
+revoked revisions stay listed, marked as such, because environments may
+still run them.`,
 		Aliases:       []string{"revisions", "rev"},
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -103,7 +103,7 @@ func newRevisionListCmd(opts *client.Options) *cobra.Command {
 		},
 	}
 
-	flags.Enum(cmd, &status, "status", "", "only revisions in this status", "published", "deprecated")
+	flags.Enum(cmd, &status, "status", "", "only revisions in this status", "published", "deprecated", "revoked")
 	flags.Paging(cmd, &paging)
 
 	return cmd
