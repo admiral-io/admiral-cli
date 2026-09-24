@@ -54,10 +54,14 @@ func ifRevision(cmd *cobra.Command, n int32) *int32 {
 }
 
 // edits sends one EditChangeSet, so each command is one revision, and
-// prints what it cut.
-func edits(cmd *cobra.Command, opts *client.Options, csID string, ifRev *int32, es ...*changesetv1.Edit) error {
+// prints what it cut. With --plan the answer is the revision's prepare
+// instead, and the revision is only confirmed on stderr.
+func edits(cmd *cobra.Command, opts *client.Options, csID string, ifRev *int32, po planOptions, es ...*changesetv1.Edit) error {
 	if len(es) > maxEdits {
 		return cmderr.Usage("%d edits in one command; the limit is %d", len(es), maxEdits)
+	}
+	if err := po.check(cmd); err != nil {
+		return err
 	}
 	c, err := client.CreateClient(cmd.Context(), opts)
 	if err != nil {
@@ -69,6 +73,7 @@ func edits(cmd *cobra.Command, opts *client.Options, csID string, ifRev *int32, 
 		ChangeSetId: csID,
 		IfRevision:  ifRev,
 		Edits:       es,
+		Plan:        po.plan,
 	})
 	if err != nil {
 		return err
@@ -77,6 +82,9 @@ func edits(cmd *cobra.Command, opts *client.Options, csID string, ifRev *int32, 
 	p := output.NewPrinter(cmd, opts.OutputFormat)
 	printWarnings(p.Err(), resp.Warnings, resp.Revision.GetViolations())
 	output.Confirmed(p.Err(), "change set", csID, "revision "+strconv.Itoa(int(resp.Revision.GetNumber())))
+	if po.plan {
+		return finishPrepare(cmd, opts, c.ChangeSet(), csID, resp.Prepare, po)
+	}
 	return p.PrintOne(resp.Revision, revisionName(csID, resp.Revision), revisionTable.Render(p, resp.Revision))
 }
 

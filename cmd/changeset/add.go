@@ -22,6 +22,7 @@ func newAddCmd(opts *client.Options) *cobra.Command {
 		from       string
 		valuesPath string
 		ifRev      int32
+		po         planOptions
 	)
 
 	cmd := &cobra.Command{
@@ -59,7 +60,7 @@ stored.`,
 					return err
 				}
 			}
-			return edits(cmd, opts, csID, ifRevision(cmd, ifRev),
+			return edits(cmd, opts, csID, ifRevision(cmd, ifRev), po,
 				&changesetv1.Edit{Edit: &changesetv1.Edit_AddComponent{AddComponent: add}})
 		},
 	}
@@ -67,6 +68,7 @@ stored.`,
 	cmd.Flags().StringVar(&from, "from", "", "the registry component, as <component>:<tag> or <component>@<digest>")
 	cmd.Flags().StringVar(&valuesPath, "values", "", "a YAML values file; !ref <component>.<output> references another component")
 	revisionFlag(cmd, &ifRev)
+	planFlags(cmd, &po)
 	_ = cmd.MarkFlagRequired("from")
 	complete.Flag(cmd, "from", complete.Refs(opts))
 

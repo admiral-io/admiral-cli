@@ -15,7 +15,10 @@ import (
 )
 
 func newValuesCmd(opts *client.Options) *cobra.Command {
-	var valuesPath string
+	var (
+		valuesPath string
+		po         planOptions
+	)
 
 	cmd := &cobra.Command{
 		Use:   "values <change-set> <component>",
@@ -51,7 +54,12 @@ A key missing from the file is removed, so its default applies.`,
 					return err
 				}
 				// from_revision is the guard; if_revision would say the same.
-				return edits(cmd, opts, csID, nil, upload)
+				return edits(cmd, opts, csID, nil, po, upload)
+			}
+
+			if po.plan || cmd.Flags().Changed("no-wait") || cmd.Flags().Changed("wait-timeout") {
+				return cmderr.UsageHint("Plan an upload: 'admiral changeset values "+csID+" "+comp+" --values "+comp+".yaml --plan'.",
+					"--plan applies to an upload with --values")
 			}
 
 			c, err := client.CreateClient(cmd.Context(), opts)
@@ -90,6 +98,7 @@ A key missing from the file is removed, so its default applies.`,
 	}
 
 	cmd.Flags().StringVar(&valuesPath, "values", "", "upload this file, downloaded earlier, as the component's values")
+	planFlags(cmd, &po)
 
 	return cmd
 }

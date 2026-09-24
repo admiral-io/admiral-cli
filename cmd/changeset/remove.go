@@ -9,7 +9,10 @@ import (
 )
 
 func newRemoveCmd(opts *client.Options) *cobra.Command {
-	var ifRev int32
+	var (
+		ifRev int32
+		po    planOptions
+	)
 
 	cmd := &cobra.Command{
 		Use:   "remove <change-set> <component>",
@@ -28,13 +31,14 @@ by this command.`,
 			if err := componentName(args[1]); err != nil {
 				return err
 			}
-			return edits(cmd, opts, csID, ifRevision(cmd, ifRev), &changesetv1.Edit{
+			return edits(cmd, opts, csID, ifRevision(cmd, ifRev), po, &changesetv1.Edit{
 				Edit: &changesetv1.Edit_RemoveComponent{RemoveComponent: &changesetv1.RemoveComponent{Component: args[1]}},
 			})
 		},
 	}
 
 	revisionFlag(cmd, &ifRev)
+	planFlags(cmd, &po)
 
 	return cmd
 }

@@ -16,6 +16,7 @@ func newSetCmd(opts *client.Options) *cobra.Command {
 		to         string
 		setStrings []string
 		ifRev      int32
+		po         planOptions
 	)
 
 	cmd := &cobra.Command{
@@ -58,7 +59,7 @@ pin moves to that tag or digest of the same registry component.`,
 				if err := componentName(args[1]); err != nil {
 					return err
 				}
-				return edits(cmd, opts, csID, ifRevision(cmd, ifRev), &changesetv1.Edit{
+				return edits(cmd, opts, csID, ifRevision(cmd, ifRev), po, &changesetv1.Edit{
 					Edit: &changesetv1.Edit_SetPin{SetPin: &changesetv1.SetPin{Component: args[1], Reference: to}},
 				})
 			}
@@ -71,13 +72,14 @@ pin moves to that tag or digest of the same registry component.`,
 				return cmderr.UsageHint("Give <component>.<path>=<value>, --set-string, or a component with --to.",
 					"nothing to set")
 			}
-			return edits(cmd, opts, csID, ifRevision(cmd, ifRev), es...)
+			return edits(cmd, opts, csID, ifRevision(cmd, ifRev), po, es...)
 		},
 	}
 
 	cmd.Flags().StringVar(&to, "to", "", "move the component's pin to this tag or sha256: digest")
 	cmd.Flags().StringArrayVar(&setStrings, "set-string", nil, "set <component>.<path>=<value> as a string, whatever it looks like (repeatable)")
 	revisionFlag(cmd, &ifRev)
+	planFlags(cmd, &po)
 
 	return cmd
 }
