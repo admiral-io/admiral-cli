@@ -2,6 +2,7 @@ package changeset
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -341,4 +342,141 @@ func TestAddFromValuesFile(t *testing.T) {
 	printed, err := add(write("escaped.yaml", "labels:\n  $ref: literal\n"))
 	requireAccepted(t, err, "add --values escaped.yaml")
 	assert.Contains(t, printed, "stored as $$ref")
+}
+
+// downloaded writes a file as `values` downloads it.
+func downloaded(t *testing.T, h valuesfile.Header, tree map[string]any) string {
+	t.Helper()
+	data, err := valuesfile.Render(tree, h)
+	require.NoError(t, err)
+	p := filepath.Join(t.TempDir(), "values.yaml")
+	require.NoError(t, os.WriteFile(p, data, 0o644))
+	return p
+}
+
+// An upload is checked against the header before any sign-in: a file from
+// another change set or component, or one with no header, is refused.
+func TestValuesUploadRefusesAFileFromElsewhere(t *testing.T) {
+	tree := map[string]any{"replicas": json.Number("3")}
+	upload := func(path string) error {
+		_, err := run(t, "values", csID, "api", "--values", path)
+		return err
+	}
+
+	err := upload(downloaded(t, valuesfile.Header{ChangeSet: "cs-000000000000", Component: "api", Revision: 3}, tree))
+	requireUsage(t, err, "was downloaded from change set cs-000000000000, not "+csID)
+
+	err = upload(downloaded(t, valuesfile.Header{ChangeSet: csID, Component: "web", Revision: 3}, tree))
+	requireUsage(t, err, "holds the values of web, not api")
+
+	dir := t.TempDir()
+	for name, body := range map[string]string{
+		"bare.yaml":        "replicas: 3\n",
+		"no-revision.yaml": "# change set: " + csID + "\n# component: api\nreplicas: 3\n",
+		"bad-revision.yaml": "# change set: " + csID + "\n# component: api\n# revision: head\n" +
+			"replicas: 3\n",
+		"no-names.yaml": "# revision: 3\nreplicas: 3\n",
+	} {
+		p := filepath.Join(dir, name)
+		require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
+		err = upload(p)
+		requireUsage(t, err, "has no change set, component and revision header")
+		require.Contains(t, cmderr.Hint(err), "admiral changeset values "+csID+" api", name)
+	}
+
+	// The header matches, so the body is what is wrong; still no sign-in.
+	bad := downloaded(t, valuesfile.Header{ChangeSet: csID, Component: "api", Revision: 3}, tree)
+	f, err := os.OpenFile(bad, os.O_APPEND|os.O_WRONLY, 0)
+	require.NoError(t, err)
+	_, err = f.WriteString("key: !secret x\n")
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+	requireUsage(t, upload(bad), "only !ref is")
+
+	err = upload(downloaded(t, valuesfile.Header{ChangeSet: csID, Component: "api", Revision: 3}, tree))
+	requireAccepted(t, err, "values upload")
+}
+
+// An upload is one ReplaceValues carrying the whole tree and the revision
+// the file was taken at, so a stale file is refused by the server.
+func TestValuesUploadSendsTheTreeAndItsRevision(t *testing.T) {
+	path := downloaded(t, valuesfile.Header{ChangeSet: csID, Component: "api", Revision: 7, BaseDigest: "sha256:ab"},
+		map[string]any{
+			"replicas": json.Number("12345678901234567890"),
+			"db":       map[string]any{"$ref": "users-db.host"},
+			"literal":  map[string]any{"$$ref": "kept"},
+			"tier":     nil,
+		})
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Contains(t, string(data), "!ref users-db.host", "a download writes a reference as !ref")
+
+	var stderr bytes.Buffer
+	e, err := uploadEdit(&stderr, path, csID, "api", data)
+	require.NoError(t, err)
+	rv := e.GetReplaceValues()
+	require.NotNil(t, rv)
+	assert.Equal(t, "api", rv.Component)
+	assert.Equal(t, int32(7), rv.FromRevision)
+	assert.JSONEq(t,
+		`{"replicas":12345678901234567890,"db":{"$ref":"users-db.host"},"literal":{"$$ref":"kept"},"tier":null}`,
+		rv.TreeJson)
+	assert.Contains(t, rv.TreeJson, "12345678901234567890", "digits survive the round trip")
+
+	// The empty tree is `{}`, which the API accepts as "no values".
+	path = downloaded(t, valuesfile.Header{ChangeSet: csID, Component: "api", Revision: 0}, map[string]any{})
+	data, err = os.ReadFile(path)
+	require.NoError(t, err)
+	e, err = uploadEdit(&stderr, path, csID, "api", data)
+	require.NoError(t, err)
+	assert.Equal(t, `{}`, e.GetReplaceValues().TreeJson)
+	assert.Equal(t, int32(0), e.GetReplaceValues().FromRevision)
+}
+
+func TestValuesAndDiffArguments(t *testing.T) {
+	_, err := run(t, "values", csID)
+	requireUsage(t, err, "missing argument: values <change-set> <component>")
+
+	_, err = run(t, "values", csID, "Api")
+	requireUsage(t, err, `invalid component name "Api"`)
+
+	_, err = run(t, "values", csID, "api", "-f", "api.yaml")
+	require.ErrorContains(t, err, "unknown shorthand flag: 'f'")
+
+	_, err = run(t, "diff", "cs-1")
+	requireUsage(t, err, `invalid change set "cs-1"`)
+
+	for _, args := range [][]string{{"values", csID, "api"}, {"diff", csID}} {
+		_, err = run(t, args...)
+		requireAccepted(t, err, args...)
+	}
+}
+
+func TestWriteDiff(t *testing.T) {
+	var b bytes.Buffer
+	writeDiff(&b, csID, &changesetv1.DiffChangeSetResponse{
+		Revision: 4,
+		Components: []*changesetv1.ComponentDiff{
+			{
+				Component: "api", Action: changesetv1.EntryAction_UPDATE,
+				OldPin: &changesetv1.Pin{Name: "api-chart", Digest: "sha256:aaaaaaaaaaaaaaaa"},
+				NewPin: &changesetv1.Pin{Name: "api-chart", Digest: "sha256:bbbbbbbbbbbbbbbb"},
+				Paths: []*changesetv1.PathDiff{
+					{DisplayPath: "image.tag", BeforePresent: true, BeforeJson: `"v1"`, AfterPresent: true, AfterJson: `"v2"`},
+					{DisplayPath: "replicas", AfterPresent: true, AfterJson: `3`},
+					{DisplayPath: "resources", BeforePresent: true, BeforeJson: `{"cpu":"1"}`, AfterPresent: true, AfterJson: `null`},
+				},
+				Violations: []*changesetv1.Violation{{Component: "api", Path: "replicas", Message: "must be <= 2"}},
+			},
+			{Component: "old-cache", Action: changesetv1.EntryAction_DESTROY},
+		},
+	})
+	out := b.String()
+	assert.Contains(t, out, csID+" at revision 4")
+	assert.Contains(t, out, "~ api (update)  api-chart@aaaaaaaaaaaa -> bbbbbbbbbbbb")
+	assert.Contains(t, out, `image.tag: "v1" -> "v2"`)
+	assert.Contains(t, out, "replicas: <absent> -> 3", "absent and null are different")
+	assert.Contains(t, out, `resources: {"cpu":"1"} -> null`)
+	assert.Contains(t, out, "! replicas: must be <= 2")
+	assert.Contains(t, out, "- old-cache (destroy)")
 }
