@@ -6,7 +6,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
@@ -93,10 +92,9 @@ describe is a human view. Use 'env get -o json' for the raw record.`,
 			// sections below are assembled from further reads. A section
 			// whose read fails (missing scope, endpoint not served) is
 			// rendered as unavailable rather than failing the describe.
-			// The four reads are independent; the diffs depend on the
-			// open change sets, so they fan out from that read once it
-			// returns. Every section keeps its own error, so nothing here
-			// returns one and the group is only a way to wait.
+			// The four reads are independent. Every section keeps its own
+			// error, so nothing here returns one and the group is only a way
+			// to wait.
 			var sec envSections
 			g, gctx := errgroup.WithContext(ctx)
 			g.Go(func() error {
@@ -115,10 +113,7 @@ describe is a human view. Use 'env get -o json' for the raw record.`,
 				return nil
 			})
 			g.Go(func() error {
-				sec.openCS, sec.openCSErr = listOpenChangeSets(gctx, c, e.ApplicationId, envID)
-				if sec.openCSErr == nil {
-					sec.diffs = loadPendingDiffs(gctx, c, sec.openCS)
-				}
+				sec.openCS, sec.openCSErr = listOpenChangeSets(gctx, c, envID)
 				return nil
 			})
 			g.Go(func() error {
@@ -147,7 +142,6 @@ type envSections struct {
 	runsErr   error
 	openCS    []*changesetv1.ChangeSet
 	openCSErr error
-	diffs     map[string]*changesetv1.ChangeSetDiff
 	vars      []*variablev1.Variable
 	varsErr   error
 }
@@ -167,7 +161,7 @@ func (s envSections) permissionDenied() bool {
 // conditions, per-component health messages, metrics) are left out rather
 // than faked; see SERVER_FOLLOWUPS.md.
 func describeEnv(e *environmentv1.Environment, app *applicationv1.Application, sec envSections) *output.Describe {
-	comps, openCS, diffs, runs, vars := sec.comps, sec.openCS, sec.diffs, sec.runs, sec.vars
+	comps, openCS, runs, vars := sec.comps, sec.openCS, sec.runs, sec.vars
 	d := output.NewDescribe()
 	d.Field("Name", e.Name)
 	d.Field("Application", app.Name)
@@ -244,37 +238,12 @@ func describeEnv(e *environmentv1.Environment, app *applicationv1.Application, s
 				b.Field("Count", "0")
 				return
 			}
+			rows := make([][]string, 0, len(openCS))
 			for _, cs := range openCS {
-				id := cs.DisplayId
-				if id == "" {
-					id = truncateUUID(cs.Id)
-				}
-				b.Block(id, func(b *output.Block) {
-					b.Field("Title", cs.Title)
-					b.Field("Created By", output.FormatActor(cs.CreatedBy))
-					b.Field("Age", output.FormatAge(cs.CreatedAt))
-					df := diffs[cs.Id]
-					if df == nil {
-						return
-					}
-					if entries := df.GetEntries(); len(entries) > 0 {
-						rows := make([][]string, 0, len(entries))
-						for _, en := range entries {
-							mod, ver := pendingEntryModuleVersion(en)
-							rows = append(rows, []string{en.GetComponentName(), output.FormatEnum(en.GetChangeType()), mod, ver})
-						}
-						b.Table([]string{"Component", "Change", "Module", "Ref"}, rows)
-					}
-					if variables := df.GetVariables(); len(variables) > 0 {
-						rows := make([][]string, 0, len(variables))
-						for _, v := range variables {
-							oldStr, newStr := pendingVariableSides(v)
-							rows = append(rows, []string{v.GetKey(), output.FormatEnum(v.GetChangeType()), oldStr, newStr})
-						}
-						b.Table([]string{"Key", "Change", "Old", "New"}, rows)
-					}
-				})
+				rows = append(rows, []string{cs.Id, cs.Title, strconv.Itoa(int(cs.HeadRevision)),
+					output.FormatActor(cs.CreatedBy), output.FormatAge(cs.CreatedAt)})
 			}
+			b.Table([]string{"ID", "Title", "Revision", "Created By", "Age"}, rows)
 		})
 	}
 
@@ -364,72 +333,6 @@ func changeSetDisplay(r *runv1.Run) string {
 	return ""
 }
 
-// pendingEntryModuleVersion picks the "after" side of a module/version diff
-// for the rendered table. CREATE entries only have the new side; UPDATEs
-// either keep or replace the module — operators care about what the entry
-// will produce, not the prior pin.
-func pendingEntryModuleVersion(e *changesetv1.EntryDiff) (string, string) {
-	var mod, ver string
-	if m := e.GetCatalogItem(); m != nil {
-		if m.CatalogItemNameNew != nil && *m.CatalogItemNameNew != "" {
-			mod = *m.CatalogItemNameNew
-		} else if m.CatalogItemIdNew != nil && *m.CatalogItemIdNew != "" {
-			mod = *m.CatalogItemIdNew
-		}
-		if m.RefNew != nil && *m.RefNew != "" {
-			ver = *m.RefNew
-		}
-	}
-	return mod, ver
-}
-
-func pendingVariableSides(v *changesetv1.VariableDiff) (string, string) {
-	if v.GetSensitive() {
-		return "<redacted>", "<redacted>"
-	}
-	var oldStr, newStr string
-	if v.Old != nil {
-		oldStr = *v.Old
-	}
-	if v.New != nil {
-		newStr = *v.New
-	}
-	return output.Truncate(oldStr, 40), output.Truncate(newStr, 40)
-}
-
-// diffConcurrency bounds how many DiffChangeSet calls run at once: enough
-// that an environment with many open change sets does not wait for them
-// one after another, few enough not to hammer the server.
-const diffConcurrency = 4
-
-// loadPendingDiffs fetches DiffChangeSet for each open changeset so describe
-// can render staged entries and variables under each cs header. Failures are
-// silent: a missing entry in the returned map is rendered as "no pending
-// changes" rather than a hard error, since describe is read-only and partial
-// info is more useful than no info.
-func loadPendingDiffs(ctx context.Context, c sdkclient.AdmiralClient, css []*changesetv1.ChangeSet) map[string]*changesetv1.ChangeSetDiff {
-	var (
-		mu  sync.Mutex
-		out = make(map[string]*changesetv1.ChangeSetDiff, len(css))
-	)
-	g, ctx := errgroup.WithContext(ctx)
-	g.SetLimit(diffConcurrency)
-	for _, cs := range css {
-		g.Go(func() error {
-			resp, err := c.ChangeSet().DiffChangeSet(ctx, &changesetv1.DiffChangeSetRequest{ChangeSetId: cs.Id})
-			if err != nil {
-				return nil //nolint:nilerr // one missing diff must not hide the others
-			}
-			mu.Lock()
-			out[cs.Id] = resp.GetDiff()
-			mu.Unlock()
-			return nil
-		})
-	}
-	_ = g.Wait() // nothing returns an error
-	return out
-}
-
 // scopeFilter builds the application + environment predicate shared by the
 // describe sub-queries.
 func scopeFilter(appID, envID string) (string, error) {
@@ -459,14 +362,11 @@ func listRecentRuns(ctx context.Context, c sdkclient.AdmiralClient, appID, envID
 	return resp.Runs, nil
 }
 
-func listOpenChangeSets(ctx context.Context, c sdkclient.AdmiralClient, appID, envID string) ([]*changesetv1.ChangeSet, error) {
-	scope, err := scopeFilter(appID, envID)
-	if err != nil {
-		return nil, err
-	}
+func listOpenChangeSets(ctx context.Context, c sdkclient.AdmiralClient, envID string) ([]*changesetv1.ChangeSet, error) {
 	resp, err := c.ChangeSet().ListChangeSets(ctx, &changesetv1.ListChangeSetsRequest{
-		Filter:   filter.And(scope, "field['status'] = 'OPEN'"),
-		PageSize: 50,
+		EnvironmentId: envID,
+		Status:        changesetv1.ChangeSetStatus_DRAFT,
+		PageSize:      50,
 	})
 	if err != nil {
 		return nil, err
