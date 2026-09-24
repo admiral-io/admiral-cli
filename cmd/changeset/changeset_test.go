@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -479,4 +480,126 @@ func TestWriteDiff(t *testing.T) {
 	assert.Contains(t, out, `resources: {"cpu":"1"} -> null`)
 	assert.Contains(t, out, "! replicas: must be <= 2")
 	assert.Contains(t, out, "- old-cache (destroy)")
+}
+
+// A component name is at most 53 characters, Helm's limit on a release
+// name; the registry name it comes from may be longer.
+func TestComponentNameLimit(t *testing.T) {
+	name53 := "a" + strings.Repeat("b", 52)
+	name54 := name53 + "c"
+	require.NoError(t, componentName(name53))
+	requireUsage(t, componentName(name54), "invalid component name")
+
+	for _, args := range [][]string{
+		{"add", csID, name54, "--from", "cloud-sql:v1"},
+		{"set", csID, name54 + ".replicas=3"},
+		{"set", csID, name54, "--to", "v2"},
+		{"set", csID, name54, "--namespace", "shop"},
+		{"unset", csID, name54 + ".replicas"},
+		{"remove", csID, name54},
+		{"values", csID, name54},
+		{"get", csID, "--rendered", "--component", name54},
+	} {
+		_, err := run(t, args...)
+		requireUsage(t, err, `invalid component name "`+name54+`"`)
+	}
+
+	_, err := registryRef(strings.Repeat("r", 63) + ":v1")
+	require.NoError(t, err, "a registry name keeps the registry's 63")
+	_, err = run(t, "add", csID, name53, "--from", strings.Repeat("r", 63)+":v1")
+	requireAccepted(t, err, "add", name53)
+}
+
+func TestPlacementEdit(t *testing.T) {
+	e, err := placementEdit("api", "shop-api", []string{"kube-system", "monitoring"})
+	require.NoError(t, err)
+	sp := e.GetSetPlacement()
+	require.NotNil(t, sp)
+	assert.Equal(t, "api", sp.Component)
+	assert.Equal(t, "shop-api", sp.Placement.GetKubernetes().GetNamespace())
+	assert.Equal(t, []string{"kube-system", "monitoring"}, sp.Placement.GetKubernetes().GetExtraNamespaces())
+
+	e, err = placementEdit("api", "", nil)
+	require.NoError(t, err)
+	require.NotNil(t, e.GetSetPlacement().Placement.GetKubernetes(), "the environment's default is an empty namespace, not no placement")
+	assert.Empty(t, e.GetSetPlacement().Placement.GetKubernetes().GetNamespace())
+
+	_, err = placementEdit("api", "Shop", nil)
+	requireUsage(t, err, `invalid namespace "Shop"`)
+	_, err = placementEdit("api", strings.Repeat("n", 64), nil)
+	requireUsage(t, err, "invalid namespace")
+	_, err = placementEdit("api", "shop", []string{""})
+	requireUsage(t, err, `invalid extra namespace ""`)
+	_, err = placementEdit("api", "shop", []string{"kube-system", "kube-system"})
+	requireUsage(t, err, `extra namespace "kube-system" given twice`)
+	many := make([]string, maxExtraNamespaces+1)
+	for i := range many {
+		many[i] = fmt.Sprintf("ns-%d", i)
+	}
+	_, err = placementEdit("api", "shop", many)
+	requireUsage(t, err, "17 extra namespaces; the limit is 16")
+}
+
+func TestSetNamespaceArguments(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"no component", []string{"set", csID, "--namespace", "shop"}, "--namespace takes a component"},
+		{"a path first", []string{"set", csID, "api.replicas=3", "--namespace", "shop"}, "--namespace takes a component"},
+		{"extra alone", []string{"set", csID, "api", "--extra-namespace", "kube-system"}, "--extra-namespace needs --namespace"},
+		{"a bad namespace", []string{"set", csID, "api", "--namespace", "Shop"}, `invalid namespace "Shop"`},
+		{"a bare second component", []string{"set", csID, "api", "web", "--namespace", "shop"}, "is not component.path=value"},
+		{"--to on two", []string{"set", csID, "api", "web", "--to", "v2", "--namespace", "shop"}, "--to takes exactly one component"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := run(t, tc.args...)
+			requireUsage(t, err, tc.want)
+		})
+	}
+
+	// Placement and values in one command are one request, so one revision.
+	for _, args := range [][]string{
+		{"set", csID, "api", "--namespace", "shop-api"},
+		{"set", csID, "api", "--namespace", ""},
+		{"set", csID, "api", "--namespace", "shop-api", "--extra-namespace", "kube-system", "--extra-namespace", "monitoring"},
+		{"set", csID, "api", "--namespace", "shop-api", "api.replicas=3", "web.replicas=2"},
+		{"set", csID, "api", "--namespace", "shop-api", "--set-string", "api.build=0042"},
+		{"set", csID, "api", "--namespace", "shop-api", "--to", "v1.4.0"},
+		{"set", csID, "api", "--namespace", "shop-api", "--plan"},
+	} {
+		_, err := run(t, args...)
+		requireAccepted(t, err, args...)
+	}
+}
+
+// Placement combined with values or a pin move is one request, placement
+// first, so it is one revision.
+func TestSetRequestCombinesPlacement(t *testing.T) {
+	es, err := setRequest{
+		args:           []string{"api", "api.replicas=3", "web.replicas=2"},
+		setStrings:     []string{"api.build=0042"},
+		namespaceGiven: true, namespace: "shop-api", extraNamespaces: []string{"kube-system"},
+	}.edits()
+	require.NoError(t, err)
+	require.Len(t, es, 4)
+	assert.Equal(t, "shop-api", es[0].GetSetPlacement().GetPlacement().GetKubernetes().GetNamespace())
+	assert.Equal(t, []string{"kube-system"}, es[0].GetSetPlacement().GetPlacement().GetKubernetes().GetExtraNamespaces())
+	assert.Equal(t, "api", es[1].GetSetValue().GetComponent())
+	assert.Equal(t, "web", es[2].GetSetValue().GetComponent())
+	assert.Equal(t, `"0042"`, es[3].GetSetValue().GetValueJson())
+
+	es, err = setRequest{args: []string{"api"}, to: "v1.4.0", namespaceGiven: true}.edits()
+	require.NoError(t, err)
+	require.Len(t, es, 2)
+	assert.Equal(t, "api", es[0].GetSetPlacement().GetComponent())
+	assert.Empty(t, es[0].GetSetPlacement().GetPlacement().GetKubernetes().GetNamespace())
+	assert.Equal(t, "v1.4.0", es[1].GetSetPin().GetReference())
+
+	es, err = setRequest{args: []string{"api.replicas=3"}}.edits()
+	require.NoError(t, err)
+	require.Len(t, es, 1, "no placement unless --namespace is given")
+	assert.NotNil(t, es[0].GetSetValue())
 }
