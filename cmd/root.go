@@ -15,6 +15,7 @@ import (
 
 	appcmd "go.admiral.io/cli/cmd/app"
 	authcmd "go.admiral.io/cli/cmd/auth"
+	changesetcmd "go.admiral.io/cli/cmd/changeset"
 	componentcmd "go.admiral.io/cli/cmd/component"
 	configcmd "go.admiral.io/cli/cmd/config"
 	credentialcmd "go.admiral.io/cli/cmd/credential"
@@ -253,6 +254,7 @@ Documentation: https://admiral.io/docs`,
 	cmd.AddCommand(
 		appcmd.NewAppCmd(&clientOpts).Cmd,
 		envcmd.NewEnvCmd(&clientOpts).Cmd,
+		changesetcmd.NewChangeSetCmd(&clientOpts).Cmd,
 		componentcmd.NewComponentCmd(&clientOpts).Cmd,
 		credentialcmd.NewCredentialCmd(&clientOpts).Cmd,
 		authcmd.NewAuthCmd(&clientOpts).Cmd,
