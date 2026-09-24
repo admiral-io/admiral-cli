@@ -332,6 +332,14 @@ func TestRoot_ExitCodes(t *testing.T) {
 		})
 	}
 
+	// A command that already reported its failure sets the exit code and
+	// the root prints nothing on top of it.
+	t.Run("reported", func(t *testing.T) {
+		stderr, code := runRootWith(t, cmderr.Reported(credentials.ErrSessionExpired))
+		require.Equal(t, cmderr.ExitAuth, code)
+		require.Empty(t, stderr)
+	})
+
 	t.Run("success does not exit", func(t *testing.T) {
 		stderr, code := runRootWith(t, nil)
 		require.Equal(t, -1, code)

@@ -87,9 +87,11 @@ func (cmd *rootCmd) Execute(args []string) {
 			cmd.exit(cmderr.ExitInterrupted)
 			return
 		}
-		output.Writef(stderr, "Error: %s\n", formatError(err))
-		if hint := errorHint(err); hint != "" {
-			output.Writef(stderr, "%s\n", hint)
+		if !cmderr.IsReported(err) {
+			output.Writef(stderr, "Error: %s\n", formatError(err))
+			if hint := errorHint(err); hint != "" {
+				output.Writef(stderr, "%s\n", hint)
+			}
 		}
 		cmd.exit(exitCode(err))
 	}

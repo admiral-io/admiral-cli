@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -311,6 +312,36 @@ func TestStatus_VerifiesWithServer(t *testing.T) {
 	require.Contains(t, stdout, "ID:            u-1")
 }
 
+// Verifying can refresh the session; status then shows the new expiry, not
+// the one it read before contacting the server.
+func TestStatus_ShowsExpiryAfterRefresh(t *testing.T) {
+	os.Unsetenv(credentials.EnvAPIKey)
+	opts := &client.Options{ConfigDir: t.TempDir(), OutputFormat: output.FormatJSON}
+	stale := &credentials.Credential{Kind: credentials.KindSession, AccessToken: "jwt-1", Expiry: time.Now().Add(-time.Hour)}
+	require.NoError(t, credentials.Save(opts.ConfigDir, stale))
+
+	fresh := time.Now().Add(time.Hour).Truncate(time.Second)
+	prev := verifyIdentity
+	verifyIdentity = func(context.Context, *client.Options) (*userv1.User, error) {
+		next := *stale
+		next.AccessToken, next.Expiry = "jwt-2", fresh
+		return &userv1.User{Id: "u-1"}, credentials.Save(opts.ConfigDir, &next)
+	}
+	t.Cleanup(func() { verifyIdentity = prev })
+
+	stdout, err := run(t, opts, "", "status")
+	require.NoError(t, err)
+	var got authStatus
+	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
+	require.True(t, got.Verified)
+	require.Equal(t, fresh.Local().Format(time.RFC3339), got.Expires)
+
+	opts.OutputFormat = output.FormatTable
+	stdout, err = run(t, opts, "", "status")
+	require.NoError(t, err)
+	require.NotContains(t, stdout, "expired")
+}
+
 // A credential the server refuses is reported as not authenticated, exit
 // 4, even though something is stored.
 func TestStatus_ServerRejectsCredential(t *testing.T) {
@@ -329,6 +360,7 @@ func TestStatus_ServerRejectsCredential(t *testing.T) {
 	stdout, err = run(t, opts, "", "status")
 	require.Error(t, err)
 	require.Equal(t, codes.Unauthenticated, status.Code(err), "the root maps this to exit 4")
+	require.True(t, cmderr.IsReported(err), "the document already says why; the root must not repeat it")
 	require.Contains(t, stdout, "Authenticated:  no")
 	require.Contains(t, stdout, "key revoked")
 }
@@ -353,6 +385,7 @@ func TestStatus_ServerUnreachable(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, codes.Unavailable, status.Code(err))
 	require.NotEqual(t, cmderr.ExitAuth, cmderr.Code(err))
+	require.True(t, cmderr.IsReported(err))
 	require.Contains(t, stdout, "Verified:       no (could not reach")
 }
 
