@@ -186,6 +186,8 @@ func describeEnv(e *environmentv1.Environment, app *applicationv1.Application, s
 	d.Field("Created", output.FormatDescribeTime(e.CreatedAt))
 	d.Field("Created By", output.FormatActor(e.CreatedBy))
 
+	describeKubernetes(d, e.Kubernetes)
+
 	if sec.compsErr != nil {
 		d.Unavailable("Components", cmderr.Format(sec.compsErr))
 	} else {
