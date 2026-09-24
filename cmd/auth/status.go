@@ -117,6 +117,9 @@ it, so a script can gate on it.`,
 				case err == nil:
 					st.Verified = true
 					st.User = &identity{Email: user.GetEmail(), DisplayName: user.GetDisplayName(), ID: user.GetId()}
+					// Verifying may have refreshed the session, which moves
+					// the expiry localStatus read before it.
+					st.reloadExpiry(opts)
 				case isAuthError(err):
 					// The credential is there but the server will not take
 					// it: a revoked key, a session whose refresh was refused.
@@ -170,15 +173,17 @@ it, so a script can gate on it.`,
 				return err
 			}
 			// The document is the answer for -o json|yaml; its fields carry
-			// the outcome. In human mode the exit code does.
+			// the outcome. In human mode the exit code does, and the
+			// document has already said why, so the error is not printed
+			// again.
 			if opts.OutputFormat.IsMachine() {
 				return nil
 			}
 			if verifyErr != nil {
-				return verifyErr
+				return cmderr.Reported(verifyErr)
 			}
 			if !st.Authenticated {
-				return cmderr.Auth("", errors.New("not signed in"))
+				return cmderr.Reported(cmderr.Auth("", errors.New("not signed in")))
 			}
 			return nil
 		},
@@ -186,6 +191,20 @@ it, so a script can gate on it.`,
 
 	cmd.Flags().BoolVar(&noVerify, "no-verify", false, "report the stored credential without contacting the server")
 	return cmd
+}
+
+// reloadExpiry re-reads the stored session's expiry. Best effort: on any
+// failure the expiry read before verification stands.
+func (s *authStatus) reloadExpiry(opts *client.Options) {
+	if s.Method != "session" || s.Storage != "file" {
+		return
+	}
+	cred, err := credentials.Load(opts.ConfigDir)
+	if err != nil || cred.Kind != credentials.KindSession || cred.Expiry.IsZero() {
+		return
+	}
+	s.expiry = cred.Expiry
+	s.Expires = cred.Expiry.Local().Format(time.RFC3339)
 }
 
 // storedIn renders the storage location for table output.

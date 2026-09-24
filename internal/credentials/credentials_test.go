@@ -119,6 +119,60 @@ func TestResolveToken_ExpiredWithoutRefreshToken(t *testing.T) {
 	require.ErrorIs(t, err, ErrSessionExpired)
 }
 
+// failingTokenServer answers every refresh with status code and body.
+func failingTokenServer(t *testing.T, code int, body string) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(code)
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// Only a token endpoint that turns the refresh down ends the session. One
+// that fails or cannot be reached says nothing about it, and the stored
+// session is left for the next attempt.
+func TestResolveToken_RefreshFailures(t *testing.T) {
+	os.Unsetenv(EnvAPIKey)
+	closed := httptest.NewServer(http.NotFoundHandler())
+	closed.Close()
+
+	cases := []struct {
+		name     string
+		tokenURL string
+		expired  bool
+		contains string
+	}{
+		{"invalid_grant", failingTokenServer(t, http.StatusBadRequest, `{"error":"invalid_grant"}`).URL, true, ""},
+		{"unauthorized client", failingTokenServer(t, http.StatusUnauthorized, `{"error":"invalid_client"}`).URL, true, ""},
+		{"server error", failingTokenServer(t, http.StatusServiceUnavailable, `upstream down`).URL, false, "the auth server answered 503 Service Unavailable"},
+		{"rate limited", failingTokenServer(t, http.StatusTooManyRequests, `{"error":"slow_down"}`).URL, false, "429"},
+		{"unreachable", closed.URL, false, "could not refresh the session"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			require.NoError(t, Save(dir, session(time.Now().Add(-time.Minute), "refresh-1", tc.tokenURL)))
+
+			_, err := ResolveToken(context.Background(), dir)
+			require.Error(t, err)
+			if tc.expired {
+				require.ErrorIs(t, err, ErrSessionExpired)
+				return
+			}
+			require.NotErrorIs(t, err, ErrSessionExpired)
+			require.Contains(t, err.Error(), tc.contains)
+			require.NotContains(t, err.Error(), "\n", "one line, not the response body")
+
+			cred, err := Load(dir)
+			require.NoError(t, err)
+			require.Equal(t, "refresh-1", cred.RefreshToken, "the session is kept for the next try")
+		})
+	}
+}
+
 // tokenServer is a minimal OAuth2 token endpoint that answers refresh_token
 // grants and records what it received.
 func tokenServer(t *testing.T, newRefresh string) (*httptest.Server, *[]string) {

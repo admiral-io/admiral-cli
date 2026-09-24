@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -69,8 +70,12 @@ const (
 // ErrNotAuthenticated is returned when no credential is available.
 var ErrNotAuthenticated = errors.New("not signed in")
 
-// ErrSessionExpired is returned when a stored session can no longer be used.
+// ErrSessionExpired is returned when a stored session can no longer be used:
+// the token endpoint refused the refresh, or there is nothing to refresh with.
 var ErrSessionExpired = errors.New("session expired")
+
+// errNoRefreshToken is a session that cannot be refreshed at all.
+var errNoRefreshToken = errors.New("session has no refresh token")
 
 // permissiveWarned remembers which paths have been warned about, so a
 // command that loads the file more than once warns once.
@@ -172,7 +177,10 @@ func ResolveToken(ctx context.Context, configDir string) (*TokenResult, error) {
 				return nil, ctx.Err()
 			}
 			slog.Debug("session refresh failed", "error", err)
-			return nil, ErrSessionExpired
+			if refreshRefused(err) {
+				return nil, ErrSessionExpired
+			}
+			return nil, refreshFailure(err)
 		}
 		return &TokenResult{Token: refreshed.AccessToken, AuthScheme: client.AuthSchemeBearer, Source: SourceSession}, nil
 
@@ -320,7 +328,7 @@ func refreshSession(ctx context.Context, configDir string, cred *Credential) (*C
 // and by ctx, whichever ends first.
 func doRefresh(ctx context.Context, configDir string, cred *Credential) (*Credential, error) {
 	if cred.RefreshToken == "" || cred.TokenURL == "" {
-		return nil, errors.New("session has no refresh token")
+		return nil, errNoRefreshToken
 	}
 
 	// Force the oauth2 library to actually refresh: it returns the existing
@@ -361,6 +369,36 @@ func doRefresh(ctx context.Context, configDir string, cred *Credential) (*Creden
 		return nil, err
 	}
 	return &next, nil
+}
+
+// refreshRefused reports whether a failed refresh means the session is over:
+// the token endpoint answered and turned it down (invalid_grant and the
+// like), or there was no refresh token to present. A timeout, a network
+// error or a 5xx says nothing about the session, and the same refresh token
+// may well work on the next try.
+func refreshRefused(err error) bool {
+	if errors.Is(err, errNoRefreshToken) {
+		return true
+	}
+	var re *oauth2.RetrieveError
+	if !errors.As(err, &re) || re.Response == nil {
+		return false
+	}
+	code := re.Response.StatusCode
+	return code >= 400 && code < 500 &&
+		code != http.StatusRequestTimeout && code != http.StatusTooManyRequests
+}
+
+// refreshFailure is the error for a refresh that did not complete, worded so
+// it is not mistaken for an expired session. A RetrieveError's own message
+// carries the whole response body; the status line is enough here, and the
+// body is in the debug log.
+func refreshFailure(err error) error {
+	var re *oauth2.RetrieveError
+	if errors.As(err, &re) && re.Response != nil {
+		return fmt.Errorf("could not refresh the session: the auth server answered %s", re.Response.Status)
+	}
+	return fmt.Errorf("could not refresh the session: %w", err)
 }
 
 // warnIfPermissive warns once per process when the credentials file is

@@ -67,6 +67,28 @@ func WithHint(err error, hint string) error {
 	return &Error{Err: err, Code: ExitError, Hint: hint}
 }
 
+// Reported marks err as already shown to the user: the command's own output
+// says what went wrong and how to fix it, so the root takes the exit code
+// from err and prints nothing more.
+func Reported(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &reported{err: err}
+}
+
+type reported struct{ err error }
+
+func (r *reported) Error() string { return r.err.Error() }
+
+func (r *reported) Unwrap() error { return r.err }
+
+// IsReported reports whether err was marked with Reported.
+func IsReported(err error) bool {
+	var r *reported
+	return errors.As(err, &r)
+}
+
 // Code returns the exit code for err: the wrapped code when present,
 // otherwise ExitError.
 func Code(err error) int {
