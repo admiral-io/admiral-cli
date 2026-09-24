@@ -187,7 +187,7 @@ func TestFormatEnum(t *testing.T) {
 	require.Equal(t, "PartiallyFailed", FormatEnum(runv1.RunStatus_RUN_STATUS_PARTIALLY_FAILED))
 	require.Equal(t, "Succeeded", FormatEnum(runv1.RunStatus_RUN_STATUS_SUCCEEDED))
 	require.Equal(t, None, FormatEnum(runv1.RunStatus_RUN_STATUS_UNSPECIFIED))
-	require.Equal(t, "destroy-plan", FormatEnumKebab(agentv1.JobType_JOB_TYPE_DESTROY_PLAN))
+	require.Equal(t, "agent-too-old", FormatEnumKebab(agentv1.WaitReason_AGENT_TOO_OLD))
 	require.Equal(t, "ssh-key", FormatEnumKebab(credentialv1.CredentialType_CREDENTIAL_TYPE_SSH_KEY))
 	require.Equal(t, None, FormatEnumKebab(credentialv1.CredentialType_CREDENTIAL_TYPE_UNSPECIFIED))
 }
