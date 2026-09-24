@@ -2,7 +2,9 @@ package changeset
 
 import (
 	"bytes"
+	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -222,4 +224,121 @@ func TestSetEdits_PathsAndOrder(t *testing.T) {
 func TestPathSegments(t *testing.T) {
 	assert.Empty(t, pathSegments(nil))
 	assert.Equal(t, []string{"a", "b.c", ""}, keys(pathSegments([]string{"a", "b.c", ""})))
+}
+
+// Every edit verb checks what it can locally, in full, before the client
+// is built: a typo never costs a sign-in and never half-applies.
+func TestSetAndAddRefuseBeforeTheNetwork(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"set without =", []string{"set", csID, "api.image.tag"}, "is not component.path=value"},
+		{"set a whole component", []string{"set", csID, "api=1"}, "names no path inside the component"},
+		{"set an empty key", []string{"set", csID, "api.image..tag=v2"}, "has an empty key"},
+		{"set a bad id", []string{"set", "cs-1", "api.replicas=3"}, `invalid change set "cs-1"`},
+		{"set nothing", []string{"set", csID}, "nothing to set"},
+		{"set --to with a path", []string{"set", csID, "api.image.tag=v2", "--to", "v2"}, "--to takes exactly one component"},
+		{"set --to on two", []string{"set", csID, "api", "web", "--to", "v2"}, "--to takes exactly one component"},
+		{"set --to and --set-string", []string{"set", csID, "api", "--to", "v2", "--set-string", "api.a=1"}, "--to cannot be combined with --set-string"},
+		{"set --to a bad name", []string{"set", csID, "API", "--to", "v2"}, `invalid component name "API"`},
+		{"unset with a value", []string{"unset", csID, "api.image.tag=v2"}, "unset takes a path, not a value"},
+		{"unset a whole component", []string{"unset", csID, "api"}, "names no path inside the component"},
+		{"unset nothing", []string{"unset", csID}, "missing argument: unset"},
+		{"remove a bad name", []string{"remove", csID, "Api"}, `invalid component name "Api"`},
+		{"add a bad name", []string{"add", csID, "Users_DB", "--from", "cloud-sql:v1"}, `invalid component name "Users_DB"`},
+		{"add without a tag", []string{"add", csID, "users-db", "--from", "cloud-sql"}, `--from "cloud-sql" names no tag or digest`},
+		{"add an empty tag", []string{"add", csID, "users-db", "--from", "cloud-sql:"}, "names no tag or digest"},
+		{"add an empty digest", []string{"add", csID, "users-db", "--from", "cloud-sql@"}, "names no tag or digest"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := run(t, tc.args...)
+			requireUsage(t, err, tc.want)
+		})
+	}
+
+	_, err := run(t, "add", csID, "users-db")
+	require.ErrorContains(t, err, `required flag(s) "from" not set`)
+
+	// -f is --force everywhere; a values file is --values.
+	for _, args := range [][]string{
+		{"add", csID, "users-db", "--from", "cloud-sql:v1", "-f", "values.yaml"},
+		{"create", "shop/prod", "-f", "values.yaml"},
+	} {
+		_, err := run(t, args...)
+		require.ErrorContains(t, err, "unknown shorthand flag: 'f'", "%v", args)
+	}
+
+	// One command is one request: more edits than the API takes in one
+	// revision is refused here, not split into several revisions.
+	many := []string{"set", csID}
+	for i := range maxEdits + 1 {
+		many = append(many, fmt.Sprintf("api.k%d=1", i))
+	}
+	_, err = run(t, many...)
+	requireUsage(t, err, "accepts at most 101 arg(s)")
+
+	for _, args := range [][]string{
+		{"set", csID, "api.image.tag=v2", "api.replicas=3", "--if-revision", "4"},
+		{"set", csID, "--set-string", "api.build=0042"},
+		{"set", csID, "api", "--to", "v1.4.0"},
+		{"unset", csID, "api.image.tag", `api.annotations."a.b"`},
+		{"remove", csID, "api"},
+		{"rm", csID, "api"},
+		{"add", csID, "users-db", "--from", "cloud-sql:v1.2.0"},
+		{"add", csID, "users-db", "--from", "cloud-sql@sha256:3f9a2c1d"},
+	} {
+		_, err := run(t, args...)
+		requireAccepted(t, err, args...)
+	}
+}
+
+func TestAddFromReference(t *testing.T) {
+	ref, err := registryRef("cloud-sql:v1.2.0")
+	require.NoError(t, err)
+	assert.Equal(t, "cloud-sql", ref.Name)
+	assert.Equal(t, "v1.2.0", ref.Reference)
+	assert.Empty(t, ref.Namespace)
+
+	ref, err = registryRef("cloud-sql@sha256:3f9a")
+	require.NoError(t, err)
+	assert.Equal(t, "cloud-sql", ref.Name)
+	assert.Equal(t, "sha256:3f9a", ref.Reference, "the digest keeps its prefix, which is how the API tells it from a tag")
+}
+
+// A values file is read and parsed before the client is built.
+func TestAddFromValuesFile(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, body string) string {
+		p := filepath.Join(dir, name)
+		require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
+		return p
+	}
+	add := func(path string) (string, error) {
+		return run(t, "add", csID, "users-db", "--from", "cloud-sql:v1", "--values", path)
+	}
+
+	_, err := add(filepath.Join(dir, "missing.yaml"))
+	require.ErrorContains(t, err, "read values")
+	require.NotErrorIs(t, err, credentials.ErrNotAuthenticated)
+
+	_, err = add(write("list.yaml", "- 1\n- 2\n"))
+	requireUsage(t, err, "values must be a map at the top level")
+
+	_, err = add(write("merge.yaml", "base: &b {tier: db}\nprimary:\n  <<: *b\n"))
+	requireUsage(t, err, "merge keys (<<) are not supported")
+
+	_, err = add(write("tag.yaml", "key: !secret x\n"))
+	requireUsage(t, err, "only !ref is")
+
+	_, err = add(write("ok.yaml", "tier: db-custom-2-7680\nnetwork: !ref vpc.self_link\n"))
+	requireAccepted(t, err, "add --values ok.yaml")
+
+	// A literal map whose only key is $ref is stored escaped, and the
+	// person is told, since they most likely meant !ref.
+	printed, err := add(write("escaped.yaml", "labels:\n  $ref: literal\n"))
+	requireAccepted(t, err, "add --values escaped.yaml")
+	assert.Contains(t, printed, "stored as $$ref")
 }

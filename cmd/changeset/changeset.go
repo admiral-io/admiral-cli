@@ -37,6 +37,10 @@ Change sets are addressed by ID (cs-7f2a1c9d0e3b).`,
 		newListCmd(opts),
 		newGetCmd(opts),
 		newDiscardCmd(opts),
+		newAddCmd(opts),
+		newSetCmd(opts),
+		newUnsetCmd(opts),
+		newRemoveCmd(opts),
 	)
 
 	root.Cmd = cmd
