@@ -11,7 +11,10 @@ import (
 )
 
 func newUnsetCmd(opts *client.Options) *cobra.Command {
-	var ifRev int32
+	var (
+		ifRev int32
+		po    planOptions
+	)
 
 	cmd := &cobra.Command{
 		Use:   "unset <change-set> <component>.<path>...",
@@ -40,11 +43,12 @@ To clear a default instead, set the path to null.`,
 					Path:      pathSegments(path),
 				}}})
 			}
-			return edits(cmd, opts, csID, ifRevision(cmd, ifRev), es...)
+			return edits(cmd, opts, csID, ifRevision(cmd, ifRev), po, es...)
 		},
 	}
 
 	revisionFlag(cmd, &ifRev)
+	planFlags(cmd, &po)
 
 	return cmd
 }

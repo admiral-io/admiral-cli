@@ -16,6 +16,7 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 		appName     string
 		description string
 		labelStrs   []string
+		kube        kubernetesFlags
 	)
 
 	cmd := &cobra.Command{
@@ -28,7 +29,10 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
   admiral env create billing/prod --description "US East production" --label tier=1
 
   # By name, scoped with --app
-  admiral env create staging --app billing`,
+  admiral env create staging --app billing
+
+  # Into a namespace that must already exist
+  admiral env create billing/prod --namespace billing --create-namespaces=false`,
 		Args:              flags.ExactArgs(1),
 		ValidArgsFunction: complete.First(complete.NewEnv(opts)),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -38,6 +42,10 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 			}
 			labels, err := flags.ParseLabels(labelStrs)
 			if err != nil {
+				return err
+			}
+			var kt *environmentv1.KubernetesTarget
+			if _, err := kube.apply(cmd, &kt); err != nil {
 				return err
 			}
 
@@ -57,6 +65,7 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 				Name:          name,
 				Description:   description,
 				Labels:        labels,
+				Kubernetes:    kt,
 			}
 
 			resp, err := c.Environment().CreateEnvironment(cmd.Context(), req)
@@ -72,6 +81,7 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 	flags.App(cmd, &appName, opts)
 	cmd.Flags().StringVar(&description, "description", "", "environment description")
 	flags.Label(cmd, &labelStrs, "label to attach (key=value, repeatable)")
+	kube.register(cmd, "the Kubernetes namespace workload components go to (default <app>-<env>)")
 
 	return cmd
 }

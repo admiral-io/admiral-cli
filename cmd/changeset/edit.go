@@ -21,8 +21,14 @@ const maxEdits = 100
 
 var (
 	changeSetIDPattern = regexp.MustCompile(`^cs-[0-9a-z]{12}$`)
-	componentPattern   = regexp.MustCompile(`^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`)
+	// componentPattern is 53 at most, Helm's limit on a release name,
+	// which a component's name becomes.
+	componentPattern = regexp.MustCompile(`^[a-z]([a-z0-9-]{0,51}[a-z0-9])?$`)
+	namespacePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 )
+
+// maxExtraNamespaces is the API's cap on a placement's extra namespaces.
+const maxExtraNamespaces = 16
 
 // changeSetID refuses a malformed ID before any sign-in or RPC.
 func changeSetID(s string) (string, error) {
@@ -35,9 +41,40 @@ func changeSetID(s string) (string, error) {
 
 func componentName(s string) error {
 	if !componentPattern.MatchString(s) {
-		return cmderr.Usage("invalid component name %q: lowercase letters, digits and hyphens, starting with a letter", s)
+		return cmderr.Usage("invalid component name %q: at most 53 lowercase letters, digits and hyphens, starting with a letter", s)
 	}
 	return nil
+}
+
+// placementEdit replaces a component's placement. An empty namespace is
+// the environment's default.
+func placementEdit(comp, namespace string, extra []string) (*changesetv1.Edit, error) {
+	if err := componentName(comp); err != nil {
+		return nil, err
+	}
+	if namespace != "" && !namespacePattern.MatchString(namespace) {
+		return nil, cmderr.Usage("invalid namespace %q: at most 63 lowercase letters, digits and hyphens", namespace)
+	}
+	if len(extra) > maxExtraNamespaces {
+		return nil, cmderr.Usage("%d extra namespaces; the limit is %d", len(extra), maxExtraNamespaces)
+	}
+	seen := make(map[string]bool, len(extra))
+	for _, ns := range extra {
+		if !namespacePattern.MatchString(ns) {
+			return nil, cmderr.Usage("invalid extra namespace %q: at most 63 lowercase letters, digits and hyphens", ns)
+		}
+		if seen[ns] {
+			return nil, cmderr.Usage("extra namespace %q given twice", ns)
+		}
+		seen[ns] = true
+	}
+	return &changesetv1.Edit{Edit: &changesetv1.Edit_SetPlacement{SetPlacement: &changesetv1.SetPlacement{
+		Component: comp,
+		Placement: &changesetv1.Placement{Kubernetes: &changesetv1.KubernetesPlacement{
+			Namespace:       namespace,
+			ExtraNamespaces: extra,
+		}},
+	}}}, nil
 }
 
 // revisionFlag registers --if-revision; ifRevision reads it back as nil
@@ -54,10 +91,14 @@ func ifRevision(cmd *cobra.Command, n int32) *int32 {
 }
 
 // edits sends one EditChangeSet, so each command is one revision, and
-// prints what it cut.
-func edits(cmd *cobra.Command, opts *client.Options, csID string, ifRev *int32, es ...*changesetv1.Edit) error {
+// prints what it cut. With --plan the answer is the revision's prepare
+// instead, and the revision is only confirmed on stderr.
+func edits(cmd *cobra.Command, opts *client.Options, csID string, ifRev *int32, po planOptions, es ...*changesetv1.Edit) error {
 	if len(es) > maxEdits {
 		return cmderr.Usage("%d edits in one command; the limit is %d", len(es), maxEdits)
+	}
+	if err := po.check(cmd); err != nil {
+		return err
 	}
 	c, err := client.CreateClient(cmd.Context(), opts)
 	if err != nil {
@@ -69,6 +110,7 @@ func edits(cmd *cobra.Command, opts *client.Options, csID string, ifRev *int32, 
 		ChangeSetId: csID,
 		IfRevision:  ifRev,
 		Edits:       es,
+		Plan:        po.plan,
 	})
 	if err != nil {
 		return err
@@ -77,6 +119,9 @@ func edits(cmd *cobra.Command, opts *client.Options, csID string, ifRev *int32, 
 	p := output.NewPrinter(cmd, opts.OutputFormat)
 	printWarnings(p.Err(), resp.Warnings, resp.Revision.GetViolations())
 	output.Confirmed(p.Err(), "change set", csID, "revision "+strconv.Itoa(int(resp.Revision.GetNumber())))
+	if po.plan {
+		return finishPrepare(cmd, opts, c.ChangeSet(), csID, resp.Prepare, po)
+	}
 	return p.PrintOne(resp.Revision, revisionName(csID, resp.Revision), revisionTable.Render(p, resp.Revision))
 }
 

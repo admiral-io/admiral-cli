@@ -18,6 +18,7 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 		description string
 		sets        []string
 		setStrings  []string
+		po          planOptions
 	)
 
 	cmd := &cobra.Command{
@@ -26,7 +27,8 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 		Long: `Open a change set against an environment.
 
 With --set or --set-string the edits cut revision 1 in the same request;
-without, the change set has no revision until its first edit.`,
+without, the change set has no revision until its first edit. --plan plans
+revision 1 and waits for its prepare, as 'admiral changeset plan' does.`,
 		Example: `  admiral changeset create shop/prod --title "Bump api to 1.4.0"
 
   # Open it with values already set
@@ -49,6 +51,13 @@ without, the change set has no revision until its first edit.`,
 			if len(es) > maxEdits {
 				return cmderr.Usage("%d edits in one command; the limit is %d", len(es), maxEdits)
 			}
+			if err := po.check(cmd); err != nil {
+				return err
+			}
+			if po.plan && len(es) == 0 {
+				return cmderr.UsageHint("Pass --set or --set-string, or plan after the first edit.",
+					"--plan needs a revision, and a change set created without edits has none")
+			}
 
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
@@ -65,6 +74,7 @@ without, the change set has no revision until its first edit.`,
 				Title:         title,
 				Description:   description,
 				Edits:         es,
+				Plan:          po.plan,
 			})
 			if err != nil {
 				return err
@@ -73,6 +83,9 @@ without, the change set has no revision until its first edit.`,
 			p := output.NewPrinter(cmd, opts.OutputFormat)
 			printWarnings(p.Err(), resp.Warnings, resp.Revision.GetViolations())
 			output.Confirmed(p.Err(), "change set", resp.ChangeSet.Id, "created")
+			if po.plan {
+				return finishPrepare(cmd, opts, c.ChangeSet(), resp.ChangeSet.Id, resp.Prepare, po)
+			}
 			return p.PrintOne(resp.ChangeSet, resp.ChangeSet.Id, changeSetTable.Render(p, resp.ChangeSet))
 		},
 	}
@@ -80,6 +93,7 @@ without, the change set has no revision until its first edit.`,
 	cmd.Flags().StringVar(&title, "title", "", "a one-line title")
 	cmd.Flags().StringVar(&description, "description", "", "what the change is for")
 	setFlags(cmd, &sets, &setStrings)
+	planFlags(cmd, &po)
 
 	return cmd
 }

@@ -23,7 +23,7 @@ func NewChangeSetCmd(opts *client.Options) *ChangeSetCmd {
 
 A change set is a draft against one environment: add a component from the
 registry, move its pin, set or unset values, remove it. Each command cuts one
-immutable revision. Nothing here plans or applies.
+immutable revision. 'plan' prepares a revision; nothing here applies.
 
 Change sets are addressed by ID (cs-7f2a1c9d0e3b).`,
 		Aliases:       []string{"cs", "changesets"},
@@ -43,6 +43,7 @@ Change sets are addressed by ID (cs-7f2a1c9d0e3b).`,
 		newRemoveCmd(opts),
 		newValuesCmd(opts),
 		newDiffCmd(opts),
+		newPlanCmd(opts),
 	)
 
 	root.Cmd = cmd

@@ -17,7 +17,6 @@ import (
 
 	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/filter"
-	agentv1 "go.admiral.io/sdk/proto/admiral/api/agent/v1"
 	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
 	credentialv1 "go.admiral.io/sdk/proto/admiral/api/credential/v1"
 	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
@@ -137,52 +136,6 @@ func Credential(ctx context.Context, c credentialv1.CredentialAPIClient, nameOrI
 		},
 		func(c *credentialv1.Credential) string { return c.Name },
 		func(c *credentialv1.Credential) string { return c.Id },
-	)
-}
-
-// Agent resolves an agent name or ID.
-func Agent(ctx context.Context, c agentv1.AgentAPIClient, nameOrID string) (string, error) {
-	return byName(ctx, "agent", nameOrID, "", "agent list", "",
-		func(ctx context.Context, f string) ([]*agentv1.Agent, error) {
-			resp, err := c.ListAgents(ctx, &agentv1.ListAgentsRequest{Filter: f})
-			if err != nil {
-				return nil, err
-			}
-			return resp.Agents, nil
-		},
-		func(a *agentv1.Agent) string { return a.Name },
-		func(a *agentv1.Agent) string { return a.Id },
-	)
-}
-
-// AgentToken resolves an agent token name or ID. A UUID needs no agent; a
-// name is looked up inside agent (itself a name or ID).
-func AgentToken(ctx context.Context, c agentv1.AgentAPIClient, agent, nameOrID string) (string, error) {
-	if IsUUID(nameOrID) {
-		return nameOrID, nil
-	}
-	if nameOrID == "" {
-		return "", cmderr.Usage("no token specified")
-	}
-	if agent == "" {
-		return "", cmderr.UsageHint("Pass the agent name, or the token's ID instead of its name.",
-			"an agent is required to look up token %q by name", nameOrID)
-	}
-	agentID, err := Agent(ctx, c, agent)
-	if err != nil {
-		return "", err
-	}
-	return byName(ctx, "token", nameOrID,
-		fmt.Sprintf("on agent %q", agent), "agent token list --agent "+agent, "",
-		func(ctx context.Context, f string) ([]*commonv1.ApiKey, error) {
-			resp, err := c.ListApiKeys(ctx, &agentv1.ListApiKeysRequest{AgentId: agentID, Filter: f})
-			if err != nil {
-				return nil, err
-			}
-			return resp.ApiKeys, nil
-		},
-		func(t *commonv1.ApiKey) string { return t.Name },
-		func(t *commonv1.ApiKey) string { return t.Id },
 	)
 }
 

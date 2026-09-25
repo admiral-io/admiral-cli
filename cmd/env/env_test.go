@@ -3,13 +3,19 @@ package env
 import (
 	"bytes"
 	"os"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/credentials"
+	"go.admiral.io/cli/internal/output"
+	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
 )
 
 // run executes the env command tree with no stored credential, so anything
@@ -121,7 +127,7 @@ func TestWellFormedTargetsAreAccepted(t *testing.T) {
 
 func TestUpdate_RequiresAtLeastOneField(t *testing.T) {
 	_, err := run(t, "update", "shop/prod")
-	require.ErrorContains(t, err, "at least one of --name, --description, or --label")
+	require.ErrorContains(t, err, "at least one of --name, --description, --label, --namespace or --create-namespaces")
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 }
 
@@ -139,4 +145,93 @@ func TestDeleteWithoutForceFailsBeforeNetwork(t *testing.T) {
 
 	_, err = run(t, "delete", "shop/prod", "--app", "shop")
 	require.EqualError(t, err, "--app cannot be combined with a path")
+}
+
+func TestKubernetesFlags(t *testing.T) {
+	for _, verb := range []string{"create", "update"} {
+		_, err := run(t, verb, "shop/prod", "--namespace", "Shop")
+		require.EqualError(t, err, `invalid namespace "Shop": at most 63 lowercase letters, digits and hyphens`)
+		require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
+
+		_, err = run(t, verb, "shop/prod", "--create-namespaces=maybe")
+		require.ErrorContains(t, err, `invalid argument "maybe"`)
+
+		for _, args := range [][]string{
+			{verb, "shop/prod", "--namespace", "shop-prod"},
+			{verb, "shop/prod", "--create-namespaces=false"},
+			{verb, "shop/prod", "--namespace", "shop", "--create-namespaces=true"},
+		} {
+			_, err = run(t, args...)
+			require.ErrorIs(t, err, credentials.ErrNotAuthenticated, "%v: should fail at client creation, not usage", args)
+		}
+	}
+}
+
+// Only the flags given are written, and each names its mask path; an
+// empty namespace is a value, the default.
+func TestKubernetesFlagsApply(t *testing.T) {
+	parse := func(args ...string) (*environmentv1.KubernetesTarget, []string, error) {
+		cmd := &cobra.Command{Use: "x"}
+		var k kubernetesFlags
+		k.register(cmd, "")
+		require.NoError(t, cmd.ParseFlags(args))
+		var kt *environmentv1.KubernetesTarget
+		paths, err := k.apply(cmd, &kt)
+		return kt, paths, err
+	}
+
+	kt, paths, err := parse()
+	require.NoError(t, err)
+	require.Nil(t, kt, "no flag, no target: the server's defaults apply")
+	require.Empty(t, paths)
+
+	kt, paths, err = parse("--namespace", "shop-prod")
+	require.NoError(t, err)
+	require.Equal(t, "shop-prod", kt.Namespace)
+	require.Nil(t, kt.CreateNamespaces)
+	require.Equal(t, []string{"kubernetes.namespace"}, paths)
+
+	kt, paths, err = parse("--create-namespaces=false")
+	require.NoError(t, err)
+	require.NotNil(t, kt.CreateNamespaces)
+	require.False(t, *kt.CreateNamespaces)
+	require.Equal(t, []string{"kubernetes.create_namespaces"}, paths)
+
+	kt, paths, err = parse("--namespace=", "--create-namespaces")
+	require.NoError(t, err)
+	require.Empty(t, kt.Namespace)
+	require.True(t, *kt.CreateNamespaces)
+	require.Equal(t, []string{"kubernetes.namespace", "kubernetes.create_namespaces"}, paths)
+
+	_, _, err = parse("--namespace", strings.Repeat("n", 64))
+	require.ErrorContains(t, err, "invalid namespace")
+}
+
+func TestDescribeKubernetes(t *testing.T) {
+	yes := true
+	render := func(kt *environmentv1.KubernetesTarget) string {
+		d := output.NewDescribe()
+		describeKubernetes(d, kt)
+		var b bytes.Buffer
+		require.NoError(t, d.Render(&b))
+		return b.String()
+	}
+
+	out := render(&environmentv1.KubernetesTarget{Namespace: "shop-prod", CreateNamespaces: &yes})
+	require.Regexp(t, `Namespace:\s+shop-prod`, out)
+	require.Regexp(t, `Create Namespaces:\s+true`, out)
+	require.Regexp(t, `Capabilities:\s+<none reported>`, out)
+
+	out = render(&environmentv1.KubernetesTarget{Namespace: "shop-prod", Capabilities: &environmentv1.KubernetesCapabilities{
+		KubeVersion: "v1.31.2",
+		ApiVersions: []string{"v1", "apps/v1", "batch/v1", "batch/v1beta1", "monitoring.coreos.com/v1"},
+		ReportedAt:  timestamppb.New(time.Now().Add(-3 * time.Hour)),
+	}})
+	require.Regexp(t, `Version:\s+v1.31.2`, out)
+	require.Regexp(t, `API Groups:\s+4`, out, "core, apps, batch, monitoring.coreos.com")
+	require.Regexp(t, `Reported:\s+.*\(3h ago\)`, out)
+
+	require.Equal(t, "v1.31.2, 1 API groups, 3h ago", capabilitiesSummary(&environmentv1.KubernetesCapabilities{
+		KubeVersion: "v1.31.2", ApiVersions: []string{"v1"}, ReportedAt: timestamppb.New(time.Now().Add(-3 * time.Hour)),
+	}))
 }

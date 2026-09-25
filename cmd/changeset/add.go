@@ -12,6 +12,7 @@ import (
 	"go.admiral.io/cli/internal/complete"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/input"
+	"go.admiral.io/cli/internal/manifest"
 	"go.admiral.io/cli/internal/output"
 	"go.admiral.io/cli/internal/valuesfile"
 	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
@@ -22,6 +23,7 @@ func newAddCmd(opts *client.Options) *cobra.Command {
 		from       string
 		valuesPath string
 		ifRev      int32
+		po         planOptions
 	)
 
 	cmd := &cobra.Command{
@@ -59,7 +61,7 @@ stored.`,
 					return err
 				}
 			}
-			return edits(cmd, opts, csID, ifRevision(cmd, ifRev),
+			return edits(cmd, opts, csID, ifRevision(cmd, ifRev), po,
 				&changesetv1.Edit{Edit: &changesetv1.Edit_AddComponent{AddComponent: add}})
 		},
 	}
@@ -67,6 +69,7 @@ stored.`,
 	cmd.Flags().StringVar(&from, "from", "", "the registry component, as <component>:<tag> or <component>@<digest>")
 	cmd.Flags().StringVar(&valuesPath, "values", "", "a YAML values file; !ref <component>.<output> references another component")
 	revisionFlag(cmd, &ifRev)
+	planFlags(cmd, &po)
 	_ = cmd.MarkFlagRequired("from")
 	complete.Flag(cmd, "from", complete.Refs(opts))
 
@@ -87,8 +90,8 @@ func registryRef(s string) (*changesetv1.RegistryRef, error) {
 		return nil, cmderr.UsageHint("Pin a revision: --from cloud-sql:v1.2.0 or --from cloud-sql@sha256:<hex>.",
 			"--from %q names no tag or digest", s)
 	}
-	if err := componentName(name); err != nil {
-		return nil, err
+	if !manifest.ValidName(name) {
+		return nil, cmderr.Usage("invalid registry component name %q: lowercase letters, digits and hyphens, starting with a letter", name)
 	}
 	return &changesetv1.RegistryRef{Name: name, Reference: ref}, nil
 }
