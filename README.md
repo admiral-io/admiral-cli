@@ -5,11 +5,9 @@
 [![CodeQL](https://github.com/admiral-io/admiral-cli/actions/workflows/codeql.yaml/badge.svg)](https://github.com/admiral-io/admiral-cli/actions/workflows/codeql.yaml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/admiral-io/admiral-cli/blob/master/LICENSE)
 
-The official command-line interface for [Admiral](https://admiral.io), the platform orchestrator.
+The official command-line interface for [Admiral](https://admiral.io/?utm_source=github&utm_medium=referral&utm_campaign=admiral-cli), a control plane for coordinating infrastructure and application delivery across environments.
 
-Admiral manages infrastructure provisioning and application deployment as a single, dependency-aware control plane. It orchestrates the tools you already use (Terraform, Helm, Kustomize, any CI/CD system) and maintains the dependency graph across your full stack so changes happen in the right order.
-
-No proprietary formats, no lock-in. If you stop using Admiral, you keep all your manifests and modules.
+Admiral orchestrates the tools you already use, Terraform or OpenTofu, Helm and Kubernetes manifests, and keeps the dependency graph across them so changes happen in the right order. Your modules, charts and manifests stay in their standard formats, so you keep them if you stop using Admiral.
 
 The CLI gives you direct access to the Admiral API from your terminal or CI/CD pipelines. This release covers authentication, applications, environments, and the component registry; more of the platform lands in each release.
 
@@ -137,12 +135,17 @@ plain-HTTP requests, which the CLI does not make against a production server.)
 No extra configuration is needed. If your proxy intercepts TLS, install its CA
 certificate in the operating system trust store, as you would for a browser.
 
-## Documentation
-
-Full documentation is available at [admiral.io/docs](https://admiral.io/docs).
-
 ## Contributing
 
 `make test` and `make lint` are what CI runs; [CONTRIBUTING.md](CONTRIBUTING.md)
-has the rest, including where the CLI style guide lives.
+has the rest, including the rules for adding a command.
 
+## Admiral
+
+[Admiral](https://admiral.io/?utm_source=github&utm_medium=referral&utm_campaign=admiral-cli) is a control plane for coordinating infrastructure and application delivery across environments. This repository is one of its
+[open-source tools](https://github.com/admiral-io).
+
+- [Documentation](https://admiral.io/docs?utm_source=github&utm_medium=referral&utm_campaign=admiral-cli)
+- A bug in this repository: [open an issue](https://github.com/admiral-io/admiral-cli/issues/new/choose)
+- Anything else about Admiral, or not sure where it goes: [admiral-community](https://github.com/admiral-io/admiral-community)
+- A security vulnerability: email [security@admiral.io](mailto:security@admiral.io), never a public issue
