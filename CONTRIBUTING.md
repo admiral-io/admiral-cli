@@ -16,12 +16,7 @@ the scenarios that need a server skip unless `ADMIRAL_SERVER` and
 
 ## Style guide
 
-Code comments cite "style guide §1.5" and similar. The guide is the
-[Admiral CLI Style Guide](../admiral-cli-next/docs/cli-style-guide.md) in
-the `admiral-cli-next` repository, checked out beside this one; the
-command tree it governs is
-[`COMMAND_TREE.md`](../admiral-cli-next/COMMAND_TREE.md) there. Read it
-before adding a command or changing what one prints; the short version:
+Follow these rules when you add a command or change what one prints:
 
 - stdout is the answer, stderr is everything else (prompts, hints,
   "No applications found.", next-page tokens).
