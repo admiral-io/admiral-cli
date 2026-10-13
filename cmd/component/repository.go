@@ -19,7 +19,7 @@ import (
 // Publishing a repository is the Docker shape: pack every component the
 // manifest declares and push each one. The registry is content-addressed,
 // so bytes it already holds are a no-op and only what changed becomes a new
-// revision; no git diff decides what to send, and a shared module's change
+// version; no git diff decides what to send, and a shared module's change
 // surfaces as a new digest in every component that vendors it. The tags
 // (<branch> and sha-<short> unless --tag says otherwise) go on every
 // declared component, the way pushing an image tags it whether or not a
@@ -43,7 +43,7 @@ func publishRepository(cmd *cobra.Command, opts *client.Options, o repositoryOpt
 	root := filepath.Dir(o.manifestPath)
 
 	// Explicit --tag applies to every publish as given. Otherwise the branch
-	// tag rides on the publish and the commit tag is set only on a revision
+	// tag rides on the publish and the commit tag is set only on a version
 	// this run created (see tags.go).
 	tags, sha := o.tags, ""
 	if len(tags) == 0 {
@@ -65,10 +65,10 @@ func publishRepository(cmd *cobra.Command, opts *client.Options, o repositoryOpt
 	defer cl.Close() //nolint:errcheck
 
 	var (
-		revisions []*registryv1.Revision
-		rows      []publishedRow
-		names     []string
-		failures  []string
+		versions []*registryv1.Version
+		rows     []publishedRow
+		names    []string
+		failures []string
 	)
 	for _, c := range m.Components {
 		abs := filepath.Join(root, filepath.FromSlash(c.Path))
@@ -87,15 +87,15 @@ func publishRepository(cmd *cobra.Command, opts *client.Options, o repositoryOpt
 			failures = append(failures, c.Name)
 			continue
 		}
-		resp.Revision.Tags = applyTags(ctx, p, cl, resp, packed, afterPublish{sha: sha})
-		revisions = append(revisions, resp.Revision)
-		rows = append(rows, publishedRow{name: resp.Component.Name, rev: resp.Revision, unchanged: resp.Unchanged})
-		names = append(names, resp.Component.Name+"@"+resp.Revision.Digest)
+		resp.Version.Tags = applyTags(ctx, p, cl, resp, packed, afterPublish{sha: sha})
+		versions = append(versions, resp.Version)
+		rows = append(rows, publishedRow{name: resp.Component.Name, ver: resp.Version, unchanged: resp.Unchanged})
+		names = append(names, resp.Component.Name+"@"+resp.Version.Digest)
 	}
 
 	if err := p.PrintList(output.List{
-		Kind:  "revisions",
-		Items: output.Messages(revisions),
+		Kind:  "versions",
+		Items: output.Messages(versions),
 		Name:  func(i int) string { return names[i] },
 	}, publishedTable.Render(p, rows...)); err != nil {
 		return err
@@ -107,7 +107,7 @@ func publishRepository(cmd *cobra.Command, opts *client.Options, o repositoryOpt
 }
 
 // defaultTags is the push policy: the branch, applied to every publish, and
-// sha-<short>, applied only to a revision the publish created. On a
+// sha-<short>, applied only to a version the publish created. On a
 // detached HEAD (which is what CI checks out) the branch comes from
 // GITHUB_REF_NAME when set. A ref with a slash in it is not a tag name and
 // is left out; it is returned as skipped so the caller can say so rather
@@ -140,23 +140,23 @@ func gitOutput(ctx context.Context, dir string, args ...string) (string, error) 
 }
 
 // publishedRow is one component's outcome in a repository publish: the
-// table needs the name, which the revision does not carry.
+// table needs the name, which the version does not carry.
 type publishedRow struct {
 	name      string
-	rev       *registryv1.Revision
+	ver       *registryv1.Version
 	unchanged bool
 }
 
 var publishedTable = output.Table[publishedRow]{
 	{Header: "COMPONENT", Cell: func(r publishedRow) string { return r.name }},
-	{Header: "DIGEST", Cell: func(r publishedRow) string { return shortDigest(r.rev.Digest) }},
-	{Header: "TAGS", Cell: func(r publishedRow) string { return strings.Join(r.rev.Tags, ",") }},
+	{Header: "DIGEST", Cell: func(r publishedRow) string { return shortDigest(r.ver.Digest) }},
+	{Header: "TAGS", Cell: func(r publishedRow) string { return strings.Join(r.ver.Tags, ",") }},
 	{Header: "RESULT", Cell: func(r publishedRow) string {
 		if r.unchanged {
 			return "unchanged"
 		}
 		return "published"
 	}},
-	{Header: "FINDINGS", Cell: func(r publishedRow) string { return formatFindingCount(r.rev.Findings) }},
-	{Header: "FULL-DIGEST", Wide: true, Cell: func(r publishedRow) string { return r.rev.Digest }},
+	{Header: "FINDINGS", Cell: func(r publishedRow) string { return formatFindingCount(r.ver.Findings) }},
+	{Header: "FULL-DIGEST", Wide: true, Cell: func(r publishedRow) string { return r.ver.Digest }},
 }

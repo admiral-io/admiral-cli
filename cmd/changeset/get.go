@@ -2,6 +2,7 @@ package changeset
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -12,7 +13,9 @@ import (
 	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
+	sdkclient "go.admiral.io/sdk/client"
 	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
+	runv1 "go.admiral.io/sdk/proto/admiral/api/run/v1"
 )
 
 // renderedOptions are the flags of get --rendered.
@@ -35,9 +38,9 @@ func newGetCmd(opts *client.Options) *cobra.Command {
 With --rendered, print a prepared revision's manifests and hooks instead: for
 each component a header naming it and its namespace, its findings as
 comments, its manifests, then its hooks. Secret values are masked. The
-revision is the one last planned unless --revision names another; get never
-prepares one, 'admiral changeset plan' does. --output-dir unpacks the whole
-artifact into a directory.`,
+revision is the one the change set's newest run planned unless --revision
+names another; get never prepares one, 'admiral changeset plan' does.
+--output-dir unpacks the whole artifact into a directory.`,
 		Example: `  admiral changeset get cs-7f2a1c9d0e3b
 
   # The full object
@@ -68,7 +71,7 @@ artifact into a directory.`,
 			defer c.Close() //nolint:errcheck
 
 			if ro.rendered {
-				return getRendered(cmd, c.ChangeSet(), csID, ro)
+				return getRendered(cmd, c, csID, ro)
 			}
 			resp, err := c.ChangeSet().GetChangeSet(cmd.Context(), &changesetv1.GetChangeSetRequest{ChangeSetId: csID})
 			if err != nil {
@@ -81,7 +84,7 @@ artifact into a directory.`,
 
 	cmd.Flags().BoolVar(&ro.rendered, "rendered", false, "print a prepared revision's manifests and hooks")
 	cmd.Flags().StringVar(&ro.component, "component", "", "with --rendered, only this component")
-	cmd.Flags().Int32Var(&ro.revision, "revision", 0, "with --rendered, this revision instead of the one last planned")
+	cmd.Flags().Int32Var(&ro.revision, "revision", 0, "with --rendered, this revision number instead of the one last planned")
 	cmd.Flags().StringVar(&ro.outputDir, "output-dir", "", "with --rendered, unpack the artifact into this directory")
 	cmd.Flags().BoolVarP(&ro.force, "force", "f", false, "with --output-dir, write into a directory that is not empty")
 
@@ -120,26 +123,17 @@ func (ro renderedOptions) check(cmd *cobra.Command) error {
 }
 
 // getRendered reads an artifact; it never asks for one to be made.
-func getRendered(cmd *cobra.Command, c changesetv1.ChangeSetAPIClient, csID string, ro renderedOptions) error {
+func getRendered(cmd *cobra.Command, c sdkclient.AdmiralClient, csID string, ro renderedOptions) error {
 	ctx := cmd.Context()
-	rev := ro.revision
+	rev := strconv.Itoa(int(ro.revision))
 	if !cmd.Flags().Changed("revision") {
-		resp, err := c.GetChangeSet(ctx, &changesetv1.GetChangeSetRequest{ChangeSetId: csID})
-		if err != nil {
+		var err error
+		if rev, err = lastPlanned(cmd, c, csID); err != nil {
 			return err
-		}
-		lp := resp.LatestPrepare
-		if err := preparedRevision(csID, lp); err != nil {
-			return err
-		}
-		rev = lp.Revision
-		if resp.PlanStale {
-			output.Writef(cmd.ErrOrStderr(), "Warning: this is revision %d; the head is %d and not yet planned\n",
-				rev, resp.ChangeSet.GetHeadRevision())
 		}
 	}
 
-	resp, err := c.GetArtifact(ctx, &changesetv1.GetArtifactRequest{ChangeSetId: csID, Revision: rev})
+	resp, err := c.ChangeSet().GetArtifact(ctx, &changesetv1.GetArtifactRequest{ChangeSetId: csID, Revision: rev})
 	if err != nil {
 		if status.Code(err) == codes.FailedPrecondition {
 			return cmderr.WithHint(err, fmt.Sprintf("Run 'admiral changeset plan %s' to prepare the head.", csID))
@@ -154,7 +148,7 @@ func getRendered(cmd *cobra.Command, c changesetv1.ChangeSetAPIClient, csID stri
 		if err := unpack(ro.outputDir, files); err != nil {
 			return err
 		}
-		output.Writef(cmd.ErrOrStderr(), "Unpacked %s revision %d (%s) into %s\n",
+		output.Writef(cmd.ErrOrStderr(), "Unpacked %s revision %s (%s) into %s\n",
 			csID, rev, shortArtifact(resp.ArtifactDigest), ro.outputDir)
 		return nil
 	}
@@ -173,33 +167,32 @@ func getRendered(cmd *cobra.Command, c changesetv1.ChangeSetAPIClient, csID stri
 	return nil
 }
 
-// preparedRevision says why there is nothing to read, naming the command
-// that makes it.
-func preparedRevision(csID string, lp *changesetv1.Prepare) error {
-	plan := fmt.Sprintf("Run 'admiral changeset plan %s' to prepare the head.", csID)
-	switch lp.GetStatus() {
-	case changesetv1.PrepareStatus_PREPARED:
-		return nil
-	case changesetv1.PrepareStatus_PREPARE_STATUS_UNSPECIFIED:
-		return cmderr.WithHint(fmt.Errorf("%s has no prepared revision", csID), plan)
-	case changesetv1.PrepareStatus_QUEUED, changesetv1.PrepareStatus_RUNNING:
-		return cmderr.WithHint(fmt.Errorf("%s revision %d is %s, not yet prepared",
-			csID, lp.Revision, output.FormatEnumKebab(lp.Status)),
-			fmt.Sprintf("Run 'admiral changeset plan %s --if-revision %d' to wait for it.", csID, lp.Revision))
-	default:
-		return cmderr.WithHint(fmt.Errorf("%s revision %d was not prepared: it %s",
-			csID, lp.Revision, pastTense(lp.Status)), plan)
+// lastPlanned is the revision of the change set's newest run, warning when
+// the head has moved past it.
+func lastPlanned(cmd *cobra.Command, c sdkclient.AdmiralClient, csID string) (string, error) {
+	ctx := cmd.Context()
+	resp, err := c.ChangeSet().GetChangeSet(ctx, &changesetv1.GetChangeSetRequest{ChangeSetId: csID})
+	if err != nil {
+		return "", err
 	}
+	runID := resp.ChangeSet.GetLatestRunId()
+	if runID == "" {
+		return "", cmderr.WithHint(fmt.Errorf("%s has not been planned", csID),
+			fmt.Sprintf("Run 'admiral changeset plan %s' to prepare the head.", csID))
+	}
+	run, err := c.Run().GetRun(ctx, &runv1.GetRunRequest{RunId: runID})
+	if err != nil {
+		return "", err
+	}
+	rev := run.Run.GetRevisionId()
+	if head := resp.Head; head != nil && head.Id != rev {
+		output.Writef(cmd.ErrOrStderr(), "Warning: this is %s, last planned by %s; the head is revision %d and not yet planned\n",
+			rev, runID, head.Number)
+	}
+	return rev, nil
 }
 
-func pastTense(s changesetv1.PrepareStatus) string {
-	if s == changesetv1.PrepareStatus_SUPERSEDED {
-		return "was superseded"
-	}
-	return "failed"
-}
-
-func onlyComponent(comps []*renderedComponent, name, csID string, rev int32) ([]*renderedComponent, error) {
+func onlyComponent(comps []*renderedComponent, name, csID, rev string) ([]*renderedComponent, error) {
 	names := make([]string, 0, len(comps))
 	for _, c := range comps {
 		if c.name == name {
@@ -207,6 +200,6 @@ func onlyComponent(comps []*renderedComponent, name, csID string, rev int32) ([]
 		}
 		names = append(names, c.name)
 	}
-	return nil, fmt.Errorf("component %q is not in %s revision %d, which renders: %s",
+	return nil, fmt.Errorf("component %q is not in %s revision %s, which renders: %s",
 		name, csID, rev, strings.Join(names, ", "))
 }

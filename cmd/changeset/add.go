@@ -32,7 +32,7 @@ func newAddCmd(opts *client.Options) *cobra.Command {
 		Long: `Add a component from the registry, under a name unique in the environment.
 
 The name is reserved until the change set is discarded or the component is
-removed from it. A tag is resolved to its revision now; only the revision is
+removed from it. A tag is resolved to its version now; only the version is
 stored.`,
 		Example: `  admiral changeset add cs-7f2a1c9d0e3b users-db --from cloud-sql:v1.2.0
 
@@ -51,7 +51,7 @@ stored.`,
 			if err != nil {
 				return err
 			}
-			add := &changesetv1.AddComponent{Name: args[1], Source: src}
+			add := &changesetv1.AddComponent{Name: args[1], Version: src}
 			if valuesPath != "" {
 				tree, err := readValues(cmd, valuesPath)
 				if err != nil {
@@ -77,7 +77,7 @@ stored.`,
 }
 
 // registryRef reads NAME:TAG or NAME@DIGEST, the form the component
-// commands use. The namespace stays empty, which is the default one.
+// commands use.
 func registryRef(s string) (*changesetv1.RegistryRef, error) {
 	var name, ref string
 	var found bool
@@ -87,7 +87,7 @@ func registryRef(s string) (*changesetv1.RegistryRef, error) {
 		name, ref, found = strings.Cut(s, ":")
 	}
 	if !found || ref == "" {
-		return nil, cmderr.UsageHint("Pin a revision: --from cloud-sql:v1.2.0 or --from cloud-sql@sha256:<hex>.",
+		return nil, cmderr.UsageHint("Name a version: --from cloud-sql:v1.2.0 or --from cloud-sql@sha256:<hex>.",
 			"--from %q names no tag or digest", s)
 	}
 	if !manifest.ValidName(name) {

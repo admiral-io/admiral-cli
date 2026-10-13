@@ -44,13 +44,24 @@ func newDescribeCmd(opts *client.Options) *cobra.Command {
 			}
 			a := resp.Application
 
-			byApp, err := filter.Eq("application_id", id)
-			if err != nil {
-				return err
-			}
+			envs, envErr := c.Environment().ListEnvironments(ctx, &environmentv1.ListEnvironmentsRequest{ApplicationId: &id, PageSize: 100})
 
-			envs, envErr := c.Environment().ListEnvironments(ctx, &environmentv1.ListEnvironmentsRequest{Filter: byApp, PageSize: 100})
-			runs, runErr := c.Run().ListRuns(ctx, &runv1.ListRunsRequest{Filter: byApp, PageSize: 5})
+			// Runs are listed per environment, so the app's runs are those
+			// of its environments.
+			envNames := map[string]string{}
+			runs, runErr := &runv1.ListRunsResponse{}, envErr
+			if envErr == nil && len(envs.Environments) > 0 {
+				ids := make([]string, 0, len(envs.Environments))
+				for _, e := range envs.Environments {
+					ids = append(ids, e.Id)
+					envNames[e.Id] = e.Name
+				}
+				byEnv, err := filter.In("environment_id", ids)
+				if err != nil {
+					return err
+				}
+				runs, runErr = c.Run().ListRuns(ctx, &runv1.ListRunsRequest{Filter: byEnv, PageSize: 5})
+			}
 
 			d := output.NewDescribe()
 			d.Field("Name", a.Name)
@@ -75,9 +86,9 @@ func newDescribeCmd(opts *client.Options) *cobra.Command {
 			} else {
 				runRows := make([][]string, 0, len(runs.Runs))
 				for _, r := range runs.Runs {
-					runRows = append(runRows, []string{r.DisplayId, r.EnvironmentName, output.FormatEnum(r.Status), r.ChangeSetDisplayId, output.Truncate(r.ChangeSetTitle, 40), output.FormatAge(r.CreatedAt)})
+					runRows = append(runRows, []string{r.Id, envNames[r.EnvironmentId], output.FormatEnum(r.Status), output.OrEmpty(r.ChangeSetId), output.FormatAge(r.CreatedAt)})
 				}
-				d.Table("Recent Runs", []string{"ID", "Env", "Status", "Change Set", "Title", "Age"}, runRows)
+				d.Table("Recent Runs", []string{"ID", "Env", "Status", "Change Set", "Age"}, runRows)
 			}
 
 			if status.Code(envErr) == codes.PermissionDenied || status.Code(runErr) == codes.PermissionDenied {

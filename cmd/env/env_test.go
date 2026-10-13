@@ -2,8 +2,8 @@ package env
 
 import (
 	"bytes"
+	"context"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -14,7 +14,8 @@ import (
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/credentials"
-	"go.admiral.io/cli/internal/output"
+	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
+	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
 	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
 )
 
@@ -33,7 +34,7 @@ func run(t *testing.T, args ...string) (string, error) {
 	return out.String() + errOut.String(), err
 }
 
-const uuid = "550e8400-e29b-41d4-a716-446655440000"
+const envID = "env-3k9x2m7qpl0a"
 
 // Missing or extra positionals are usage errors (exit 2) with a hint to
 // --help; the full usage block is never printed.
@@ -107,11 +108,11 @@ func TestList_ScopeRules(t *testing.T) {
 	}
 }
 
-// A path, a --app-scoped name, or a bare UUID is accepted as the identity
+// A path, a --app-scoped name, or a bare id is accepted as the identity
 // and the command proceeds to client creation.
 func TestWellFormedTargetsAreAccepted(t *testing.T) {
 	for _, verb := range []string{"get", "describe", "delete"} {
-		for _, args := range [][]string{{verb, "shop/prod"}, {verb, "prod", "--app", "shop"}, {verb, uuid}} {
+		for _, args := range [][]string{{verb, "shop/prod"}, {verb, "prod", "--app", "shop"}, {verb, envID}} {
 			if verb == "delete" {
 				args = append(args, "--force") // a piped run cannot confirm
 			}
@@ -119,7 +120,7 @@ func TestWellFormedTargetsAreAccepted(t *testing.T) {
 			require.ErrorIs(t, err, credentials.ErrNotAuthenticated, "%v: should fail at client creation, not usage", args)
 		}
 	}
-	_, err := run(t, "update", uuid, "--description", "x")
+	_, err := run(t, "update", envID, "--description", "x")
 	require.ErrorIs(t, err, credentials.ErrNotAuthenticated)
 	_, err = run(t, "create", "shop/staging")
 	require.ErrorIs(t, err, credentials.ErrNotAuthenticated)
@@ -127,7 +128,7 @@ func TestWellFormedTargetsAreAccepted(t *testing.T) {
 
 func TestUpdate_RequiresAtLeastOneField(t *testing.T) {
 	_, err := run(t, "update", "shop/prod")
-	require.ErrorContains(t, err, "at least one of --name, --description, --label, --namespace or --create-namespaces")
+	require.ErrorContains(t, err, "at least one of --name, --description, --label, --agent, --namespace or --approvals")
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 }
 
@@ -147,91 +148,104 @@ func TestDeleteWithoutForceFailsBeforeNetwork(t *testing.T) {
 	require.EqualError(t, err, "--app cannot be combined with a path")
 }
 
-func TestKubernetesFlags(t *testing.T) {
+func TestTargetFlags(t *testing.T) {
 	for _, verb := range []string{"create", "update"} {
-		_, err := run(t, verb, "shop/prod", "--namespace", "Shop")
+		_, err := run(t, verb, "shop/prod", "--agent", "prod", "--namespace", "Shop")
 		require.EqualError(t, err, `invalid namespace "Shop": at most 63 lowercase letters, digits and hyphens`)
 		require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 
-		_, err = run(t, verb, "shop/prod", "--create-namespaces=maybe")
-		require.ErrorContains(t, err, `invalid argument "maybe"`)
+		_, err = run(t, verb, "shop/prod", "--agent", "a", "--agent", "b", "--namespace", "shop")
+		require.EqualError(t, err, "--namespace needs exactly one --agent, got 2")
+		require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
+
+		_, err = run(t, verb, "shop/prod", "--approvals", "-1")
+		require.EqualError(t, err, "--approvals cannot be negative")
 
 		for _, args := range [][]string{
-			{verb, "shop/prod", "--namespace", "shop-prod"},
-			{verb, "shop/prod", "--create-namespaces=false"},
-			{verb, "shop/prod", "--namespace", "shop", "--create-namespaces=true"},
+			{verb, "shop/prod", "--agent", "prod-cluster"},
+			{verb, "shop/prod", "--agent", "agt-3k9x2m7qpl0a", "--namespace", "shop-prod"},
+			{verb, "shop/prod", "--approvals", "2"},
 		} {
 			_, err = run(t, args...)
 			require.ErrorIs(t, err, credentials.ErrNotAuthenticated, "%v: should fail at client creation, not usage", args)
 		}
 	}
+	// Create has no assignment to put a namespace on without --agent.
+	_, err := run(t, "create", "shop/prod", "--namespace", "shop")
+	require.EqualError(t, err, "--namespace needs exactly one --agent, got 0")
 }
 
-// Only the flags given are written, and each names its mask path; an
-// empty namespace is a value, the default.
-func TestKubernetesFlagsApply(t *testing.T) {
-	parse := func(args ...string) (*environmentv1.KubernetesTarget, []string, error) {
+// Only the flags given are written, each names its mask path, and an agent
+// that stays keeps its assignment and settings. Agents are given as ids so
+// no lookup is made.
+func TestTargetFlagsApply(t *testing.T) {
+	const kept, added = "agt-aaaaaaaaaaaa", "agt-bbbbbbbbbbbb"
+	parse := func(e *environmentv1.Environment, args ...string) ([]string, error) {
 		cmd := &cobra.Command{Use: "x"}
-		var k kubernetesFlags
-		k.register(cmd, "")
+		var f targetFlags
+		f.register(cmd, "", "")
 		require.NoError(t, cmd.ParseFlags(args))
-		var kt *environmentv1.KubernetesTarget
-		paths, err := k.apply(cmd, &kt)
-		return kt, paths, err
+		require.NoError(t, f.check(cmd, false))
+		return f.apply(context.Background(), cmd, nil, e)
+	}
+	current := func() *environmentv1.Environment {
+		return &environmentv1.Environment{Agents: []*environmentv1.AgentAssignment{{
+			AgentId: kept, Id: "asg-111111111111",
+			Settings: &environmentv1.AgentAssignment_Kubernetes{Kubernetes: &environmentv1.KubernetesSettings{DefaultNamespace: "shop"}},
+		}}}
 	}
 
-	kt, paths, err := parse()
+	e := current()
+	paths, err := parse(e)
 	require.NoError(t, err)
-	require.Nil(t, kt, "no flag, no target: the server's defaults apply")
 	require.Empty(t, paths)
 
-	kt, paths, err = parse("--namespace", "shop-prod")
+	e = current()
+	paths, err = parse(e, "--agent", added, "--agent", kept, "--agent", added)
 	require.NoError(t, err)
-	require.Equal(t, "shop-prod", kt.Namespace)
-	require.Nil(t, kt.CreateNamespaces)
-	require.Equal(t, []string{"kubernetes.namespace"}, paths)
+	require.Equal(t, []string{"agents"}, paths)
+	require.Len(t, e.Agents, 2, "a repeated agent is assigned once")
+	require.Equal(t, added, e.Agents[0].AgentId)
+	require.Empty(t, e.Agents[0].Id, "a new assignment gets its id from the server")
+	require.Equal(t, "asg-111111111111", e.Agents[1].Id)
+	require.Equal(t, "shop", e.Agents[1].GetKubernetes().GetDefaultNamespace())
 
-	kt, paths, err = parse("--create-namespaces=false")
+	e = current()
+	paths, err = parse(e, "--namespace", "shop-prod", "--approvals", "2")
 	require.NoError(t, err)
-	require.NotNil(t, kt.CreateNamespaces)
-	require.False(t, *kt.CreateNamespaces)
-	require.Equal(t, []string{"kubernetes.create_namespaces"}, paths)
+	require.Equal(t, []string{"agents", "approval"}, paths)
+	require.Equal(t, "shop-prod", e.Agents[0].GetKubernetes().GetDefaultNamespace())
+	require.EqualValues(t, 2, e.Approval.RequiredApprovals)
 
-	kt, paths, err = parse("--namespace=", "--create-namespaces")
-	require.NoError(t, err)
-	require.Empty(t, kt.Namespace)
-	require.True(t, *kt.CreateNamespaces)
-	require.Equal(t, []string{"kubernetes.namespace", "kubernetes.create_namespaces"}, paths)
-
-	_, _, err = parse("--namespace", strings.Repeat("n", 64))
-	require.ErrorContains(t, err, "invalid namespace")
+	e = &environmentv1.Environment{}
+	_, err = parse(e, "--namespace", "shop")
+	require.EqualError(t, err, "--namespace sets the namespace of an environment's one agent; this one has 0")
 }
 
-func TestDescribeKubernetes(t *testing.T) {
+func TestDescribeEnv(t *testing.T) {
 	yes := true
-	render := func(kt *environmentv1.KubernetesTarget) string {
-		d := output.NewDescribe()
-		describeKubernetes(d, kt)
-		var b bytes.Buffer
-		require.NoError(t, d.Render(&b))
-		return b.String()
+	e := &environmentv1.Environment{
+		Name: "prod", Id: envID, Generation: 7,
+		Agents: []*environmentv1.AgentAssignment{{
+			AgentId: "agt-aaaaaaaaaaaa", Id: "asg-111111111111", ApplyProfile: "edit",
+			Settings: &environmentv1.AgentAssignment_Kubernetes{Kubernetes: &environmentv1.KubernetesSettings{DefaultNamespace: "shop-prod", Prune: &yes}},
+		}},
+		Approval: &environmentv1.ApprovalRule{RequiredApprovals: 2},
+		Hold:     &environmentv1.Hold{ChangeSetId: "cs-7q2k9m4x8p1c", HeldAt: timestamppb.New(time.Now().Add(-3 * time.Hour))},
 	}
-
-	out := render(&environmentv1.KubernetesTarget{Namespace: "shop-prod", CreateNamespaces: &yes})
-	require.Regexp(t, `Namespace:\s+shop-prod`, out)
-	require.Regexp(t, `Create Namespaces:\s+true`, out)
-	require.Regexp(t, `Capabilities:\s+<none reported>`, out)
-
-	out = render(&environmentv1.KubernetesTarget{Namespace: "shop-prod", Capabilities: &environmentv1.KubernetesCapabilities{
-		KubeVersion: "v1.31.2",
-		ApiVersions: []string{"v1", "apps/v1", "batch/v1", "batch/v1beta1", "monitoring.coreos.com/v1"},
-		ReportedAt:  timestamppb.New(time.Now().Add(-3 * time.Hour)),
-	}})
-	require.Regexp(t, `Version:\s+v1.31.2`, out)
-	require.Regexp(t, `API Groups:\s+4`, out, "core, apps, batch, monitoring.coreos.com")
-	require.Regexp(t, `Reported:\s+.*\(3h ago\)`, out)
-
-	require.Equal(t, "v1.31.2, 1 API groups, 3h ago", capabilitiesSummary(&environmentv1.KubernetesCapabilities{
-		KubeVersion: "v1.31.2", ApiVersions: []string{"v1"}, ReportedAt: timestamppb.New(time.Now().Add(-3 * time.Hour)),
-	}))
+	sec := envSections{
+		agentNames: map[string]string{"agt-aaaaaaaaaaaa": "prod-cluster"},
+		comps: []*environmentv1.EnvironmentComponent{{
+			Name: "api", Version: &changesetv1.VersionRef{Reference: "v1.2.0", Digest: "sha256:abc"},
+			LastApply: &environmentv1.LastApply{AppliedAt: timestamppb.New(time.Now().Add(-2 * time.Hour))},
+		}},
+	}
+	var b bytes.Buffer
+	require.NoError(t, describeEnv(e, &applicationv1.Application{Name: "shop"}, sec).Render(&b))
+	out := b.String()
+	require.Regexp(t, `Generation:\s+7`, out)
+	require.Regexp(t, `Hold:\s+held by cs-7q2k9m4x8p1c since 3h ago`, out)
+	require.Regexp(t, `prod-cluster\s+asg-111111111111\s+default\s+edit\s+shop-prod\s+<none>\s+true`, out)
+	require.Regexp(t, `Required Approvals:\s+2`, out)
+	require.Regexp(t, `api\s+<none>\s+v1.2.0\s+120m ago`, out)
 }

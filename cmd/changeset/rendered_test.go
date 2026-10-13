@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"go.admiral.io/cli/internal/cmderr"
-	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
 )
 
 type tarEntry struct {
@@ -103,14 +102,14 @@ metadata:
   name: worker
 `, b.String(), "a masked secret is printed as it arrived")
 
-	one, err := onlyComponent(comps, "worker", csID, 4)
+	one, err := onlyComponent(comps, "worker", csID, "4")
 	require.NoError(t, err)
 	b.Reset()
 	writeRendered(&b, one)
 	assert.NotContains(t, b.String(), "# component: api")
 	assert.Contains(t, b.String(), "# component: worker  namespace: jobs")
 
-	_, err = onlyComponent(comps, "web", csID, 4)
+	_, err = onlyComponent(comps, "web", csID, "4")
 	assert.EqualError(t, err, `component "web" is not in `+csID+` revision 4, which renders: api, worker`)
 }
 
@@ -227,19 +226,3 @@ func TestGetRenderedArguments(t *testing.T) {
 }
 
 // get never prepares: with nothing prepared it names the command that does.
-func TestPreparedRevision(t *testing.T) {
-	require.NoError(t, preparedRevision(csID, &changesetv1.Prepare{Revision: 2, Status: changesetv1.PrepareStatus_PREPARED}))
-
-	err := preparedRevision(csID, nil)
-	assert.EqualError(t, err, csID+" has no prepared revision")
-	assert.Equal(t, "Run 'admiral changeset plan "+csID+"' to prepare the head.", cmderr.Hint(err))
-	assert.Equal(t, cmderr.ExitError, cmderr.Code(err))
-
-	err = preparedRevision(csID, &changesetv1.Prepare{Revision: 2, Status: changesetv1.PrepareStatus_RUNNING})
-	assert.EqualError(t, err, csID+" revision 2 is running, not yet prepared")
-	assert.Contains(t, cmderr.Hint(err), "--if-revision 2")
-
-	err = preparedRevision(csID, &changesetv1.Prepare{Revision: 2, Status: changesetv1.PrepareStatus_FAILED})
-	assert.EqualError(t, err, csID+" revision 2 was not prepared: it failed")
-	assert.Contains(t, cmderr.Hint(err), "admiral changeset plan "+csID)
-}

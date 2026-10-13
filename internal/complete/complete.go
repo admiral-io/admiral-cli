@@ -17,7 +17,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"go.admiral.io/cli/internal/client"
-	"go.admiral.io/cli/internal/filter"
 	"go.admiral.io/cli/internal/resolve"
 	sdkclient "go.admiral.io/sdk/client"
 	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
@@ -177,7 +176,7 @@ func Refs(opts *client.Options) Func {
 			return withSuffix(out, ":"), noSpace(directive)
 		}
 		return withClient(cmd, opts, toComplete, func(ctx context.Context, c sdkclient.AdmiralClient) ([]Candidate, error) {
-			resp, err := c.Registry().GetComponent(ctx, &registryv1.GetComponentRequest{Name: name})
+			resp, err := c.Registry().GetComponent(ctx, &registryv1.GetComponentRequest{Component: name})
 			if err != nil {
 				return nil, err
 			}
@@ -268,16 +267,12 @@ func envsIn(ctx context.Context, c sdkclient.AdmiralClient, app string) ([]Candi
 	if err != nil {
 		return nil, err
 	}
-	byApp, err := filter.Eq("application_id", appID)
-	if err != nil {
-		return nil, err
-	}
 	var out []Candidate
 	err = paged(func(token string) (string, error) {
 		resp, err := c.Environment().ListEnvironments(ctx, &environmentv1.ListEnvironmentsRequest{
-			Filter:    byApp,
-			PageSize:  pageSize,
-			PageToken: token,
+			ApplicationId: &appID,
+			PageSize:      pageSize,
+			PageToken:     token,
 		})
 		if err != nil {
 			return "", err

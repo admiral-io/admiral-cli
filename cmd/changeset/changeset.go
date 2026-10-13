@@ -21,9 +21,10 @@ func NewChangeSetCmd(opts *client.Options) *ChangeSetCmd {
 		Short: "Propose changes to an environment's components",
 		Long: `Propose changes to an environment's components.
 
-A change set is a draft against one environment: add a component from the
-registry, move its pin, set or unset values, remove it. Each command cuts one
-immutable revision. 'plan' prepares a revision; nothing here applies.
+A change set is a proposal against one environment: add a component from
+the registry, change its version, set or unset values, remove it. Each
+command cuts one immutable revision. 'plan' starts a run that plans the
+head; approve and apply that run with 'admiral run'.
 
 Change sets are addressed by ID (cs-7f2a1c9d0e3b).`,
 		Aliases:       []string{"cs", "changesets"},

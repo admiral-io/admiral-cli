@@ -15,6 +15,7 @@ func newGetCmd(opts *client.Options) *cobra.Command {
 		Use:   "get <name>",
 		Short: "Get a component and its tags",
 		Example: `  admiral component get cloud-sql
+  admiral component get cmp-7q2k9m4x8p1c
 
   # The full object, tags with their digests
   admiral component get cloud-sql -o yaml`,
@@ -27,7 +28,7 @@ func newGetCmd(opts *client.Options) *cobra.Command {
 			}
 			defer c.Close() //nolint:errcheck
 
-			resp, err := c.Registry().GetComponent(cmd.Context(), &registryv1.GetComponentRequest{Name: args[0]})
+			resp, err := c.Registry().GetComponent(cmd.Context(), &registryv1.GetComponentRequest{Component: args[0]})
 			if err != nil {
 				return err
 			}

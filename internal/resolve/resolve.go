@@ -11,24 +11,34 @@ import (
 	"regexp"
 	"strings"
 
-	commonv1 "buf.build/gen/go/admiral/common/protocolbuffers/go/admiral/common/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/filter"
+	apikeyv1 "go.admiral.io/sdk/proto/admiral/api/apikey/v1"
 	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
 	credentialv1 "go.admiral.io/sdk/proto/admiral/api/credential/v1"
 	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
 	registryv1 "go.admiral.io/sdk/proto/admiral/api/registry/v1"
-	userv1 "go.admiral.io/sdk/proto/admiral/api/user/v1"
 )
 
-var uuidRE = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+var idRE = regexp.MustCompile(`^([a-z]+)-[0-9a-z]{12}$`)
 
-// IsUUID reports whether s is a canonical UUID and therefore a server ID
-// rather than a name.
-func IsUUID(s string) bool { return uuidRE.MatchString(s) }
+// IsID reports whether s is a server id of the type prefix names, such as
+// `env-3k9x2m7qpl0a` for "env", rather than a name.
+func IsID(prefix, s string) bool {
+	m := idRE.FindStringSubmatch(s)
+	return m != nil && m[1] == prefix
+}
+
+// prefixOf is the id prefix of each kind byName resolves.
+var prefixOf = map[string]string{
+	"application": "app",
+	"environment": "env",
+	"credential":  "cred",
+	"API key":     "key",
+}
 
 // NotFoundError is returned when a name matches nothing in its scope.
 type NotFoundError struct {
@@ -89,11 +99,11 @@ func App(ctx context.Context, c applicationv1.ApplicationAPIClient, nameOrID str
 	)
 }
 
-// Environment resolves an environment name or ID. A UUID needs no
+// Environment resolves an environment name or ID. An ID needs no
 // application; a name is looked up inside app (itself a name or ID). The
 // caller has already split an app/env path with flags.EnvTarget.
 func Environment(ctx context.Context, envs environmentv1.EnvironmentAPIClient, apps applicationv1.ApplicationAPIClient, app, nameOrID string) (string, error) {
-	if IsUUID(nameOrID) {
+	if IsID("env", nameOrID) {
 		return nameOrID, nil
 	}
 	if nameOrID == "" {
@@ -106,14 +116,10 @@ func Environment(ctx context.Context, envs environmentv1.EnvironmentAPIClient, a
 	if err != nil {
 		return "", err
 	}
-	scopeFilter, err := filter.Eq("application_id", appID)
-	if err != nil {
-		return "", err
-	}
 	return byName(ctx, "environment", nameOrID,
-		fmt.Sprintf("in application %q", app), "env list --app "+app, scopeFilter,
+		fmt.Sprintf("in application %q", app), "env list --app "+app, "",
 		func(ctx context.Context, f string) ([]*environmentv1.Environment, error) {
-			resp, err := envs.ListEnvironments(ctx, &environmentv1.ListEnvironmentsRequest{Filter: f})
+			resp, err := envs.ListEnvironments(ctx, &environmentv1.ListEnvironmentsRequest{ApplicationId: &appID, Filter: f})
 			if err != nil {
 				return nil, err
 			}
@@ -140,17 +146,17 @@ func Credential(ctx context.Context, c credentialv1.CredentialAPIClient, nameOrI
 }
 
 // PersonalAccessToken resolves a personal API key name or ID.
-func PersonalAccessToken(ctx context.Context, c userv1.UserAPIClient, nameOrID string) (string, error) {
+func PersonalAccessToken(ctx context.Context, c apikeyv1.ApiKeyAPIClient, nameOrID string) (string, error) {
 	return byName(ctx, "API key", nameOrID, "", "auth key list", "",
-		func(ctx context.Context, f string) ([]*commonv1.ApiKey, error) {
-			resp, err := c.ListApiKeys(ctx, &userv1.ListApiKeysRequest{Filter: f})
+		func(ctx context.Context, f string) ([]*apikeyv1.ApiKey, error) {
+			resp, err := c.ListApiKeys(ctx, &apikeyv1.ListApiKeysRequest{Filter: f})
 			if err != nil {
 				return nil, err
 			}
 			return resp.ApiKeys, nil
 		},
-		func(t *commonv1.ApiKey) string { return t.Name },
-		func(t *commonv1.ApiKey) string { return t.Id },
+		func(t *apikeyv1.ApiKey) string { return t.Name },
+		func(t *apikeyv1.ApiKey) string { return t.Id },
 	)
 }
 
@@ -165,7 +171,7 @@ func byName[T any](
 	nameOf func(T) string,
 	idOf func(T) string,
 ) (string, error) {
-	if IsUUID(nameOrID) {
+	if IsID(prefixOf[kind], nameOrID) {
 		return nameOrID, nil
 	}
 	if nameOrID == "" {
@@ -200,13 +206,13 @@ func byName[T any](
 // Component resolves a registry component name or ID. Names are unique in
 // the registry, so this is one read rather than a filtered list.
 func Component(ctx context.Context, c registryv1.RegistryAPIClient, nameOrID string) (string, error) {
-	if IsUUID(nameOrID) {
+	if IsID("cmp", nameOrID) {
 		return nameOrID, nil
 	}
 	if nameOrID == "" {
 		return "", cmderr.Usage("no component specified")
 	}
-	resp, err := c.GetComponent(ctx, &registryv1.GetComponentRequest{Name: nameOrID})
+	resp, err := c.GetComponent(ctx, &registryv1.GetComponentRequest{Component: nameOrID})
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			return "", &NotFoundError{Kind: "component", Name: nameOrID, ListCommand: "component list"}

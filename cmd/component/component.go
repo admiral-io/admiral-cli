@@ -23,11 +23,12 @@ func NewComponentCmd(opts *client.Options) *ComponentCmd {
 		Long: `Publish and inspect components in the registry.
 
 A component here is a registry entry: a Terraform module, a Helm chart or a
-set of manifests, published as an immutable revision identified by the
-digest of its bytes. Tags name revisions the way image tags name digests;
+set of manifests, published as an immutable version identified by the
+digest of its bytes. Tags name versions the way image tags name digests;
 a semver tag (v1.2.0) never moves once set, a floating one (latest) may.
 
-References: NAME:TAG (cloud-sql:v1.2.0) or NAME@DIGEST (cloud-sql@sha256:...).`,
+References: NAME:TAG (cloud-sql:v1.2.0), NAME@DIGEST (cloud-sql@sha256:...)
+or NAME@ID (cloud-sql@ver-7q2k9m4x8p1c).`,
 		Aliases:       []string{"components"},
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -44,7 +45,7 @@ References: NAME:TAG (cloud-sql:v1.2.0) or NAME@DIGEST (cloud-sql@sha256:...).`,
 		newStatusCmd(opts, deprecateVerb),
 		newStatusCmd(opts, revokeVerb),
 		newStatusCmd(opts, restoreVerb),
-		newRevisionCmd(opts),
+		newVersionCmd(opts),
 	)
 
 	root.Cmd = cmd

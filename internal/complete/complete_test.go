@@ -42,25 +42,25 @@ func (m *registryClient) ListComponents(_ context.Context, _ *registryv1.ListCom
 }
 
 func (m *registryClient) GetComponent(_ context.Context, req *registryv1.GetComponentRequest, _ ...grpc.CallOption) (*registryv1.GetComponentResponse, error) {
-	m.got = req.Name
+	m.got = req.Component
 	for _, c := range m.components {
-		if c.Name == req.Name {
+		if c.Name == req.Component {
 			return &registryv1.GetComponentResponse{Component: c}, nil
 		}
 	}
 	return nil, errors.New("not found")
 }
 
-// envClient serves one page of environments and records the filter it
-// was asked for, so a test can check the scope.
+// envClient serves one page of environments and records the application
+// it was asked for, so a test can check the scope.
 type envClient struct {
 	environmentv1.EnvironmentAPIClient
-	envs   []*environmentv1.Environment
-	filter string
+	envs  []*environmentv1.Environment
+	appID string
 }
 
 func (m *envClient) ListEnvironments(_ context.Context, req *environmentv1.ListEnvironmentsRequest, _ ...grpc.CallOption) (*environmentv1.ListEnvironmentsResponse, error) {
-	m.filter = req.Filter
+	m.appID = req.GetApplicationId()
 	return &environmentv1.ListEnvironmentsResponse{Environments: m.envs}, nil
 }
 
@@ -213,7 +213,7 @@ func TestEnvs_BareNameCompletesInsideAppFlag(t *testing.T) {
 	got, directive := Envs(&client.Options{})(scopedCmd(t, "shop"), nil, "pr")
 	require.Equal(t, []string{"prod\tProduction"}, got)
 	require.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
-	require.Equal(t, "field['application_id'] = 'app-1'", envs.filter)
+	require.Equal(t, "app-1", envs.appID)
 }
 
 // With no scope on the line, the only thing to offer is the first segment
@@ -232,7 +232,7 @@ func TestEnvs_PathCompletesSecondSegment(t *testing.T) {
 	got, directive := Envs(&client.Options{})(scopedCmd(t, ""), nil, "shop/st")
 	require.Equal(t, []string{"shop/staging"}, got)
 	require.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
-	require.Equal(t, "field['application_id'] = 'app-1'", envs.filter)
+	require.Equal(t, "app-1", envs.appID)
 
 	got, _ = Envs(&client.Options{})(scopedCmd(t, ""), nil, "shop/")
 	require.Equal(t, []string{"shop/prod\tProduction", "shop/staging"}, got)

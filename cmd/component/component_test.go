@@ -35,10 +35,11 @@ func TestPositionalUsageErrors(t *testing.T) {
 		{[]string{"list", "extra-arg"}, `unknown argument "extra-arg"`},
 		{[]string{"publish", "a", "b"}, `accepts at most 1 arg(s), received 2`},
 		{[]string{"tag", "--digest", "sha256:ab"}, "missing argument: tag <name>:<tag> --digest <digest>"},
-		{[]string{"deprecate", "--digest", "sha256:ab", "--reason", "x"}, "missing argument: deprecate <name> --digest <digest> --reason <text>"},
+		{[]string{"deprecate", "--reason", "x"}, "missing argument: deprecate <name>[:<tag>|@<digest>] --reason <text>"},
+		{[]string{"revoke", "--reason", "x"}, "missing argument: revoke <name>:<tag>|<name>@<digest> --reason <text>"},
 		{[]string{"untag"}, "missing argument: untag <name>:<tag>"},
-		{[]string{"revision", "list"}, "missing argument: list <name>"},
-		{[]string{"revision", "get"}, "missing argument: get <name>:<tag> | <name>@<digest>"},
+		{[]string{"version", "list"}, "missing argument: list <name>"},
+		{[]string{"version", "get"}, "missing argument: get <name>:<tag> | <name>@<digest|id>"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.args[0], func(t *testing.T) {
@@ -108,15 +109,44 @@ func TestSplitRef(t *testing.T) {
 	require.EqualError(t, err, `"cloud-sql" names no tag; use <name>:<tag>`)
 	assert.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 
-	_, err = run(t, "revision", "get", "cloud-sql")
-	require.EqualError(t, err, `"cloud-sql" names no revision; use <name>:<tag> or <name>@<digest>`)
+	_, err = run(t, "version", "get", "cloud-sql")
+	require.EqualError(t, err, `"cloud-sql" names no version; use <name>:<tag> or <name>@<digest>`)
 	assert.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 
 	// --status is an enum flag: the flag itself refuses the value, before
 	// RunE, and completes from the same list.
-	_, err = run(t, "revision", "list", "cloud-sql", "--status", "retired")
+	_, err = run(t, "version", "list", "cloud-sql", "--status", "retired")
 	require.ErrorContains(t, err, "must be one of published, deprecated")
 	assert.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
+}
+
+// A status verb reads its target off the argument: a bare name is the
+// component, a reference one version. What cannot apply is refused before
+// any network.
+func TestStatusVerbsRefuseLocallyWhatCannotApply(t *testing.T) {
+	cases := []struct {
+		args []string
+		want string
+	}{
+		{[]string{"revoke", "cloud-sql", "--reason", "x"}, `"cloud-sql" names no version; use <name>:<tag> or <name>@<digest>`},
+		{[]string{"deprecate", "cloud-sql"}, "--reason is required"},
+		{[]string{"deprecate", "cloud-sql:v1.2.0"}, "--reason is required"},
+		{[]string{"restore", "cloud-sql@sha256:ab"}, "--reason is required"},
+		{[]string{"deprecate", "cloud-sql:v1.2.0", "--reason", "x", "--successor", "cloud-sql-v2"}, "--successor applies to a component, not a version"},
+	}
+	for _, tc := range cases {
+		_, err := run(t, tc.args...)
+		require.EqualError(t, err, tc.want, tc.args)
+		assert.Equal(t, cmderr.ExitUsage, cmderr.Code(err), tc.args)
+	}
+
+	// Restoring a component needs no reason; it proceeds past the checks.
+	_, err := run(t, "restore", "cloud-sql", "--force")
+	require.Error(t, err)
+	assert.NotEqual(t, cmderr.ExitUsage, cmderr.Code(err))
+
+	_, err = run(t, "revoke", "cloud-sql:v1", "--reason", "x", "--successor", "y")
+	require.ErrorContains(t, err, "unknown flag: --successor", "only deprecate names a successor")
 }
 
 func TestFormatSize_LargeValues(t *testing.T) {

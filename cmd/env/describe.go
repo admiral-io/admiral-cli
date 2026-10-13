@@ -3,7 +3,6 @@ package env
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -20,11 +19,11 @@ import (
 	"go.admiral.io/cli/internal/output"
 	"go.admiral.io/cli/internal/resolve"
 	sdkclient "go.admiral.io/sdk/client"
+	agentv1 "go.admiral.io/sdk/proto/admiral/api/agent/v1"
 	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
 	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
 	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
 	runv1 "go.admiral.io/sdk/proto/admiral/api/run/v1"
-	variablev1 "go.admiral.io/sdk/proto/admiral/api/variable/v1"
 )
 
 const recentRunsLimit = 5
@@ -35,13 +34,10 @@ func newDescribeCmd(opts *client.Options) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "describe <name>",
 		Short: "Show everything about an environment",
-		Long: `Render the operator view of an environment: identity, health, every
-component with its module and last run, open change sets, variables and
-recent runs. A section the active credential cannot read is shown as
-unavailable.
-
-Environment health is the worst of its components, in the order Healthy,
-Progressing, Degraded, Unknown.
+		Long: `Render the operator view of an environment: identity, the agents it
+deploys through, what an apply needs, any hold, every component with its
+version and last apply, open change sets and recent runs. A section the
+active credential cannot read is shown as unavailable.
 
 describe is a human view. Use 'env get -o json' for the raw record.`,
 		Example: `  # By path
@@ -51,7 +47,7 @@ describe is a human view. Use 'env get -o json' for the raw record.`,
   admiral env describe prod --app shop
 
   # By ID
-  admiral env describe <uuid>`,
+  admiral env describe env-3k9x2m7qpl0a`,
 		Aliases:           []string{"desc"},
 		Args:              flags.ExactArgs(1),
 		ValidArgsFunction: complete.First(complete.Envs(opts)),
@@ -92,14 +88,15 @@ describe is a human view. Use 'env get -o json' for the raw record.`,
 			// sections below are assembled from further reads. A section
 			// whose read fails (missing scope, endpoint not served) is
 			// rendered as unavailable rather than failing the describe.
-			// The four reads are independent. Every section keeps its own
+			// The reads are independent. Every section keeps its own
 			// error, so nothing here returns one and the group is only a way
 			// to wait.
 			var sec envSections
 			g, gctx := errgroup.WithContext(ctx)
 			g.Go(func() error {
 				compResp, err := c.Environment().ListEnvironmentComponents(gctx, &environmentv1.ListEnvironmentComponentsRequest{
-					EnvironmentId: envID,
+					EnvironmentId: &envID,
+					PageSize:      100,
 				})
 				if err != nil {
 					sec.compsErr = err
@@ -109,7 +106,7 @@ describe is a human view. Use 'env get -o json' for the raw record.`,
 				return nil
 			})
 			g.Go(func() error {
-				sec.runs, sec.runsErr = listRecentRuns(gctx, c, e.ApplicationId, envID)
+				sec.runs, sec.runsErr = listRecentRuns(gctx, c, envID)
 				return nil
 			})
 			g.Go(func() error {
@@ -117,7 +114,7 @@ describe is a human view. Use 'env get -o json' for the raw record.`,
 				return nil
 			})
 			g.Go(func() error {
-				sec.vars, sec.varsErr = listAllVariables(gctx, c, envID)
+				sec.agentNames = agentNames(gctx, c, e.Agents)
 				return nil
 			})
 			_ = g.Wait() // nothing returns an error
@@ -136,19 +133,18 @@ describe is a human view. Use 'env get -o json' for the raw record.`,
 // record. Each read carries its own error so a failed section renders as
 // unavailable without hiding the others.
 type envSections struct {
-	comps     []*environmentv1.EnvironmentComponent
-	compsErr  error
-	runs      []*runv1.Run
-	runsErr   error
-	openCS    []*changesetv1.ChangeSet
-	openCSErr error
-	vars      []*variablev1.Variable
-	varsErr   error
+	comps      []*environmentv1.EnvironmentComponent
+	compsErr   error
+	runs       []*runv1.Run
+	runsErr    error
+	openCS     []*changesetv1.ChangeSet
+	openCSErr  error
+	agentNames map[string]string
 }
 
 // permissionDenied reports whether any section read was refused for scope.
 func (s envSections) permissionDenied() bool {
-	for _, err := range []error{s.compsErr, s.runsErr, s.openCSErr, s.varsErr} {
+	for _, err := range []error{s.compsErr, s.runsErr, s.openCSErr} {
 		if status.Code(err) == codes.PermissionDenied {
 			return true
 		}
@@ -156,37 +152,56 @@ func (s envSections) permissionDenied() bool {
 	return false
 }
 
-// describeEnv assembles the §2.5 operator view from the pieces describe
-// fetched. Sections the server does not yet report (agent presence,
-// conditions, per-component health messages, metrics) are left out rather
-// than faked; see SERVER_FOLLOWUPS.md.
+// describeEnv assembles the operator view from the pieces describe fetched.
 func describeEnv(e *environmentv1.Environment, app *applicationv1.Application, sec envSections) *output.Describe {
-	comps, openCS, runs, vars := sec.comps, sec.openCS, sec.runs, sec.vars
+	comps, openCS, runs := sec.comps, sec.openCS, sec.runs
 	d := output.NewDescribe()
 	d.Field("Name", e.Name)
 	d.Field("Application", app.Name)
 	d.Field("ID", e.Id)
 	d.Field("Description", e.Description)
 	d.Fields("Labels", output.LabelLines(e.Labels))
-	if sec.compsErr != nil {
-		d.Field("Health", unavailable)
-	} else {
-		d.Field("Health", envHealth(comps))
-	}
-	d.Field("Pending Changes", strconv.FormatBool(e.HasPendingChanges))
+	d.Field("Generation", strconv.FormatInt(e.Generation, 10))
+	d.Field("Hold", holdLine(e.Hold))
+	d.Field("Last Apply", lastApplyLine(e.LastApply))
 	switch {
 	case sec.runsErr != nil:
 		d.Field("Last Run", unavailable)
 	case len(runs) > 0:
 		r := runs[0]
-		d.Field("Last Run", fmt.Sprintf("%s %s %s ago", runDisplay(r), output.FormatEnum(r.Status), output.FormatAge(r.CreatedAt)))
+		d.Field("Last Run", fmt.Sprintf("%s %s %s ago", r.Id, output.FormatEnum(r.Status), output.FormatAge(r.CreatedAt)))
 	default:
 		d.Field("Last Run", "")
 	}
 	d.Field("Created", output.FormatDescribeTime(e.CreatedAt))
 	d.Field("Created By", output.FormatActor(e.CreatedBy))
 
-	describeKubernetes(d, e.Kubernetes)
+	d.Section("Agents", func(b *output.Block) {
+		if len(e.Agents) == 0 {
+			b.Field("Count", "0")
+			return
+		}
+		rows := make([][]string, 0, len(e.Agents))
+		for _, a := range e.Agents {
+			name := sec.agentNames[a.AgentId]
+			if name == "" {
+				name = a.AgentId
+			}
+			k := a.GetKubernetes()
+			rows = append(rows, []string{name, a.Id, profile(a.PlanProfile), profile(a.ApplyProfile),
+				k.GetDefaultNamespace(), optionalBool(k.CreateNamespaces), optionalBool(k.Prune)})
+		}
+		b.Table([]string{"Agent", "Assignment", "Plan Profile", "Apply Profile", "Namespace", "Create Namespaces", "Prune"}, rows)
+	})
+
+	d.Section("Approval", func(b *output.Block) {
+		b.Field("Required Approvals", approvals(e))
+		groups := make([]string, 0, len(e.GetApproval().GetGroups()))
+		for _, g := range e.GetApproval().GetGroups() {
+			groups = append(groups, fmt.Sprintf("%s: %d", g.GroupId, g.Approvals))
+		}
+		b.Fields("Groups", groups)
+	})
 
 	if sec.compsErr != nil {
 		d.Unavailable("Components", cmderr.Format(sec.compsErr))
@@ -196,39 +211,15 @@ func describeEnv(e *environmentv1.Environment, app *applicationv1.Application, s
 				b.Field("Count", "0")
 				return
 			}
+			rows := make([][]string, 0, len(comps))
 			for _, c := range comps {
-				b.Block(c.Name, func(b *output.Block) {
-					b.Field("Kind", output.FormatEnumKebab(c.Kind))
-					b.Field("Ref", c.Ref)
-					st := output.FormatEnum(c.LastRevisionStatus)
-					if c.LastDeployedAt != nil {
-						st = fmt.Sprintf("%s (%s ago)", st, output.FormatAge(c.LastDeployedAt))
-					}
-					b.Field("Status", st)
-					b.Field("Health", componentHealth(c))
-					b.Field("Last Revision", c.LastRevisionId)
-				})
-			}
-		})
-	}
-
-	if sec.varsErr != nil {
-		d.Unavailable("Variables", cmderr.Format(sec.varsErr))
-	} else {
-		d.Section("Variables", func(b *output.Block) {
-			if len(vars) == 0 {
-				b.Field("Count", "0")
-				return
-			}
-			rows := make([][]string, 0, len(vars))
-			for _, v := range vars {
-				value := v.Value
-				if v.Sensitive {
-					value = "<redacted>"
+				applied := ""
+				if c.LastApply != nil {
+					applied = output.FormatAge(c.LastApply.AppliedAt) + " ago"
 				}
-				rows = append(rows, []string{v.Key, output.FormatEnumKebab(v.Type), output.FormatEnumKebab(v.Source), strconv.FormatBool(v.Sensitive), output.Truncate(value, 60)})
+				rows = append(rows, []string{c.Name, output.FormatEnumKebab(c.Kind), versionDisplay(c.Version), applied})
 			}
-			b.Table([]string{"Key", "Type", "Source", "Sensitive", "Value"}, rows)
+			b.Table([]string{"Name", "Kind", "Version", "Applied"}, rows)
 		})
 	}
 
@@ -254,9 +245,9 @@ func describeEnv(e *environmentv1.Environment, app *applicationv1.Application, s
 	} else {
 		rows := make([][]string, 0, len(runs))
 		for _, r := range runs {
-			rows = append(rows, []string{runDisplay(r), output.FormatEnum(r.Status), changeSetDisplay(r), output.FormatActor(r.TriggeredBy), output.FormatAge(r.CreatedAt)})
+			rows = append(rows, []string{r.Id, output.FormatEnum(r.Status), r.ChangeSetId, output.FormatActor(r.CreatedBy), output.FormatAge(r.CreatedAt)})
 		}
-		d.Table("Recent Runs", []string{"ID", "Status", "Change Set", "Triggered By", "Age"}, rows)
+		d.Table("Recent Runs", []string{"ID", "Status", "Change Set", "Created By", "Age"}, rows)
 	}
 
 	if sec.permissionDenied() {
@@ -268,89 +259,60 @@ func describeEnv(e *environmentv1.Environment, app *applicationv1.Application, s
 // unavailable marks a top-block field whose backing read failed.
 const unavailable = "<unavailable>"
 
-// healthRank orders health words from best to worst so the environment's
-// health can be the worst of its components (argocd's rule).
-var healthRank = map[string]int{"Healthy": 0, "Progressing": 1, "Degraded": 2, "Unknown": 3}
-
-// componentHealth derives a health word from the component's last revision
-// status until the server reports health directly.
-func componentHealth(c *environmentv1.EnvironmentComponent) string {
-	switch c.LastRevisionStatus {
-	case runv1.RevisionStatus_REVISION_STATUS_SUCCEEDED:
-		return "Healthy"
-	case runv1.RevisionStatus_REVISION_STATUS_PENDING, runv1.RevisionStatus_REVISION_STATUS_QUEUED,
-		runv1.RevisionStatus_REVISION_STATUS_PLANNING, runv1.RevisionStatus_REVISION_STATUS_PLANNED,
-		runv1.RevisionStatus_REVISION_STATUS_APPLYING, runv1.RevisionStatus_REVISION_STATUS_DEFERRED:
-		return "Progressing"
-	case runv1.RevisionStatus_REVISION_STATUS_FAILED, runv1.RevisionStatus_REVISION_STATUS_BLOCKED:
-		return "Degraded"
-	default:
-		return "Unknown"
+func holdLine(h *environmentv1.Hold) string {
+	if h == nil {
+		return ""
 	}
+	return fmt.Sprintf("held by %s since %s ago", h.ChangeSetId, output.FormatAge(h.HeldAt))
 }
 
-// envHealth is the worst component health, naming the culprits.
-func envHealth(comps []*environmentv1.EnvironmentComponent) string {
-	if len(comps) == 0 {
-		return "Unknown (no components)"
+func lastApplyLine(l *environmentv1.LastApply) string {
+	if l == nil {
+		return ""
 	}
-	worst := "Healthy"
-	var culprits []string
-	for _, c := range comps {
-		h := componentHealth(c)
-		if healthRank[h] > healthRank[worst] {
-			worst, culprits = h, []string{c.Name}
-		} else if h == worst && h != "Healthy" {
-			culprits = append(culprits, c.Name)
+	return fmt.Sprintf("%s %s %s ago", l.ChangeSetId, l.RevisionId, output.FormatAge(l.AppliedAt))
+}
+
+// versionDisplay is the tag or digest the version was referenced by.
+func versionDisplay(v *changesetv1.VersionRef) string {
+	if v == nil {
+		return ""
+	}
+	if v.Reference != "" && !strings.HasPrefix(v.Reference, "sha256:") {
+		return v.Reference
+	}
+	return output.Truncate(v.Digest, 19)
+}
+
+func profile(p string) string {
+	if p == "" {
+		return "default"
+	}
+	return p
+}
+
+func optionalBool(b *bool) string {
+	if b == nil {
+		return ""
+	}
+	return strconv.FormatBool(*b)
+}
+
+// agentNames reads each assigned agent for its name. An agent the caller
+// cannot read is shown by id.
+func agentNames(ctx context.Context, c sdkclient.AdmiralClient, assigned []*environmentv1.AgentAssignment) map[string]string {
+	names := make(map[string]string, len(assigned))
+	for _, a := range assigned {
+		resp, err := c.Agent().GetAgent(ctx, &agentv1.GetAgentRequest{AgentId: a.AgentId})
+		if err == nil {
+			names[a.AgentId] = resp.Agent.GetName()
 		}
 	}
-	if len(culprits) == 0 {
-		return worst
-	}
-	sort.Strings(culprits)
-	return fmt.Sprintf("%s (%s)", worst, joinMax(culprits, 3))
+	return names
 }
 
-func joinMax(items []string, n int) string {
-	if len(items) <= n {
-		return strings.Join(items, ", ")
-	}
-	return strings.Join(items[:n], ", ") + fmt.Sprintf(", +%d", len(items)-n)
-}
-
-func runDisplay(r *runv1.Run) string {
-	if r.DisplayId != "" {
-		return r.DisplayId
-	}
-	return truncateUUID(r.Id)
-}
-
-func changeSetDisplay(r *runv1.Run) string {
-	if r.ChangeSetDisplayId != "" {
-		return r.ChangeSetDisplayId
-	}
-	if r.ChangeSetId != "" {
-		return truncateUUID(r.ChangeSetId)
-	}
-	return ""
-}
-
-// scopeFilter builds the application + environment predicate shared by the
-// describe sub-queries.
-func scopeFilter(appID, envID string) (string, error) {
-	byApp, err := filter.Eq("application_id", appID)
-	if err != nil {
-		return "", err
-	}
-	byEnv, err := filter.Eq("environment_id", envID)
-	if err != nil {
-		return "", err
-	}
-	return filter.And(byApp, byEnv), nil
-}
-
-func listRecentRuns(ctx context.Context, c sdkclient.AdmiralClient, appID, envID string) ([]*runv1.Run, error) {
-	f, err := scopeFilter(appID, envID)
+func listRecentRuns(ctx context.Context, c sdkclient.AdmiralClient, envID string) ([]*runv1.Run, error) {
+	f, err := filter.Eq("environment_id", envID)
 	if err != nil {
 		return nil, err
 	}
@@ -365,43 +327,17 @@ func listRecentRuns(ctx context.Context, c sdkclient.AdmiralClient, appID, envID
 }
 
 func listOpenChangeSets(ctx context.Context, c sdkclient.AdmiralClient, envID string) ([]*changesetv1.ChangeSet, error) {
+	f, err := filter.Eq("status", changesetv1.ChangeSet_STATUS_OPEN.String())
+	if err != nil {
+		return nil, err
+	}
 	resp, err := c.ChangeSet().ListChangeSets(ctx, &changesetv1.ListChangeSetsRequest{
 		EnvironmentId: envID,
-		Status:        changesetv1.ChangeSetStatus_DRAFT,
+		Filter:        f,
 		PageSize:      50,
 	})
 	if err != nil {
 		return nil, err
 	}
 	return resp.ChangeSets, nil
-}
-
-func listAllVariables(ctx context.Context, c sdkclient.AdmiralClient, envID string) ([]*variablev1.Variable, error) {
-	var all []*variablev1.Variable
-	pageToken := ""
-	for {
-		resp, err := c.Environment().ListEnvironmentVariables(ctx, &environmentv1.ListEnvironmentVariablesRequest{
-			EnvironmentId: envID,
-			PageSize:      100,
-			PageToken:     pageToken,
-		})
-		if err != nil {
-			return nil, err
-		}
-		all = append(all, resp.Variables...)
-		if resp.NextPageToken == "" {
-			break
-		}
-		pageToken = resp.NextPageToken
-	}
-	// Sort by key so describe output is stable + scannable across pages.
-	sort.Slice(all, func(i, j int) bool { return all[i].Key < all[j].Key })
-	return all, nil
-}
-
-func truncateUUID(id string) string {
-	if len(id) >= 8 {
-		return id[:8]
-	}
-	return id
 }

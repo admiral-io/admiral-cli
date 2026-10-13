@@ -35,8 +35,8 @@ func run(t *testing.T, args ...string) (string, error) {
 }
 
 const (
-	csID = "cs-7f2a1c9d0e3b"
-	uuid = "550e8400-e29b-41d4-a716-446655440000"
+	csID  = "cs-7f2a1c9d0e3b"
+	envID = "env-3k9x2m7qpl0a"
 )
 
 func requireUsage(t *testing.T, err error, contains string) {
@@ -75,7 +75,7 @@ func TestPositionalUsageErrors(t *testing.T) {
 // A change set is addressed by its cs- ID only; anything else is refused
 // before any sign-in.
 func TestChangeSetIDIsCheckedBeforeTheNetwork(t *testing.T) {
-	for _, bad := range []string{"cs-7F2A1C9D0E3B", "cs-7f2a1", "7f2a1c9d0e3b", uuid} {
+	for _, bad := range []string{"cs-7F2A1C9D0E3B", "cs-7f2a1", "7f2a1c9d0e3b", envID} {
 		_, err := run(t, "get", bad)
 		requireUsage(t, err, `invalid change set "`+bad+`"`)
 		require.Contains(t, cmderr.Hint(err), "changeset list --env")
@@ -97,7 +97,7 @@ func TestCreate_NeedsAnEnvironmentPath(t *testing.T) {
 	_, err = run(t, "create", "shop/")
 	requireUsage(t, err, `invalid environment "shop/": expected app/env`)
 
-	for _, target := range []string{"shop/prod", uuid} {
+	for _, target := range []string{"shop/prod", envID} {
 		_, err = run(t, "create", target, "--title", "bump api")
 		requireAccepted(t, err, "create", target)
 	}
@@ -135,11 +135,11 @@ func TestList_RequiresAnEnvironmentPath(t *testing.T) {
 	requireUsage(t, err, "no application specified")
 
 	_, err = run(t, "list", "--env", "shop/prod", "--status", "merged")
-	requireUsage(t, err, "must be one of draft, discarded")
+	requireUsage(t, err, "must be one of open, applied, closed")
 
 	for _, args := range [][]string{
 		{"list", "--env", "shop/prod"},
-		{"list", "--env", uuid, "--status", "draft"},
+		{"list", "--env", envID, "--status", "open"},
 	} {
 		_, err = run(t, args...)
 		requireAccepted(t, err, args...)
@@ -168,12 +168,12 @@ func keys(segs []*changesetv1.PathSegment) []string {
 }
 
 // A --set value reads as a YAML scalar, as helm --set does; --set-string
-// keeps the characters; null is SetNull, never the string "null".
+// keeps the characters; null is the JSON null, never the string "null".
 func TestSetEdit_ReadsValuesLikeHelm(t *testing.T) {
 	cases := []struct {
 		raw         string
 		forceString bool
-		want        string // value_json; "" means SetNull
+		want        string // value_json
 	}{
 		{"3", false, `3`},
 		{"3", true, `"3"`},
@@ -187,20 +187,13 @@ func TestSetEdit_ReadsValuesLikeHelm(t *testing.T) {
 		{"!ref users-db.host", false, `{"$ref":"users-db.host"}`},
 		{"!ref users-db.host", true, `"!ref users-db.host"`},
 		{"null", true, `"null"`},
-		{"null", false, ""},
-		{"~", false, ""},
+		{"null", false, `null`},
+		{"~", false, `null`},
 	}
 	for _, tc := range cases {
 		a := valuesfile.Assignment{Component: "api", Path: []string{"image", "tag"}, Raw: tc.raw}
 		e, err := setEdit(a, tc.forceString)
 		require.NoError(t, err, tc.raw)
-		if tc.want == "" {
-			sn := e.GetSetNull()
-			require.NotNil(t, sn, "%q should be SetNull", tc.raw)
-			assert.Equal(t, "api", sn.Component)
-			assert.Equal(t, []string{"image", "tag"}, keys(sn.Path))
-			continue
-		}
 		sv := e.GetSetValue()
 		require.NotNil(t, sv, "%q should be SetValue", tc.raw)
 		assert.Equal(t, "api", sv.Component)
@@ -302,7 +295,6 @@ func TestAddFromReference(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "cloud-sql", ref.Name)
 	assert.Equal(t, "v1.2.0", ref.Reference)
-	assert.Empty(t, ref.Namespace)
 
 	ref, err = registryRef("cloud-sql@sha256:3f9a")
 	require.NoError(t, err)
@@ -398,8 +390,9 @@ func TestValuesUploadRefusesAFileFromElsewhere(t *testing.T) {
 	requireAccepted(t, err, "values upload")
 }
 
-// An upload is one ReplaceValues carrying the whole tree and the revision
-// the file was taken at, so a stale file is refused by the server.
+// An upload is one ReplaceValues carrying the whole tree, sent with the
+// revision the file was taken at as if_revision, so a stale file is refused
+// by the server.
 func TestValuesUploadSendsTheTreeAndItsRevision(t *testing.T) {
 	path := downloaded(t, valuesfile.Header{ChangeSet: csID, Component: "api", Revision: 7, BaseDigest: "sha256:ab"},
 		map[string]any{
@@ -413,12 +406,12 @@ func TestValuesUploadSendsTheTreeAndItsRevision(t *testing.T) {
 	require.Contains(t, string(data), "!ref users-db.host", "a download writes a reference as !ref")
 
 	var stderr bytes.Buffer
-	e, err := uploadEdit(&stderr, path, csID, "api", data)
+	e, rev, err := uploadEdit(&stderr, path, csID, "api", data)
 	require.NoError(t, err)
 	rv := e.GetReplaceValues()
 	require.NotNil(t, rv)
 	assert.Equal(t, "api", rv.Component)
-	assert.Equal(t, int32(7), rv.FromRevision)
+	assert.Equal(t, int32(7), rev)
 	assert.JSONEq(t,
 		`{"replicas":12345678901234567890,"db":{"$ref":"users-db.host"},"literal":{"$$ref":"kept"},"tier":null}`,
 		rv.TreeJson)
@@ -428,10 +421,10 @@ func TestValuesUploadSendsTheTreeAndItsRevision(t *testing.T) {
 	path = downloaded(t, valuesfile.Header{ChangeSet: csID, Component: "api", Revision: 0}, map[string]any{})
 	data, err = os.ReadFile(path)
 	require.NoError(t, err)
-	e, err = uploadEdit(&stderr, path, csID, "api", data)
+	e, rev, err = uploadEdit(&stderr, path, csID, "api", data)
 	require.NoError(t, err)
 	assert.Equal(t, `{}`, e.GetReplaceValues().TreeJson)
-	assert.Equal(t, int32(0), e.GetReplaceValues().FromRevision)
+	assert.Equal(t, int32(0), rev)
 }
 
 func TestValuesAndDiffArguments(t *testing.T) {
@@ -459,9 +452,9 @@ func TestWriteDiff(t *testing.T) {
 		Revision: 4,
 		Components: []*changesetv1.ComponentDiff{
 			{
-				Component: "api", Action: changesetv1.EntryAction_UPDATE,
-				OldPin: &changesetv1.Pin{Name: "api-chart", Digest: "sha256:aaaaaaaaaaaaaaaa"},
-				NewPin: &changesetv1.Pin{Name: "api-chart", Digest: "sha256:bbbbbbbbbbbbbbbb"},
+				Component: "api", Action: changesetv1.EntryAction_ENTRY_ACTION_UPDATE,
+				OldVersion: &changesetv1.VersionRef{Reference: "1.3.0", Digest: "sha256:aaaaaaaaaaaaaaaa"},
+				NewVersion: &changesetv1.VersionRef{Reference: "sha256:bbbbbbbbbbbbbbbb", Digest: "sha256:bbbbbbbbbbbbbbbb"},
 				Paths: []*changesetv1.PathDiff{
 					{DisplayPath: "image.tag", BeforePresent: true, BeforeJson: `"v1"`, AfterPresent: true, AfterJson: `"v2"`},
 					{DisplayPath: "replicas", AfterPresent: true, AfterJson: `3`},
@@ -469,12 +462,12 @@ func TestWriteDiff(t *testing.T) {
 				},
 				Violations: []*changesetv1.Violation{{Component: "api", Path: "replicas", Message: "must be <= 2"}},
 			},
-			{Component: "old-cache", Action: changesetv1.EntryAction_DESTROY},
+			{Component: "old-cache", Action: changesetv1.EntryAction_ENTRY_ACTION_DESTROY},
 		},
 	})
 	out := b.String()
 	assert.Contains(t, out, csID+" at revision 4")
-	assert.Contains(t, out, "~ api (update)  api-chart@aaaaaaaaaaaa -> bbbbbbbbbbbb")
+	assert.Contains(t, out, "~ api (update)  1.3.0 (sha256:aaaaaaaaaaaa) -> sha256:bbbbbbbbbbbb")
 	assert.Contains(t, out, `image.tag: "v1" -> "v2"`)
 	assert.Contains(t, out, "replicas: <absent> -> 3", "absent and null are different")
 	assert.Contains(t, out, `resources: {"cpu":"1"} -> null`)
@@ -513,16 +506,16 @@ func TestComponentNameLimit(t *testing.T) {
 func TestPlacementEdit(t *testing.T) {
 	e, err := placementEdit("api", "shop-api", []string{"kube-system", "monitoring"})
 	require.NoError(t, err)
-	sp := e.GetSetPlacement()
-	require.NotNil(t, sp)
-	assert.Equal(t, "api", sp.Component)
-	assert.Equal(t, "shop-api", sp.Placement.GetKubernetes().GetNamespace())
-	assert.Equal(t, []string{"kube-system", "monitoring"}, sp.Placement.GetKubernetes().GetExtraNamespaces())
+	ss := e.GetSetSettings()
+	require.NotNil(t, ss)
+	assert.Equal(t, "api", ss.Component)
+	assert.Equal(t, "shop-api", ss.Settings.GetKubernetes().GetNamespace())
+	assert.Equal(t, []string{"kube-system", "monitoring"}, ss.Settings.GetKubernetes().GetExtraNamespaces())
 
 	e, err = placementEdit("api", "", nil)
 	require.NoError(t, err)
-	require.NotNil(t, e.GetSetPlacement().Placement.GetKubernetes(), "the environment's default is an empty namespace, not no placement")
-	assert.Empty(t, e.GetSetPlacement().Placement.GetKubernetes().GetNamespace())
+	require.NotNil(t, e.GetSetSettings().Settings.GetKubernetes(), "the environment's default is an empty namespace, not no settings")
+	assert.Empty(t, e.GetSetSettings().Settings.GetKubernetes().GetNamespace())
 
 	_, err = placementEdit("api", "Shop", nil)
 	requireUsage(t, err, `invalid namespace "Shop"`)
@@ -560,7 +553,7 @@ func TestSetNamespaceArguments(t *testing.T) {
 		})
 	}
 
-	// Placement and values in one command are one request, so one revision.
+	// Settings and values in one command are one request, so one revision.
 	for _, args := range [][]string{
 		{"set", csID, "api", "--namespace", "shop-api"},
 		{"set", csID, "api", "--namespace", ""},
@@ -575,8 +568,8 @@ func TestSetNamespaceArguments(t *testing.T) {
 	}
 }
 
-// Placement combined with values or a pin move is one request, placement
-// first, so it is one revision.
+// Settings combined with values or a version change is one request,
+// settings first, so it is one revision.
 func TestSetRequestCombinesPlacement(t *testing.T) {
 	es, err := setRequest{
 		args:           []string{"api", "api.replicas=3", "web.replicas=2"},
@@ -585,8 +578,8 @@ func TestSetRequestCombinesPlacement(t *testing.T) {
 	}.edits()
 	require.NoError(t, err)
 	require.Len(t, es, 4)
-	assert.Equal(t, "shop-api", es[0].GetSetPlacement().GetPlacement().GetKubernetes().GetNamespace())
-	assert.Equal(t, []string{"kube-system"}, es[0].GetSetPlacement().GetPlacement().GetKubernetes().GetExtraNamespaces())
+	assert.Equal(t, "shop-api", es[0].GetSetSettings().GetSettings().GetKubernetes().GetNamespace())
+	assert.Equal(t, []string{"kube-system"}, es[0].GetSetSettings().GetSettings().GetKubernetes().GetExtraNamespaces())
 	assert.Equal(t, "api", es[1].GetSetValue().GetComponent())
 	assert.Equal(t, "web", es[2].GetSetValue().GetComponent())
 	assert.Equal(t, `"0042"`, es[3].GetSetValue().GetValueJson())
@@ -594,9 +587,9 @@ func TestSetRequestCombinesPlacement(t *testing.T) {
 	es, err = setRequest{args: []string{"api"}, to: "v1.4.0", namespaceGiven: true}.edits()
 	require.NoError(t, err)
 	require.Len(t, es, 2)
-	assert.Equal(t, "api", es[0].GetSetPlacement().GetComponent())
-	assert.Empty(t, es[0].GetSetPlacement().GetPlacement().GetKubernetes().GetNamespace())
-	assert.Equal(t, "v1.4.0", es[1].GetSetPin().GetReference())
+	assert.Equal(t, "api", es[0].GetSetSettings().GetComponent())
+	assert.Empty(t, es[0].GetSetSettings().GetSettings().GetKubernetes().GetNamespace())
+	assert.Equal(t, "v1.4.0", es[1].GetSetVersion().GetReference())
 
 	es, err = setRequest{args: []string{"api.replicas=3"}}.edits()
 	require.NoError(t, err)

@@ -78,14 +78,14 @@ func newCreateTypeCmd(opts *client.Options, typ string) *cobra.Command {
 			}
 			defer c.Close() //nolint:errcheck
 
-			resp, err := c.Credential().CreateCredential(cmd.Context(), &credentialv1.CreateCredentialRequest{
+			resp, err := c.Credential().CreateCredential(cmd.Context(), &credentialv1.CreateCredentialRequest{Credential: &credentialv1.Credential{
 				Name:         args[0],
 				Description:  description,
 				Type:         typeEnum[typ],
 				AuthConfig:   auth,
 				Labels:       labels,
 				AllowedHosts: allowedHosts,
-			})
+			}})
 			if err != nil {
 				return err
 			}

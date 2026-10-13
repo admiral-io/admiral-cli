@@ -16,7 +16,7 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 		appName     string
 		description string
 		labelStrs   []string
-		kube        kubernetesFlags
+		target      targetFlags
 	)
 
 	cmd := &cobra.Command{
@@ -31,8 +31,11 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
   # By name, scoped with --app
   admiral env create staging --app billing
 
-  # Into a namespace that must already exist
-  admiral env create billing/prod --namespace billing --create-namespaces=false`,
+  # Deploy through an agent, into a namespace of your choosing
+  admiral env create billing/prod --agent prod-cluster --namespace billing
+
+  # Applies need two approvals
+  admiral env create billing/prod --agent prod-cluster --approvals 2`,
 		Args:              flags.ExactArgs(1),
 		ValidArgsFunction: complete.First(complete.NewEnv(opts)),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -44,8 +47,7 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			var kt *environmentv1.KubernetesTarget
-			if _, err := kube.apply(cmd, &kt); err != nil {
+			if err := target.check(cmd, true); err != nil {
 				return err
 			}
 
@@ -60,13 +62,11 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 				return err
 			}
 
-			req := &environmentv1.CreateEnvironmentRequest{
-				ApplicationId: resolvedAppID,
-				Name:          name,
-				Description:   description,
-				Labels:        labels,
-				Kubernetes:    kt,
+			e := &environmentv1.Environment{Name: name, Description: description, Labels: labels}
+			if _, err := target.apply(cmd.Context(), cmd, c.Agent(), e); err != nil {
+				return err
 			}
+			req := &environmentv1.CreateEnvironmentRequest{ApplicationId: resolvedAppID, Environment: e}
 
 			resp, err := c.Environment().CreateEnvironment(cmd.Context(), req)
 			if err != nil {
@@ -81,7 +81,8 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 	flags.App(cmd, &appName, opts)
 	cmd.Flags().StringVar(&description, "description", "", "environment description")
 	flags.Label(cmd, &labelStrs, "label to attach (key=value, repeatable)")
-	kube.register(cmd, "the Kubernetes namespace workload components go to (default <app>-<env>)")
+	target.register(cmd, "agent to deploy through, by name or agt- id (repeatable)",
+		"the Kubernetes namespace components render into unless they name one (needs one --agent; default <app>-<env>)")
 
 	return cmd
 }

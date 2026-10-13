@@ -28,29 +28,33 @@ func (m *appClient) ListApplications(_ context.Context, req *applicationv1.ListA
 type envClient struct {
 	environmentv1.EnvironmentAPIClient
 	envs   []*environmentv1.Environment
+	app    string
 	filter string
 }
 
 func (m *envClient) ListEnvironments(_ context.Context, req *environmentv1.ListEnvironmentsRequest, _ ...grpc.CallOption) (*environmentv1.ListEnvironmentsResponse, error) {
-	m.filter = req.Filter
+	m.app, m.filter = req.GetApplicationId(), req.Filter
 	return &environmentv1.ListEnvironmentsResponse{Environments: m.envs}, nil
 }
 
-const uuid = "550e8400-e29b-41d4-a716-446655440000"
+const (
+	appID = "app-7q2k9m4x8p1c"
+	envID = "env-3h8w1n6r0t5z"
+)
 
-func TestIsUUID(t *testing.T) {
-	require.True(t, IsUUID(uuid))
-	require.True(t, IsUUID("550E8400-E29B-41D4-A716-446655440000"))
-	require.False(t, IsUUID("shop"))
-	require.False(t, IsUUID("run-vnx81r"))
-	require.False(t, IsUUID(uuid+"x"))
+func TestIsID(t *testing.T) {
+	require.True(t, IsID("app", appID))
+	require.False(t, IsID("env", appID), "another kind's id is a name")
+	require.False(t, IsID("app", "shop"))
+	require.False(t, IsID("app", "app-7Q2K9M4X8P1C"))
+	require.False(t, IsID("app", appID+"x"))
 }
 
-func TestApp_UUIDSkipsLookup(t *testing.T) {
+func TestApp_IDSkipsLookup(t *testing.T) {
 	c := &appClient{err: errors.New("must not be called")}
-	id, err := App(context.Background(), c, uuid)
+	id, err := App(context.Background(), c, appID)
 	require.NoError(t, err)
-	require.Equal(t, uuid, id)
+	require.Equal(t, appID, id)
 }
 
 func TestApp_Empty(t *testing.T) {
@@ -84,10 +88,10 @@ func TestApp_Ambiguous(t *testing.T) {
 	require.Equal(t, "Pass an ID instead: id-1, id-2", cmderr.Hint(err))
 }
 
-func TestEnvironment_UUIDNeedsNoApp(t *testing.T) {
-	id, err := Environment(context.Background(), &envClient{}, &appClient{err: errors.New("no")}, "", uuid)
+func TestEnvironment_IDNeedsNoApp(t *testing.T) {
+	id, err := Environment(context.Background(), &envClient{}, &appClient{err: errors.New("no")}, "", envID)
 	require.NoError(t, err)
-	require.Equal(t, uuid, id)
+	require.Equal(t, envID, id)
 }
 
 func TestEnvironment_NameNeedsApp(t *testing.T) {
@@ -103,7 +107,8 @@ func TestEnvironment_ScopedLookup(t *testing.T) {
 	id, err := Environment(context.Background(), envs, apps, "shop", "prod")
 	require.NoError(t, err)
 	require.Equal(t, "env-1", id)
-	require.Equal(t, "field['application_id'] = 'app-1' AND field['name'] = 'prod'", envs.filter)
+	require.Equal(t, "app-1", envs.app)
+	require.Equal(t, "field['name'] = 'prod'", envs.filter)
 
 	_, err = Environment(context.Background(), &envClient{}, apps, "shop", "prd")
 	require.EqualError(t, err, `environment "prd" not found in application "shop"`)

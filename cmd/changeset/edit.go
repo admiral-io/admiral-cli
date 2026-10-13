@@ -27,7 +27,7 @@ var (
 	namespacePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 )
 
-// maxExtraNamespaces is the API's cap on a placement's extra namespaces.
+// maxExtraNamespaces is the API's cap on a component's extra namespaces.
 const maxExtraNamespaces = 16
 
 // changeSetID refuses a malformed ID before any sign-in or RPC.
@@ -46,7 +46,7 @@ func componentName(s string) error {
 	return nil
 }
 
-// placementEdit replaces a component's placement. An empty namespace is
+// placementEdit replaces a component's settings. An empty namespace is
 // the environment's default.
 func placementEdit(comp, namespace string, extra []string) (*changesetv1.Edit, error) {
 	if err := componentName(comp); err != nil {
@@ -68,11 +68,13 @@ func placementEdit(comp, namespace string, extra []string) (*changesetv1.Edit, e
 		}
 		seen[ns] = true
 	}
-	return &changesetv1.Edit{Edit: &changesetv1.Edit_SetPlacement{SetPlacement: &changesetv1.SetPlacement{
+	return &changesetv1.Edit{Edit: &changesetv1.Edit_SetSettings{SetSettings: &changesetv1.SetSettings{
 		Component: comp,
-		Placement: &changesetv1.Placement{Kubernetes: &changesetv1.KubernetesPlacement{
-			Namespace:       namespace,
-			ExtraNamespaces: extra,
+		Settings: &changesetv1.ComponentSettings{Kind: &changesetv1.ComponentSettings_Kubernetes{
+			Kubernetes: &changesetv1.KubernetesComponentSettings{
+				Namespace:       namespace,
+				ExtraNamespaces: extra,
+			},
 		}},
 	}}}, nil
 }
@@ -91,8 +93,8 @@ func ifRevision(cmd *cobra.Command, n int32) *int32 {
 }
 
 // edits sends one EditChangeSet, so each command is one revision, and
-// prints what it cut. With --plan the answer is the revision's prepare
-// instead, and the revision is only confirmed on stderr.
+// prints what it cut. With --plan the answer is the run that plans the
+// revision instead, and the revision is only confirmed on stderr.
 func edits(cmd *cobra.Command, opts *client.Options, csID string, ifRev *int32, po planOptions, es ...*changesetv1.Edit) error {
 	if len(es) > maxEdits {
 		return cmderr.Usage("%d edits in one command; the limit is %d", len(es), maxEdits)
@@ -110,7 +112,6 @@ func edits(cmd *cobra.Command, opts *client.Options, csID string, ifRev *int32, 
 		ChangeSetId: csID,
 		IfRevision:  ifRev,
 		Edits:       es,
-		Plan:        po.plan,
 	})
 	if err != nil {
 		return err
@@ -120,7 +121,7 @@ func edits(cmd *cobra.Command, opts *client.Options, csID string, ifRev *int32, 
 	printWarnings(p.Err(), resp.Warnings, resp.Revision.GetViolations())
 	output.Confirmed(p.Err(), "change set", csID, "revision "+strconv.Itoa(int(resp.Revision.GetNumber())))
 	if po.plan {
-		return finishPrepare(cmd, opts, c.ChangeSet(), csID, resp.Prepare, po)
+		return planRevision(cmd, opts, c.Run(), resp.ChangeSet, resp.Revision, po)
 	}
 	return p.PrintOne(resp.Revision, revisionName(csID, resp.Revision), revisionTable.Render(p, resp.Revision))
 }
@@ -137,8 +138,8 @@ func printWarnings(w io.Writer, warnings []string, violations []*changesetv1.Vio
 }
 
 // setEdit turns one --set into an edit. The value reads as a YAML scalar,
-// as helm --set does; forceString is --set-string. A null is SetNull, which
-// clears a chart default, not SetValue.
+// as helm --set does; forceString is --set-string. A null is sent as the
+// JSON null, which clears a chart default.
 func setEdit(a valuesfile.Assignment, forceString bool) (*changesetv1.Edit, error) {
 	if err := componentName(a.Component); err != nil {
 		return nil, err
@@ -150,12 +151,6 @@ func setEdit(a valuesfile.Assignment, forceString bool) (*changesetv1.Edit, erro
 			return nil, cmderr.Usage("%s.%s: %v", a.Component, displayPath(a.Path), err)
 		}
 		v = parsed
-	}
-	if v == nil {
-		return &changesetv1.Edit{Edit: &changesetv1.Edit_SetNull{SetNull: &changesetv1.SetNull{
-			Component: a.Component,
-			Path:      pathSegments(a.Path),
-		}}}, nil
 	}
 	js, err := valuesfile.EncodeJSON(v)
 	if err != nil {

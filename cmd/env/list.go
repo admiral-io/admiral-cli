@@ -6,7 +6,6 @@ import (
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/complete"
-	"go.admiral.io/cli/internal/filter"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
 	"go.admiral.io/cli/internal/resolve"
@@ -53,15 +52,11 @@ func newListCmd(opts *client.Options) *cobra.Command {
 				return err
 			}
 
-			byApp, err := filter.Eq("application_id", resolvedAppID)
-			if err != nil {
-				return err
-			}
 			envs, next, err := flags.Pages(paging, func(token string) ([]*environmentv1.Environment, string, error) {
 				resp, err := c.Environment().ListEnvironments(cmd.Context(), &environmentv1.ListEnvironmentsRequest{
-					Filter:    byApp,
-					PageSize:  paging.PageSize,
-					PageToken: token,
+					ApplicationId: &resolvedAppID,
+					PageSize:      paging.PageSize,
+					PageToken:     token,
 				})
 				if err != nil {
 					return nil, "", err

@@ -49,12 +49,11 @@ A key missing from the file is removed, so its default applies.`,
 				if err != nil {
 					return err
 				}
-				upload, err := uploadEdit(cmd.ErrOrStderr(), valuesPath, csID, comp, data)
+				upload, rev, err := uploadEdit(cmd.ErrOrStderr(), valuesPath, csID, comp, data)
 				if err != nil {
 					return err
 				}
-				// from_revision is the guard; if_revision would say the same.
-				return edits(cmd, opts, csID, nil, po, upload)
+				return edits(cmd, opts, csID, &rev, po, upload)
 			}
 
 			if po.plan || cmd.Flags().Changed("no-wait") || cmd.Flags().Changed("wait-timeout") {
@@ -103,40 +102,40 @@ A key missing from the file is removed, so its default applies.`,
 	return cmd
 }
 
-// uploadEdit builds the one ReplaceValues an upload sends. A file whose
-// header names another change set or component is refused here; a stale
-// revision can only be judged by the server, which refuses it.
-func uploadEdit(stderr io.Writer, path, csID, comp string, data []byte) (*changesetv1.Edit, error) {
+// uploadEdit builds the one ReplaceValues an upload sends, and the revision
+// the file was downloaded at, which the edit sends as its if_revision. A
+// file whose header names another change set or component is refused here;
+// a stale revision can only be judged by the server, which refuses it.
+func uploadEdit(stderr io.Writer, path, csID, comp string, data []byte) (*changesetv1.Edit, int32, error) {
 	h, ok := valuesfile.ParseHeader(data)
 	fromCS, fromComp := headerNames(data)
 	if !ok || fromCS == "" || fromComp == "" {
-		return nil, cmderr.UsageHint(
+		return nil, 0, cmderr.UsageHint(
 			"Download the values first ('admiral changeset values "+csID+" "+comp+" > "+comp+".yaml'), edit that file, then upload it.",
 			"%s has no change set, component and revision header", path)
 	}
 	if fromCS != csID {
-		return nil, cmderr.Usage("%s was downloaded from change set %s, not %s", path, fromCS, csID)
+		return nil, 0, cmderr.Usage("%s was downloaded from change set %s, not %s", path, fromCS, csID)
 	}
 	if fromComp != comp {
-		return nil, cmderr.Usage("%s holds the values of %s, not %s", path, fromComp, comp)
+		return nil, 0, cmderr.Usage("%s holds the values of %s, not %s", path, fromComp, comp)
 	}
 
 	tree, warnings, err := valuesfile.Parse(data)
 	if err != nil {
-		return nil, cmderr.Usage("%s: %v", path, err)
+		return nil, 0, cmderr.Usage("%s: %v", path, err)
 	}
 	for _, w := range warnings {
 		output.Writef(stderr, "Warning: %s: %s\n", path, w)
 	}
 	js, err := valuesfile.EncodeJSON(tree)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	return &changesetv1.Edit{Edit: &changesetv1.Edit_ReplaceValues{ReplaceValues: &changesetv1.ReplaceValues{
-		Component:    comp,
-		TreeJson:     js,
-		FromRevision: h.Revision,
-	}}}, nil
+		Component: comp,
+		TreeJson:  js,
+	}}}, h.Revision, nil
 }
 
 // headerNames reads the change set and component lines valuesfile.Render
