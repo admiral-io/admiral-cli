@@ -1,7 +1,9 @@
 package component
 
 import (
+	"fmt"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 
@@ -14,6 +16,7 @@ import (
 	"go.admiral.io/cli/internal/manifest"
 	"go.admiral.io/cli/internal/output"
 	"go.admiral.io/cli/internal/resolve"
+	"go.admiral.io/cli/internal/valuesfile"
 	registryv1 "go.admiral.io/sdk/proto/admiral/api/registry/v1"
 )
 
@@ -28,6 +31,7 @@ func newPullCmd(opts *client.Options) *cobra.Command {
 		description string
 		labelStrs   []string
 		credentials []string
+		baseline    string
 	)
 
 	cmd := &cobra.Command{
@@ -36,10 +40,10 @@ func newPullCmd(opts *client.Options) *cobra.Command {
 		Long: `Publish a copy of an artifact you do not own.
 
 The registry fetches the source, closes it the way publish does, and
-publishes the result as a revision with the source recorded as its
+publishes the result as a version with the source recorded as its
 provenance. What is published is a copy: the bytes reviewed, whatever
 upstream does to the tag later. Pulling the same thing twice yields the
-same revision.
+same version.
 
 The source says what it is:
 
@@ -60,7 +64,12 @@ a module's resolved version become tags whether or not named.
 Nothing is fetched with ambient credentials. --credential attaches one the
 tenant holds; it is presented only where its type fits the protocol and its
 allowed hosts permit, and a fetch that reaches a host none covers fails
-naming the host.`,
+naming the host.
+
+--baseline-values sets the organization's defaults for the artifact, a
+YAML or JSON object laid over its own defaults (a chart's values.yaml, a
+module's variable defaults) before any environment's values. They are part
+of the version: pulling with different baseline values is a new version.`,
 		Example: `  # A chart from a repository, as cert-manager
   admiral component pull cert-manager --repo https://charts.jetstack.io --version v1.16.2
 
@@ -74,7 +83,10 @@ naming the host.`,
   admiral component pull git@github.com:acme/infra.git --ref v2.1.0 --path modules/vpc --credential infra-deploy
 
   # A private chart, under a name of your own, tagged
-  admiral component pull oci://ghcr.io/acme/charts/base --version 1.4.0 --name base-upstream --tag stable --credential github`,
+  admiral component pull oci://ghcr.io/acme/charts/base --version 1.4.0 --name base-upstream --tag stable --credential github
+
+  # A chart with the organization's defaults laid over its own
+  admiral component pull cert-manager --repo https://charts.jetstack.io --version v1.16.2 --baseline-values cert-manager.yaml`,
 		Args: flags.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			labels, err := flags.ParseLabels(labelStrs)
@@ -87,6 +99,12 @@ naming the host.`,
 			src, err := parseSource(args[0], sourceFlags{repo: repo, version: version, ref: ref, path: path})
 			if err != nil {
 				return err
+			}
+			var baselineJSON string
+			if baseline != "" {
+				if baselineJSON, err = readBaseline(baseline); err != nil {
+					return err
+				}
 			}
 
 			c, err := client.CreateClient(cmd.Context(), opts)
@@ -107,22 +125,23 @@ naming the host.`,
 			p := output.NewPrinter(cmd, opts.OutputFormat)
 			output.Writef(p.Err(), "Pulling %s\n", args[0])
 			resp, err := c.Registry().PullComponent(cmd.Context(), &registryv1.PullComponentRequest{
-				Name:          name,
-				Source:        src,
-				CredentialIds: ids,
-				Tags:          tags,
-				Description:   description,
-				Labels:        labels,
+				Name:               name,
+				Source:             src,
+				CredentialIds:      ids,
+				Tags:               tags,
+				Description:        description,
+				Labels:             labels,
+				BaselineValuesJson: baselineJSON,
 			})
 			if err != nil {
 				return err
 			}
-			rev := resp.Revision
-			if prov := rev.Provenance; prov != nil {
+			ver := resp.Version
+			if prov := ver.Provenance; prov != nil {
 				output.Writef(p.Err(), "Pulled %s%s -> %s\n", prov.Uri, atRef(prov.Ref), prov.Commit)
 			}
-			reportPublished(p, resp.Component, rev, resp.Unchanged)
-			return p.PrintOne(rev, resp.Component.Name+"@"+rev.Digest, revisionTable.Render(p, rev))
+			reportPublished(p, resp.Component, ver, resp.Unchanged)
+			return p.PrintOne(ver, resp.Component.Name+"@"+ver.Digest, versionTable.Render(p, ver))
 		},
 	}
 
@@ -131,13 +150,33 @@ naming the host.`,
 	cmd.Flags().StringVar(&ref, "ref", "", "the branch, tag or commit of a git repository (default: its default branch)")
 	cmd.Flags().StringVar(&path, "path", "", "one directory of a git repository")
 	cmd.Flags().StringVar(&name, "name", "", "component name (default: the artifact's own)")
-	cmd.Flags().StringArrayVarP(&tags, "tag", "t", nil, "tag to set on the revision (repeatable)")
+	cmd.Flags().StringArrayVarP(&tags, "tag", "t", nil, "tag to set on the version (repeatable)")
 	cmd.Flags().StringVar(&description, "description", "", "component description, applied when the component is created")
 	flags.Label(cmd, &labelStrs, "label to attach when the component is created (key=value, repeatable)")
 	cmd.Flags().StringArrayVar(&credentials, "credential", nil, "credential the pull may present, by name or ID (repeatable)")
 	complete.Flag(cmd, "credential", complete.Credentials(opts))
+	cmd.Flags().StringVar(&baseline, "baseline-values", "", "file of default values (YAML or JSON object) laid over the artifact's own")
+	_ = cmd.MarkFlagFilename("baseline-values", "yaml", "yml", "json")
 
 	return cmd
+}
+
+// readBaseline reads a baseline values file as the JSON object the API
+// takes. YAML is read the way a values file is, so JSON reads too.
+func readBaseline(file string) (string, error) {
+	data, err := os.ReadFile(file)
+	if err != nil {
+		return "", cmderr.Usage("cannot read --baseline-values: %v", err)
+	}
+	tree, _, err := valuesfile.Parse(data)
+	if err != nil {
+		return "", cmderr.Usage("--baseline-values %s: %v", file, err)
+	}
+	s, err := valuesfile.EncodeJSON(tree)
+	if err != nil {
+		return "", fmt.Errorf("--baseline-values %s: %w", file, err)
+	}
+	return s, nil
 }
 
 func atRef(ref string) string {

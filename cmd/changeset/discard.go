@@ -15,11 +15,11 @@ func newDiscardCmd(opts *client.Options) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "discard <change-set>",
-		Short: "Discard a draft change set",
-		Long: `Discard a draft change set.
+		Short: "Discard an open change set",
+		Long: `Discard an open change set.
 
-The component names it reserved are released. A discarded change set
-cannot be edited again.`,
+The component names it reserved are released and it is closed. A closed
+change set cannot be edited again.`,
 		Example: `  admiral changeset discard cs-7f2a1c9d0e3b
 
   # Skip the confirmation prompt

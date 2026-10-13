@@ -12,11 +12,10 @@ var envTable = output.Table[*environmentv1.Environment]{
 	{Header: "DESCRIPTION", Truncate: 40, Cell: func(e *environmentv1.Environment) string { return e.Description }},
 	{Header: "LABELS", Cell: func(e *environmentv1.Environment) string { return output.FormatLabels(e.Labels) }},
 	{Header: "AGE", Cell: func(e *environmentv1.Environment) string { return output.FormatAge(e.CreatedAt) }},
-	{Header: "NAMESPACE", Wide: true, Cell: func(e *environmentv1.Environment) string { return e.GetKubernetes().GetNamespace() }},
-	{Header: "CREATE-NAMESPACES", Wide: true, Cell: func(e *environmentv1.Environment) string { return createNamespaces(e.Kubernetes) }},
-	{Header: "KUBERNETES", Wide: true, Cell: func(e *environmentv1.Environment) string {
-		return capabilitiesSummary(e.GetKubernetes().GetCapabilities())
-	}},
+	{Header: "AGENTS", Wide: true, Cell: agentIDs},
+	{Header: "NAMESPACE", Wide: true, Cell: namespaces},
+	{Header: "APPROVALS", Wide: true, Cell: approvals},
+	{Header: "HELD-BY", Wide: true, Cell: func(e *environmentv1.Environment) string { return e.GetHold().GetChangeSetId() }},
 	{Header: "ID", Wide: true, Cell: func(e *environmentv1.Environment) string { return e.Id }},
 	{Header: "CREATED BY", Wide: true, Cell: func(e *environmentv1.Environment) string { return output.FormatActor(e.CreatedBy) }},
 }

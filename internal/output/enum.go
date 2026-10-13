@@ -11,7 +11,8 @@ import (
 // TrimEnumPrefix returns the enum value's name with its type prefix stripped.
 // Generated proto enum values are named "<TYPE>_<VALUE>" in SCREAMING_SNAKE_CASE,
 // where <TYPE> is the SCREAMING_SNAKE form of the enum's CamelCase descriptor name.
-// For example, RunStatus_RUN_STATUS_PLANNING returns "PLANNING".
+// For example, WaitReason_WAIT_REASON_AGENT_OFFLINE returns "AGENT_OFFLINE", and
+// the nested Run_STATUS_PLANNING (descriptor name Status) returns "PLANNING".
 //
 // Falls back to the unmodified value name when the prefix isn't present, which
 // keeps unknown values readable instead of erasing them.
@@ -27,8 +28,8 @@ func TrimEnumPrefix(e protoreflect.Enum) string {
 }
 
 // FormatEnum renders an enum value as a single CamelCase token, the form
-// used for statuses and health: RUN_STATUS_PARTIALLY_FAILED becomes
-// "PartiallyFailed". The zero (UNSPECIFIED) value renders as None.
+// used for statuses and health: Run_STATUS_NO_CHANGES becomes "NoChanges".
+// The zero (UNSPECIFIED) value renders as None.
 func FormatEnum(e protoreflect.Enum) string {
 	if e.Number() == 0 {
 		return None
@@ -38,8 +39,8 @@ func FormatEnum(e protoreflect.Enum) string {
 
 // FormatEnumKebab renders an enum value in lowercase kebab-case, the form
 // used for types and kinds so output matches the words users type:
-// CREDENTIAL_TYPE_SSH_KEY becomes "ssh-key", JOB_TYPE_DESTROY_PLAN becomes
-// "destroy-plan". The zero (UNSPECIFIED) value renders as None.
+// Credential_TYPE_SSH_KEY becomes "ssh-key", ChangeSet_STATUS_OPEN becomes
+// "open". The zero (UNSPECIFIED) value renders as None.
 func FormatEnumKebab(e protoreflect.Enum) string {
 	if e.Number() == 0 {
 		return None

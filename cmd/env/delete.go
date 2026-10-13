@@ -28,7 +28,7 @@ func newDeleteCmd(opts *client.Options) *cobra.Command {
   admiral env delete staging --app billing
 
   # By ID
-  admiral env delete <uuid>
+  admiral env delete env-3k9x2m7qpl0a
 
   # Skip the confirmation prompt
   admiral env delete billing/staging --force`,

@@ -26,7 +26,7 @@ func newGetCmd(opts *client.Options) *cobra.Command {
   admiral env get staging --app billing
 
   # By ID
-  admiral env get <uuid>`,
+  admiral env get env-3k9x2m7qpl0a`,
 		Args:              flags.ExactArgs(1),
 		ValidArgsFunction: complete.First(complete.Envs(opts)),
 		RunE: func(cmd *cobra.Command, args []string) error {

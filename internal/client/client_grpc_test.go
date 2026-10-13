@@ -193,7 +193,7 @@ func TestCreateClient_TransientRetryReadsOnly(t *testing.T) {
 	_, err = c.Application().ListApplications(context.Background(), &applicationv1.ListApplicationsRequest{})
 	require.NoError(t, err, "a read recovers from one Unavailable")
 
-	_, err = c.Application().CreateApplication(context.Background(), &applicationv1.CreateApplicationRequest{Name: "x"})
+	_, err = c.Application().CreateApplication(context.Background(), &applicationv1.CreateApplicationRequest{Application: &applicationv1.Application{Name: "x"}})
 	require.Equal(t, codes.Unavailable, status.Code(err), "a mutation is never retried")
 
 	var lists, creates int

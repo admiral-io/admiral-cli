@@ -18,6 +18,8 @@ var changeSetTable = output.Table[*changesetv1.ChangeSet]{
 	{Header: "AGE", Cell: func(c *changesetv1.ChangeSet) string { return output.FormatAge(c.CreatedAt) }},
 	{Header: "ENVIRONMENT-ID", Wide: true, Cell: func(c *changesetv1.ChangeSet) string { return c.EnvironmentId }},
 	{Header: "CREATED-BY", Wide: true, Cell: func(c *changesetv1.ChangeSet) string { return output.FormatActor(c.CreatedBy) }},
+	{Header: "BEHIND", Wide: true, Cell: func(c *changesetv1.ChangeSet) string { return strconv.FormatBool(c.Behind) }},
+	{Header: "LATEST-RUN", Wide: true, Cell: func(c *changesetv1.ChangeSet) string { return output.OrEmpty(c.LatestRunId) }},
 	{Header: "UPDATED", Wide: true, Cell: func(c *changesetv1.ChangeSet) string { return output.FormatAge(c.UpdatedAt) }},
 }
 

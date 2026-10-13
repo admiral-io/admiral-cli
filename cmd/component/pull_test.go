@@ -1,6 +1,8 @@
 package component
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -102,4 +104,21 @@ func TestPullRefusesLocallyWhatItCan(t *testing.T) {
 
 	_, err = run(t, "pull")
 	require.EqualError(t, err, "missing argument: pull <source>")
+
+	bad := filepath.Join(t.TempDir(), "baseline.yaml")
+	require.NoError(t, os.WriteFile(bad, []byte("- a\n- b\n"), 0o644))
+	_, err = run(t, "pull", "oci://ghcr.io/x/y", "--version", "1", "--baseline-values", bad)
+	require.ErrorContains(t, err, "values must be a map at the top level")
+	assert.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
+
+	_, err = run(t, "pull", "oci://ghcr.io/x/y", "--version", "1", "--baseline-values", filepath.Join(t.TempDir(), "missing.yaml"))
+	require.ErrorContains(t, err, "cannot read --baseline-values")
+}
+
+func TestReadBaselineIsJSON(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "baseline.yaml")
+	require.NoError(t, os.WriteFile(file, []byte("replicas: 3\ningress:\n  enabled: true\n"), 0o644))
+	got, err := readBaseline(file)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"replicas": 3, "ingress": {"enabled": true}}`, got)
 }

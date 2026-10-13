@@ -27,8 +27,9 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 		Long: `Open a change set against an environment.
 
 With --set or --set-string the edits cut revision 1 in the same request;
-without, the change set has no revision until its first edit. --plan plans
-revision 1 and waits for its prepare, as 'admiral changeset plan' does.`,
+without, the change set has no revision until its first edit. --plan starts
+a run that plans revision 1 and waits for it, as 'admiral changeset plan'
+does.`,
 		Example: `  admiral changeset create shop/prod --title "Bump api to 1.4.0"
 
   # Open it with values already set
@@ -40,7 +41,7 @@ revision 1 and waits for its prepare, as 'admiral changeset plan' does.`,
 			if err != nil {
 				return err
 			}
-			if app == "" && !resolve.IsUUID(env) {
+			if app == "" && !resolve.IsID("env", env) {
 				return cmderr.UsageHint("Give the environment as app/env: 'admiral changeset create shop/prod'.",
 					"no application specified")
 			}
@@ -71,10 +72,8 @@ revision 1 and waits for its prepare, as 'admiral changeset plan' does.`,
 			}
 			resp, err := c.ChangeSet().CreateChangeSet(cmd.Context(), &changesetv1.CreateChangeSetRequest{
 				EnvironmentId: envID,
-				Title:         title,
-				Description:   description,
+				ChangeSet:     &changesetv1.ChangeSet{Title: title, Description: description},
 				Edits:         es,
-				Plan:          po.plan,
 			})
 			if err != nil {
 				return err
@@ -84,7 +83,7 @@ revision 1 and waits for its prepare, as 'admiral changeset plan' does.`,
 			printWarnings(p.Err(), resp.Warnings, resp.Revision.GetViolations())
 			output.Confirmed(p.Err(), "change set", resp.ChangeSet.Id, "created")
 			if po.plan {
-				return finishPrepare(cmd, opts, c.ChangeSet(), resp.ChangeSet.Id, resp.Prepare, po)
+				return planRevision(cmd, opts, c.Run(), resp.ChangeSet, resp.Revision, po)
 			}
 			return p.PrintOne(resp.ChangeSet, resp.ChangeSet.Id, changeSetTable.Render(p, resp.ChangeSet))
 		},

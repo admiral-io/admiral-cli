@@ -23,8 +23,8 @@ func newUntagCmd(opts *client.Options) *cobra.Command {
 		Short: "Remove a floating tag",
 		Long: `Remove a floating tag.
 
-A tag is a name over a revision, not the revision: removing it changes
-nothing that is pinned, and the revision stays in the history, readable by
+A tag is a name over a version, not the version: removing it changes
+nothing that is pinned, and the version stays in the history, readable by
 digest. A semver tag (v1.2.0) is immutable and cannot be removed; that is
 what makes it a release.`,
 		Example: `  admiral component untag cloud-sql:dev

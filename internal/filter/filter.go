@@ -46,3 +46,18 @@ func And(preds ...string) string {
 	}
 	return strings.Join(out, " AND ")
 }
+
+// In builds a membership predicate, field['<field>'] IN ['<v1>', ...].
+func In(field string, values []string) (string, error) {
+	f, err := Quote(field)
+	if err != nil {
+		return "", err
+	}
+	quoted := make([]string, len(values))
+	for i, v := range values {
+		if quoted[i], err = Quote(v); err != nil {
+			return "", err
+		}
+	}
+	return "field[" + f + "] IN [" + strings.Join(quoted, ", ") + "]", nil
+}

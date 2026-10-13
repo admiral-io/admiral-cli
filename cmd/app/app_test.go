@@ -46,11 +46,11 @@ func TestPositionalUsageErrors(t *testing.T) {
 	}
 }
 
-// A UUID positional is accepted as the identity without any --id flag; the
+// An id positional is accepted as the identity without any --id flag; the
 // command proceeds to client creation.
-func TestUUIDPositionalIsAccepted(t *testing.T) {
+func TestIDPositionalIsAccepted(t *testing.T) {
 	for _, verb := range []string{"get", "delete", "update"} {
-		args := []string{verb, "550e8400-e29b-41d4-a716-446655440000"}
+		args := []string{verb, "app-7q2k9m4x8p1c"}
 		switch verb {
 		case "update":
 			args = append(args, "--description", "x")

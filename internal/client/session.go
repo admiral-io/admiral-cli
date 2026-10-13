@@ -10,6 +10,7 @@ import (
 
 	sdkclient "go.admiral.io/sdk/client"
 	agentv1 "go.admiral.io/sdk/proto/admiral/api/agent/v1"
+	apikeyv1 "go.admiral.io/sdk/proto/admiral/api/apikey/v1"
 	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
 	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
 	credentialv1 "go.admiral.io/sdk/proto/admiral/api/credential/v1"
@@ -76,6 +77,14 @@ func newSessionClient(hostPort string, tok *bearerToken, mode transportMode, int
 }
 
 func (c *sessionClient) Agent() agentv1.AgentAPIClient { return agentv1.NewAgentAPIClient(c.conn) }
+
+func (c *sessionClient) WorkloadIdentityProvider() agentv1.WorkloadIdentityProviderAPIClient {
+	return agentv1.NewWorkloadIdentityProviderAPIClient(c.conn)
+}
+
+func (c *sessionClient) Job() agentv1.JobAPIClient { return agentv1.NewJobAPIClient(c.conn) }
+
+func (c *sessionClient) ApiKey() apikeyv1.ApiKeyAPIClient { return apikeyv1.NewApiKeyAPIClient(c.conn) }
 
 func (c *sessionClient) AgentRuntime() agentv1.AgentRuntimeAPIClient {
 	return agentv1.NewAgentRuntimeAPIClient(c.conn)

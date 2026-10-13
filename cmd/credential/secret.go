@@ -22,16 +22,16 @@ const (
 	typeGitHubApp   = "github-app"
 )
 
-var typeEnum = map[string]credentialv1.CredentialType{
-	typeSSHKey:      credentialv1.CredentialType_CREDENTIAL_TYPE_SSH_KEY,
-	typeBasicAuth:   credentialv1.CredentialType_CREDENTIAL_TYPE_BASIC_AUTH,
-	typeBearerToken: credentialv1.CredentialType_CREDENTIAL_TYPE_BEARER_TOKEN,
-	typeGitHubApp:   credentialv1.CredentialType_CREDENTIAL_TYPE_GITHUB_APP,
+var typeEnum = map[string]credentialv1.Credential_Type{
+	typeSSHKey:      credentialv1.Credential_TYPE_SSH_KEY,
+	typeBasicAuth:   credentialv1.Credential_TYPE_BASIC_AUTH,
+	typeBearerToken: credentialv1.Credential_TYPE_BEARER_TOKEN,
+	typeGitHubApp:   credentialv1.Credential_TYPE_GITHUB_APP,
 }
 
 var typeNames = []string{typeBasicAuth, typeBearerToken, typeGitHubApp, typeSSHKey}
 
-func typeName(t credentialv1.CredentialType) string {
+func typeName(t credentialv1.Credential_Type) string {
 	for name, e := range typeEnum {
 		if e == t {
 			return name

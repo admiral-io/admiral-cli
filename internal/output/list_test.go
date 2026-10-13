@@ -13,6 +13,7 @@ import (
 
 	"go.admiral.io/cli/internal/iostreams"
 	agentv1 "go.admiral.io/sdk/proto/admiral/api/agent/v1"
+	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
 	credentialv1 "go.admiral.io/sdk/proto/admiral/api/credential/v1"
 	runv1 "go.admiral.io/sdk/proto/admiral/api/run/v1"
 )
@@ -184,12 +185,14 @@ func TestParseFormat_Name(t *testing.T) {
 }
 
 func TestFormatEnum(t *testing.T) {
-	require.Equal(t, "PartiallyFailed", FormatEnum(runv1.RunStatus_RUN_STATUS_PARTIALLY_FAILED))
-	require.Equal(t, "Succeeded", FormatEnum(runv1.RunStatus_RUN_STATUS_SUCCEEDED))
-	require.Equal(t, None, FormatEnum(runv1.RunStatus_RUN_STATUS_UNSPECIFIED))
-	require.Equal(t, "agent-too-old", FormatEnumKebab(agentv1.WaitReason_AGENT_TOO_OLD))
-	require.Equal(t, "ssh-key", FormatEnumKebab(credentialv1.CredentialType_CREDENTIAL_TYPE_SSH_KEY))
-	require.Equal(t, None, FormatEnumKebab(credentialv1.CredentialType_CREDENTIAL_TYPE_UNSPECIFIED))
+	// Nested enums carry only the field's prefix: Run.Status is STATUS_*.
+	require.Equal(t, "NoChanges", FormatEnum(runv1.Run_STATUS_NO_CHANGES))
+	require.Equal(t, "Applied", FormatEnum(runv1.Run_STATUS_APPLIED))
+	require.Equal(t, None, FormatEnum(runv1.Run_STATUS_UNSPECIFIED))
+	require.Equal(t, "open", FormatEnumKebab(changesetv1.ChangeSet_STATUS_OPEN))
+	require.Equal(t, "agent-offline", FormatEnumKebab(agentv1.WaitReason_WAIT_REASON_AGENT_OFFLINE))
+	require.Equal(t, "ssh-key", FormatEnumKebab(credentialv1.Credential_TYPE_SSH_KEY))
+	require.Equal(t, None, FormatEnumKebab(credentialv1.Credential_TYPE_UNSPECIFIED))
 }
 
 // A list whose caller forgot Name fails with a message rather than a nil

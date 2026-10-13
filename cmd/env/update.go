@@ -19,14 +19,17 @@ func newUpdateCmd(opts *client.Options) *cobra.Command {
 		newName     string
 		description string
 		labelStrs   []string
-		kube        kubernetesFlags
+		target      targetFlags
 	)
 
 	cmd := &cobra.Command{
 		Use:   "update <name>",
 		Short: "Update an environment",
-		Long: `Update an environment's mutable fields: name, description, labels, and
-the Kubernetes namespace and whether apply creates it.`,
+		Long: `Update an environment's mutable fields: name, description, labels, the
+agents it deploys through, its namespace and the approvals an apply needs.
+
+--agent replaces the list of agents. An agent that stays keeps its settings;
+one that is dropped stops serving the environment.`,
 		Example: `  # Update description
   admiral env update billing/staging --description "US East staging"
 
@@ -39,11 +42,17 @@ the Kubernetes namespace and whether apply creates it.`,
   # By name, scoped with --app
   admiral env update staging --app billing --label tier=staging
 
-  # Move workload components to another namespace
+  # Move components to another namespace
   admiral env update billing/staging --namespace billing-staging
 
-  # Update by UUID
-  admiral env update 550e8400-e29b-41d4-a716-446655440000 --description "..."`,
+  # Deploy through two agents
+  admiral env update billing/prod --agent prod-cluster --agent prod-iam
+
+  # Applies need one approval
+  admiral env update billing/prod --approvals 1
+
+  # Update by ID
+  admiral env update env-3k9x2m7qpl0a --description "..."`,
 		Args:              flags.ExactArgs(1),
 		ValidArgsFunction: complete.First(complete.Envs(opts)),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -62,14 +71,12 @@ the Kubernetes namespace and whether apply creates it.`,
 			if cmd.Flags().Changed("label") {
 				paths = append(paths, "labels")
 			}
-			var kt *environmentv1.KubernetesTarget
-			kubePaths, err := kube.apply(cmd, &kt)
-			if err != nil {
+			if err := target.check(cmd, false); err != nil {
 				return err
 			}
-			paths = append(paths, kubePaths...)
-			if len(paths) == 0 {
-				return cmderr.Usage("at least one of --name, --description, --label, --namespace or --create-namespaces must be specified")
+			targetChanged := cmd.Flags().Changed("agent") || cmd.Flags().Changed("namespace") || cmd.Flags().Changed("approvals")
+			if len(paths) == 0 && !targetChanged {
+				return cmderr.Usage("at least one of --name, --description, --label, --agent, --namespace or --approvals must be specified")
 			}
 
 			c, err := client.CreateClient(cmd.Context(), opts)
@@ -103,11 +110,11 @@ the Kubernetes namespace and whether apply creates it.`,
 				}
 				e.Labels = labels
 			}
-			if len(kubePaths) > 0 {
-				if _, err := kube.apply(cmd, &e.Kubernetes); err != nil {
-					return err
-				}
+			targetPaths, err := target.apply(cmd.Context(), cmd, c.Agent(), e)
+			if err != nil {
+				return err
 			}
+			paths = append(paths, targetPaths...)
 			resp, err := c.Environment().UpdateEnvironment(cmd.Context(), &environmentv1.UpdateEnvironmentRequest{
 				Environment: e,
 				UpdateMask:  &fieldmaskpb.FieldMask{Paths: paths},
@@ -125,7 +132,8 @@ the Kubernetes namespace and whether apply creates it.`,
 	cmd.Flags().StringVar(&newName, "name", "", "new name")
 	cmd.Flags().StringVar(&description, "description", "", "new description")
 	flags.Label(cmd, &labelStrs, "patch labels: key=value to set, key- to remove (repeatable)")
-	kube.register(cmd, "the Kubernetes namespace workload components go to")
+	target.register(cmd, "agent to deploy through, by name or agt- id (repeatable; replaces the list)",
+		"the Kubernetes namespace components render into unless they name one (needs exactly one agent)")
 
 	return cmd
 }

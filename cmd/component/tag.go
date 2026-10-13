@@ -17,13 +17,13 @@ func newTagCmd(opts *client.Options) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "tag <name>:<tag> --digest <digest>",
-		Short: "Point a tag at a revision",
-		Long: `Point a tag at a revision.
+		Short: "Point a tag at a version",
+		Long: `Point a tag at a version.
 
 A semver tag (v1.2.0) is set once and never moves; pointing it elsewhere is
 refused. A floating tag (latest, main) may be moved freely. The digest is
-the revision's full sha256, as printed by publish or 'revision list -o wide'.`,
-		Example: `  # Release a revision under a version
+the version's full sha256, as printed by publish or 'version list -o wide'.`,
+		Example: `  # Release a version under a semver tag
   admiral component tag cloud-sql:v1.2.0 --digest sha256:3f9a...
 
   # Move a floating tag
@@ -62,7 +62,7 @@ the revision's full sha256, as printed by publish or 'revision list -o wide'.`,
 		},
 	}
 
-	cmd.Flags().StringVar(&digest, "digest", "", "the revision to name, as sha256:<hex>")
+	cmd.Flags().StringVar(&digest, "digest", "", "the version to name, as sha256:<hex>")
 	_ = cmd.MarkFlagRequired("digest")
 
 	return cmd

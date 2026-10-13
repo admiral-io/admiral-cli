@@ -32,11 +32,11 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 				return err
 			}
 
-			req := &applicationv1.CreateApplicationRequest{
+			req := &applicationv1.CreateApplicationRequest{Application: &applicationv1.Application{
 				Name:        args[0],
 				Description: description,
 				Labels:      labels,
-			}
+			}}
 
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {

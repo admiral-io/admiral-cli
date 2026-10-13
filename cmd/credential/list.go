@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"go.admiral.io/cli/internal/client"
+	"go.admiral.io/cli/internal/filter"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
 	credentialv1 "go.admiral.io/sdk/proto/admiral/api/credential/v1"
@@ -28,9 +29,15 @@ func newListCmd(opts *client.Options) *cobra.Command {
   admiral credential list -o name`,
 		Args: flags.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			filter, err := flags.LabelFilter(labelStrs)
+			byLabel, err := flags.LabelFilter(labelStrs)
 			if err != nil {
 				return err
+			}
+			var byType string
+			if typ != "" {
+				if byType, err = filter.Eq("type", typeEnum[typ].String()); err != nil {
+					return err
+				}
 			}
 
 			c, err := client.CreateClient(cmd.Context(), opts)
@@ -41,8 +48,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 
 			creds, next, err := flags.Pages(paging, func(token string) ([]*credentialv1.Credential, string, error) {
 				resp, err := c.Credential().ListCredentials(cmd.Context(), &credentialv1.ListCredentialsRequest{
-					Filter:    filter,
-					Type:      typeEnum[typ],
+					Filter:    filter.And(byLabel, byType),
 					PageSize:  paging.PageSize,
 					PageToken: token,
 				})

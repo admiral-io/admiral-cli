@@ -13,6 +13,7 @@ import (
 var componentTable = output.Table[*registryv1.Component]{
 	{Header: "NAME", Cell: func(c *registryv1.Component) string { return c.Name }},
 	{Header: "TAGS", Cell: func(c *registryv1.Component) string { return formatTags(c.Tags) }},
+	{Header: "STATUS", Cell: func(c *registryv1.Component) string { return output.FormatEnumKebab(c.Status) }},
 	{Header: "DESCRIPTION", Truncate: 40, Cell: func(c *registryv1.Component) string { return c.Description }},
 	{Header: "LABELS", Cell: func(c *registryv1.Component) string { return output.FormatLabels(c.Labels) }},
 	{Header: "AGE", Cell: func(c *registryv1.Component) string { return output.FormatAge(c.CreatedAt) }},
@@ -20,16 +21,17 @@ var componentTable = output.Table[*registryv1.Component]{
 	{Header: "CREATED-BY", Wide: true, Cell: func(c *registryv1.Component) string { return output.FormatActor(c.CreatedBy) }},
 }
 
-// revisionTable is what a publish answers with.
-var revisionTable = output.Table[*registryv1.Revision]{
-	{Header: "DIGEST", Cell: func(r *registryv1.Revision) string { return shortDigest(r.Digest) }},
-	{Header: "KIND", Cell: func(r *registryv1.Revision) string { return output.FormatEnumKebab(r.Kind) }},
-	{Header: "TAGS", Cell: func(r *registryv1.Revision) string { return strings.Join(r.Tags, ",") }},
-	{Header: "STATUS", Cell: func(r *registryv1.Revision) string { return output.FormatEnumKebab(r.Status) }},
-	{Header: "FINDINGS", Cell: func(r *registryv1.Revision) string { return formatFindingCount(r.Findings) }},
-	{Header: "AGE", Cell: func(r *registryv1.Revision) string { return output.FormatAge(r.CreatedAt) }},
-	{Header: "FULL-DIGEST", Wide: true, Cell: func(r *registryv1.Revision) string { return r.Digest }},
-	{Header: "SIZE", Wide: true, Cell: func(r *registryv1.Revision) string { return formatSize(r.SizeBytes) }},
+// versionTable is what a publish answers with.
+var versionTable = output.Table[*registryv1.Version]{
+	{Header: "DIGEST", Cell: func(v *registryv1.Version) string { return shortDigest(v.Digest) }},
+	{Header: "KIND", Cell: func(v *registryv1.Version) string { return output.FormatEnumKebab(v.Kind) }},
+	{Header: "TAGS", Cell: func(v *registryv1.Version) string { return strings.Join(v.Tags, ",") }},
+	{Header: "STATUS", Cell: func(v *registryv1.Version) string { return output.FormatEnumKebab(v.Status) }},
+	{Header: "FINDINGS", Cell: func(v *registryv1.Version) string { return formatFindingCount(v.Findings) }},
+	{Header: "AGE", Cell: func(v *registryv1.Version) string { return output.FormatAge(v.CreatedAt) }},
+	{Header: "ID", Wide: true, Cell: func(v *registryv1.Version) string { return v.Id }},
+	{Header: "FULL-DIGEST", Wide: true, Cell: func(v *registryv1.Version) string { return v.Digest }},
+	{Header: "SIZE", Wide: true, Cell: func(v *registryv1.Version) string { return formatSize(v.SizeBytes) }},
 }
 
 func formatTags(tags []*registryv1.Tag) string {
@@ -44,7 +46,7 @@ func formatTags(tags []*registryv1.Tag) string {
 }
 
 // shortDigest is the first twelve hex characters, the docker convention:
-// enough to tell revisions apart in a table, and -o wide has the whole thing.
+// enough to tell versions apart in a table, and -o wide has the whole thing.
 func shortDigest(d string) string {
 	hex := strings.TrimPrefix(d, "sha256:")
 	if len(hex) > 12 {
@@ -63,11 +65,11 @@ func formatFindingCount(fs []*registryv1.Finding) string {
 	}
 	var parts []string
 	for _, sev := range []registryv1.FindingSeverity{
-		registryv1.FindingSeverity_CRITICAL, registryv1.FindingSeverity_HIGH,
-		registryv1.FindingSeverity_MEDIUM, registryv1.FindingSeverity_LOW, registryv1.FindingSeverity_INFO,
+		registryv1.FindingSeverity_FINDING_SEVERITY_CRITICAL, registryv1.FindingSeverity_FINDING_SEVERITY_HIGH,
+		registryv1.FindingSeverity_FINDING_SEVERITY_MEDIUM, registryv1.FindingSeverity_FINDING_SEVERITY_LOW, registryv1.FindingSeverity_FINDING_SEVERITY_INFO,
 	} {
 		if n := counts[sev]; n > 0 {
-			parts = append(parts, strings.ToLower(sev.String())+":"+strconv.Itoa(n))
+			parts = append(parts, output.FormatEnumKebab(sev)+":"+strconv.Itoa(n))
 		}
 	}
 	return strings.Join(parts, " ")

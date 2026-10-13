@@ -22,7 +22,7 @@ view and '-o json' for the raw record.`,
   admiral app get billing-api
 
   # Get an application by ID
-  admiral app get 550e8400-e29b-41d4-a716-446655440000
+  admiral app get app-7q2k9m4x8p1c
 
   # Raw record as JSON
   admiral app get billing-api -o json`,

@@ -43,3 +43,12 @@ func TestAnd(t *testing.T) {
 	require.Equal(t, "a", And("", "a", ""))
 	require.Equal(t, "a AND b", And("a", "b"))
 }
+
+func TestIn(t *testing.T) {
+	got, err := In("environment_id", []string{"env-a", "o'neil"})
+	require.NoError(t, err)
+	require.Equal(t, `field['environment_id'] IN ['env-a', 'o\'neil']`, got)
+
+	_, err = In("id", []string{`bad\`})
+	require.Error(t, err)
+}

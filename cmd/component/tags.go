@@ -18,7 +18,7 @@ import (
 // one refused tag never takes the publish down with it.
 //
 // A commit tag (sha-<short>) is set only when this publish created the
-// revision, so it reads as "the commit that produced this", not every
+// version, so it reads as "the commit that produced this", not every
 // commit that happened to see it.
 //
 // A chart's own version (Chart.yaml: version) is applied as an immutable
@@ -31,19 +31,19 @@ import (
 var semverPattern = regexp.MustCompile(`^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$`)
 
 type afterPublish struct {
-	// sha is the commit tag to apply when the revision is new; "" for none.
+	// sha is the commit tag to apply when the version is new; "" for none.
 	sha string
 }
 
 // applyTags sets the tags a publish earned after the fact and returns the
-// revision's tag list with the ones that took appended, so a table shows
+// version's tag list with the ones that took appended, so a table shows
 // what the registry now says.
 func applyTags(ctx context.Context, p *output.Printer, c sdkclient.AdmiralClient, resp *registryv1.PublishComponentResponse, packed *bundle.Packed, after afterPublish) []string {
-	tags := append([]string(nil), resp.Revision.Tags...)
-	comp, rev := resp.Component, resp.Revision
+	tags := append([]string(nil), resp.Version.Tags...)
+	comp, ver := resp.Component, resp.Version
 
 	if after.sha != "" && !resp.Unchanged && !slices.Contains(tags, after.sha) {
-		if _, err := c.Registry().SetTag(ctx, &registryv1.SetTagRequest{ComponentId: comp.Id, Name: after.sha, Digest: rev.Digest}); err != nil {
+		if _, err := c.Registry().SetTag(ctx, &registryv1.SetTagRequest{ComponentId: comp.Id, Name: after.sha, Digest: ver.Digest}); err != nil {
 			output.Writef(p.Err(), "%s: could not tag %s: %v\n", comp.Name, after.sha, err)
 		} else {
 			tags = append(tags, after.sha)
@@ -51,7 +51,7 @@ func applyTags(ctx context.Context, p *output.Printer, c sdkclient.AdmiralClient
 	}
 
 	if v := packed.Version; v != "" && semverPattern.MatchString(v) && !slices.Contains(tags, v) {
-		_, err := c.Registry().SetTag(ctx, &registryv1.SetTagRequest{ComponentId: comp.Id, Name: v, Digest: rev.Digest})
+		_, err := c.Registry().SetTag(ctx, &registryv1.SetTagRequest{ComponentId: comp.Id, Name: v, Digest: ver.Digest})
 		switch {
 		case err == nil:
 			tags = append(tags, v)
@@ -59,7 +59,7 @@ func applyTags(ctx context.Context, p *output.Printer, c sdkclient.AdmiralClient
 			// The version already names other bytes: the chart changed and its
 			// version did not. The registry keeps the version honest; the
 			// publish keeps its floating tags.
-			output.Writef(p.Err(), "  warn chart version %s already names a different revision; bump version in Chart.yaml to tag this one\n", v)
+			output.Writef(p.Err(), "  warn chart version %s already names a different version; bump version in Chart.yaml to tag this one\n", v)
 		default:
 			output.Writef(p.Err(), "%s: could not tag %s: %v\n", comp.Name, v, err)
 		}

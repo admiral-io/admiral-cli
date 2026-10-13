@@ -7,6 +7,7 @@ import (
 
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
+	"go.admiral.io/cli/internal/filter"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
 	"go.admiral.io/cli/internal/resolve"
@@ -25,8 +26,8 @@ func newListCmd(opts *client.Options) *cobra.Command {
 		Short: "List an environment's change sets",
 		Example: `  admiral changeset list --env shop/prod
 
-  # Drafts only, IDs for scripting
-  admiral changeset list --env shop/prod --status draft -o name`,
+  # Open ones only, IDs for scripting
+  admiral changeset list --env shop/prod --status open -o name`,
 		Args: flags.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if envTarget == "" {
@@ -39,7 +40,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 			}
 			// Checked before the client is built: dialing first would report
 			// a missing credential for what is a missing argument.
-			if app == "" && !resolve.IsUUID(env) {
+			if app == "" && !resolve.IsID("env", env) {
 				return cmderr.UsageHint("Pass --env as app/env: 'admiral changeset list --env shop/prod'.",
 					"no application specified")
 			}
@@ -54,11 +55,16 @@ func newListCmd(opts *client.Options) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			want := changesetv1.ChangeSetStatus(changesetv1.ChangeSetStatus_value[strings.ToUpper(status)])
+			var byStatus string
+			if status != "" {
+				if byStatus, err = filter.Eq("status", "STATUS_"+strings.ToUpper(status)); err != nil {
+					return err
+				}
+			}
 			css, next, err := flags.Pages(paging, func(token string) ([]*changesetv1.ChangeSet, string, error) {
 				resp, err := c.ChangeSet().ListChangeSets(cmd.Context(), &changesetv1.ListChangeSetsRequest{
 					EnvironmentId: envID,
-					Status:        want,
+					Filter:        byStatus,
 					PageSize:      paging.PageSize,
 					PageToken:     token,
 				})
@@ -83,7 +89,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 	}
 
 	flags.Env(cmd, &envTarget, opts)
-	flags.Enum(cmd, &status, "status", "", "only change sets in this status", "draft", "discarded")
+	flags.Enum(cmd, &status, "status", "", "only change sets in this status", "open", "applied", "closed")
 	flags.Paging(cmd, &paging)
 
 	return cmd

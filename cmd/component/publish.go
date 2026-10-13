@@ -34,19 +34,19 @@ func newPublishCmd(opts *client.Options) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "publish [path]",
-		Short: "Publish a directory as a component revision",
-		Long: `Publish a directory as a component revision.
+		Short: "Publish a directory as a component version",
+		Long: `Publish a directory as a component version.
 
 The directory is packed and uploaded; the registry normalizes it, digests
 it, inspects it for its contract, and stores it. Publishing the same tree
-twice yields the same revision, so a publish-everything CI step is safe.
+twice yields the same version, so a publish-everything CI step is safe.
 
 Terraform modules are closed before upload: every module call whose source
 is a local path outside the directory is copied into vendor/ and the call
 rewritten to point there, recursively. Remote sources are closed the same
-way — a registry address, git URL or archive URL is fetched, vendored, and
+way: a registry address, git URL or archive URL is fetched, vendored, and
 what the constraint resolved to (a version, a commit, a digest) is recorded
-as a pin, so the revision cannot drift. Helm charts are closed like 'helm
+as a dependency, so the version cannot drift. Helm charts are closed like 'helm
 dependency build': declared dependencies land under charts/ at the version
 Chart.lock pinned, which is why a chart with dependencies needs one. The
 working copy is never modified.
@@ -56,15 +56,15 @@ to be vendored into the tree first, as do sources built from a variable or
 a local rather than a literal string.
 
 The component is created on first publish, named after the directory
-unless --name says otherwise. --tag names the revision; a semver tag can be
+unless --name says otherwise. --tag names the version; a semver tag can be
 set once and never moved.
 
 Pointed at a directory that holds admiral.yaml, publish takes the whole
 repository: every component the manifest declares is packed and pushed. The
 registry is content-addressed, so a component whose bytes it already holds
-is a no-op and only what changed becomes a new revision; a shared module's
+is a no-op and only what changed becomes a new version; a shared module's
 change shows up in every component that vendors it. Without --tag the
-revisions are tagged with the branch name and sha-<short>, on every declared
+versions are tagged with the branch name and sha-<short>, on every declared
 component. This is the form CI runs on every push.`,
 		Example: `  # Publish the current directory, named after it
   admiral component publish
@@ -144,15 +144,15 @@ component. This is the form CI runs on every push.`,
 			if err != nil {
 				return err
 			}
-			rev := resp.Revision
-			rev.Tags = applyTags(cmd.Context(), p, c, resp, packed, afterPublish{})
-			return p.PrintOne(rev, resp.Component.Name+"@"+rev.Digest, revisionTable.Render(p, rev))
+			ver := resp.Version
+			ver.Tags = applyTags(cmd.Context(), p, c, resp, packed, afterPublish{})
+			return p.PrintOne(ver, resp.Component.Name+"@"+ver.Digest, versionTable.Render(p, ver))
 		},
 	}
 
 	cmd.Flags().StringVar(&name, "name", "", "component name (default: the directory's name)")
 	flags.Enum(cmd, &kind, "kind", "", "what the directory is, when detection should not decide", "terraform", "helm", "manifests")
-	cmd.Flags().StringArrayVarP(&tags, "tag", "t", nil, "tag to set on the revision (repeatable)")
+	cmd.Flags().StringArrayVarP(&tags, "tag", "t", nil, "tag to set on the version (repeatable)")
 	cmd.Flags().StringVar(&description, "description", "", "component description, applied when the component is created")
 	flags.Label(cmd, &labelStrs, "label to attach when the component is created (key=value, repeatable)")
 	cmd.Flags().StringVarP(&manifestArg, "manifest", "f", "", "publish the repository this "+manifest.Filename+" describes (default: the one in the directory, if any)")
@@ -198,11 +198,11 @@ type publishRequest struct {
 }
 
 // publishOne uploads a packed component and reports the outcome and the
-// findings on stderr. The caller decides how to print the revision.
+// findings on stderr. The caller decides how to print the version.
 func publishOne(cmd *cobra.Command, p *output.Printer, c sdkclient.AdmiralClient, req publishRequest) (*registryv1.PublishComponentResponse, error) {
 	prov := bundle.Describe(req.dir)
 	if prov.Dirty {
-		output.Writef(p.Err(), "Working copy has uncommitted changes; the revision will say so\n")
+		output.Writef(p.Err(), "Working copy has uncommitted changes; the version records the commit, not them\n")
 	}
 	resp, err := c.Registry().PublishComponent(cmd.Context(), &registryv1.PublishComponentRequest{
 		Name:        req.name,
@@ -211,39 +211,42 @@ func publishOne(cmd *cobra.Command, p *output.Printer, c sdkclient.AdmiralClient
 		Description: req.description,
 		Labels:      req.labels,
 		Provenance: &registryv1.Provenance{
-			Uri: prov.URI, Commit: prov.Commit, Path: prov.Path, Dirty: prov.Dirty,
-			Pins: pinsToProto(req.packed.Pins),
+			Kind:         registryv1.Provenance_KIND_PUSH,
+			Uri:          prov.URI,
+			Commit:       prov.Commit,
+			Path:         prov.Path,
+			Dependencies: dependenciesToProto(req.packed.Pins),
 		},
 		Bundle: req.packed.Bytes,
 	})
 	if err != nil {
 		return nil, err
 	}
-	reportPublished(p, resp.Component, resp.Revision, resp.Unchanged)
+	reportPublished(p, resp.Component, resp.Version, resp.Unchanged)
 	return resp, nil
 }
 
-// reportPublished says on stderr what the registry did with a revision,
+// reportPublished says on stderr what the registry did with a version,
 // and lists its findings.
-func reportPublished(p *output.Printer, comp *registryv1.Component, rev *registryv1.Revision, unchanged bool) {
+func reportPublished(p *output.Printer, comp *registryv1.Component, ver *registryv1.Version, unchanged bool) {
 	if unchanged {
-		output.Writef(p.Err(), "%s already published as %s; nothing written\n", comp.Name, shortDigest(rev.Digest))
+		output.Writef(p.Err(), "%s already published as %s; nothing written\n", comp.Name, shortDigest(ver.Digest))
 	} else {
-		output.Writef(p.Err(), "Published %s@%s\n", comp.Name, rev.Digest)
+		output.Writef(p.Err(), "Published %s@%s\n", comp.Name, ver.Digest)
 	}
-	for _, f := range rev.Findings {
-		output.Writef(p.Err(), "  %s %s: %s\n", strings.ToLower(f.Severity.String()), f.Source, f.Message)
+	for _, f := range ver.Findings {
+		output.Writef(p.Err(), "  %s %s: %s\n", output.FormatEnumKebab(f.Severity), f.Source, f.Message)
 	}
 }
 
 func kindEnum(kind string) registryv1.ComponentKind {
 	switch kind {
 	case "terraform":
-		return registryv1.ComponentKind_TERRAFORM
+		return registryv1.ComponentKind_COMPONENT_KIND_TERRAFORM
 	case "helm":
-		return registryv1.ComponentKind_HELM
+		return registryv1.ComponentKind_COMPONENT_KIND_HELM
 	case "manifests":
-		return registryv1.ComponentKind_MANIFESTS
+		return registryv1.ComponentKind_COMPONENT_KIND_MANIFESTS
 	default:
 		return registryv1.ComponentKind_COMPONENT_KIND_UNSPECIFIED
 	}
@@ -256,10 +259,10 @@ func displayCaller(rel string) string {
 	return rel
 }
 
-func pinsToProto(pins []bundle.Pin) []*registryv1.Pin {
-	out := make([]*registryv1.Pin, 0, len(pins))
+func dependenciesToProto(pins []bundle.Pin) []*registryv1.Dependency {
+	out := make([]*registryv1.Dependency, 0, len(pins))
 	for _, p := range pins {
-		out = append(out, &registryv1.Pin{Source: p.Source, Constraint: p.Constraint, Resolved: p.Resolved})
+		out = append(out, &registryv1.Dependency{Source: p.Source, Constraint: p.Constraint, Resolved: p.Resolved})
 	}
 	return out
 }
