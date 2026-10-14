@@ -11,7 +11,7 @@ type ChangeSetCmd struct {
 	Cmd *cobra.Command
 }
 
-// NewChangeSetCmd is the change set noun: a proposal against the components
+// NewChangeSetCmd is the changeset noun: a proposal against the components
 // of one environment. Every verb that changes one cuts exactly one revision.
 func NewChangeSetCmd(opts *client.Options) *ChangeSetCmd {
 	root := &ChangeSetCmd{}
@@ -21,12 +21,12 @@ func NewChangeSetCmd(opts *client.Options) *ChangeSetCmd {
 		Short: "Propose changes to an environment's components",
 		Long: `Propose changes to an environment's components.
 
-A change set is a proposal against one environment: add a component from
+A changeset is a proposal against one environment: add a component from
 the registry, change its version, set or unset values, remove it. Each
 command cuts one immutable revision. 'plan' starts a run that plans the
 head; approve and apply that run with 'admiral run'.
 
-Change sets are addressed by ID (cs-7f2a1c9d0e3b).`,
+Changesets are addressed by ID (cs-7f2a1c9d0e3b).`,
 		Aliases:       []string{"cs", "changesets"},
 		SilenceUsage:  true,
 		SilenceErrors: true,

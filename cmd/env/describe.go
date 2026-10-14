@@ -36,7 +36,7 @@ func newDescribeCmd(opts *client.Options) *cobra.Command {
 		Short: "Show everything about an environment",
 		Long: `Render the operator view of an environment: identity, the agents it
 deploys through, what an apply needs, any hold, every component with its
-version and last apply, open change sets and recent runs. A section the
+version and last apply, open changesets and recent runs. A section the
 active credential cannot read is shown as unavailable.
 
 describe is a human view. Use 'env get -o json' for the raw record.`,
@@ -224,9 +224,9 @@ func describeEnv(e *environmentv1.Environment, app *applicationv1.Application, s
 	}
 
 	if sec.openCSErr != nil {
-		d.Unavailable("Open Change Sets", cmderr.Format(sec.openCSErr))
+		d.Unavailable("Open Changesets", cmderr.Format(sec.openCSErr))
 	} else {
-		d.Section("Open Change Sets", func(b *output.Block) {
+		d.Section("Open Changesets", func(b *output.Block) {
 			if len(openCS) == 0 {
 				b.Field("Count", "0")
 				return
@@ -247,7 +247,7 @@ func describeEnv(e *environmentv1.Environment, app *applicationv1.Application, s
 		for _, r := range runs {
 			rows = append(rows, []string{r.Id, output.FormatEnum(r.Status), r.ChangeSetId, output.FormatActor(r.CreatedBy), output.FormatAge(r.CreatedAt)})
 		}
-		d.Table("Recent Runs", []string{"ID", "Status", "Change Set", "Created By", "Age"}, rows)
+		d.Table("Recent Runs", []string{"ID", "Status", "Changeset", "Created By", "Age"}, rows)
 	}
 
 	if sec.permissionDenied() {

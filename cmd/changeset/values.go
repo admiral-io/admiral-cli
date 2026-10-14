@@ -21,13 +21,13 @@ func newValuesCmd(opts *client.Options) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "values <change-set> <component>",
+		Use:   "values <changeset> <component>",
 		Short: "Download a component's values, or upload them with --values",
 		Long: `Download a component's values, or upload them with --values.
 
-A download writes YAML to stdout under a header naming the change set, the
+A download writes YAML to stdout under a header naming the changeset, the
 component and the revision it was taken at. An upload replaces the
-component's values with the file's and is refused if the change set has
+component's values with the file's and is refused if the changeset has
 moved past that revision, so an edit made meanwhile is never overwritten.
 A key missing from the file is removed, so its default applies.`,
 		Example: `  admiral changeset values cs-7f2a1c9d0e3b api > api.yaml
@@ -104,7 +104,7 @@ A key missing from the file is removed, so its default applies.`,
 
 // uploadEdit builds the one ReplaceValues an upload sends, and the revision
 // the file was downloaded at, which the edit sends as its if_revision. A
-// file whose header names another change set or component is refused here;
+// file whose header names another changeset or component is refused here;
 // a stale revision can only be judged by the server, which refuses it.
 func uploadEdit(stderr io.Writer, path, csID, comp string, data []byte) (*changesetv1.Edit, int32, error) {
 	h, ok := valuesfile.ParseHeader(data)
@@ -112,10 +112,10 @@ func uploadEdit(stderr io.Writer, path, csID, comp string, data []byte) (*change
 	if !ok || fromCS == "" || fromComp == "" {
 		return nil, 0, cmderr.UsageHint(
 			"Download the values first ('admiral changeset values "+csID+" "+comp+" > "+comp+".yaml'), edit that file, then upload it.",
-			"%s has no change set, component and revision header", path)
+			"%s has no changeset, component and revision header", path)
 	}
 	if fromCS != csID {
-		return nil, 0, cmderr.Usage("%s was downloaded from change set %s, not %s", path, fromCS, csID)
+		return nil, 0, cmderr.Usage("%s was downloaded from changeset %s, not %s", path, fromCS, csID)
 	}
 	if fromComp != comp {
 		return nil, 0, cmderr.Usage("%s holds the values of %s, not %s", path, fromComp, comp)
@@ -138,7 +138,7 @@ func uploadEdit(stderr io.Writer, path, csID, comp string, data []byte) (*change
 	}}}, h.Revision, nil
 }
 
-// headerNames reads the change set and component lines valuesfile.Render
+// headerNames reads the changeset and component lines valuesfile.Render
 // writes; ParseHeader reads only the revision.
 func headerNames(data []byte) (changeSet, component string) {
 	for _, line := range strings.Split(string(data), "\n") {
@@ -147,7 +147,7 @@ func headerNames(data []byte) (changeSet, component string) {
 			break
 		}
 		line = strings.TrimSpace(strings.TrimPrefix(line, "#"))
-		if v, ok := strings.CutPrefix(line, "change set:"); ok {
+		if v, ok := strings.CutPrefix(line, "changeset:"); ok {
 			changeSet = strings.TrimSpace(v)
 		}
 		if v, ok := strings.CutPrefix(line, "component:"); ok {

@@ -185,7 +185,7 @@ func ParseHeader(data []byte) (Header, bool) {
 // sorted, references as !ref, and escaped maps unescaped.
 func Render(tree map[string]any, h Header) ([]byte, error) {
 	var b bytes.Buffer
-	fmt.Fprintf(&b, "# change set: %s\n# component: %s\n# revision: %d\n", h.ChangeSet, h.Component, h.Revision)
+	fmt.Fprintf(&b, "# changeset: %s\n# component: %s\n# revision: %d\n", h.ChangeSet, h.Component, h.Revision)
 	if h.BaseDigest != "" {
 		fmt.Fprintf(&b, "# base: %s\n", h.BaseDigest)
 	}

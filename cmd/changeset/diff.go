@@ -16,9 +16,9 @@ import (
 
 func newDiffCmd(opts *client.Options) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "diff <change-set>",
-		Short: "Show what a change set changes",
-		Long: `Show what a change set's head revision changes: per component, the action,
+		Use:   "diff <changeset>",
+		Short: "Show what a changeset changes",
+		Long: `Show what a changeset's head revision changes: per component, the action,
 the version before and after, each changed value before and after, and the
 component's contract violations.`,
 		Example: `  admiral changeset diff cs-7f2a1c9d0e3b
@@ -100,7 +100,7 @@ func versionChange(before, after *changesetv1.VersionRef) string {
 	}
 }
 
-// versionName is the reference the change set named, a tag or a digest,
+// versionName is the reference the changeset named, a tag or a digest,
 // with the digest it resolved to when the reference is a tag.
 func versionName(v *changesetv1.VersionRef) string {
 	short := "sha256:" + shortDigest(v.Digest)

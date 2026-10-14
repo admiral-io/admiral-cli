@@ -88,7 +88,7 @@ func newDescribeCmd(opts *client.Options) *cobra.Command {
 				for _, r := range runs.Runs {
 					runRows = append(runRows, []string{r.Id, envNames[r.EnvironmentId], output.FormatEnum(r.Status), output.OrEmpty(r.ChangeSetId), output.FormatAge(r.CreatedAt)})
 				}
-				d.Table("Recent Runs", []string{"ID", "Env", "Status", "Change Set", "Age"}, runRows)
+				d.Table("Recent Runs", []string{"ID", "Env", "Status", "Changeset", "Age"}, runRows)
 			}
 
 			if status.Code(envErr) == codes.PermissionDenied || status.Code(runErr) == codes.PermissionDenied {

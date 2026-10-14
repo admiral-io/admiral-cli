@@ -82,7 +82,7 @@ func TestTable_Write(t *testing.T) {
 }
 
 func TestHeaderName(t *testing.T) {
-	require.Equal(t, "CHANGE-SET", headerName("CHANGE SET"))
+	require.Equal(t, "CREATED-BY", headerName("CREATED BY"))
 	require.Equal(t, "CREATED-BY", headerName(" created by "))
 	require.Equal(t, "AGE", headerName("AGE"))
 }

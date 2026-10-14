@@ -10,10 +10,10 @@ import (
 
 func TestPlanArguments(t *testing.T) {
 	_, err := run(t, "plan")
-	requireUsage(t, err, "missing argument: plan <change-set>")
+	requireUsage(t, err, "missing argument: plan <changeset>")
 
 	_, err = run(t, "plan", "cs-1")
-	requireUsage(t, err, `invalid change set "cs-1"`)
+	requireUsage(t, err, `invalid changeset "cs-1"`)
 
 	_, err = run(t, "plan", csID, "api")
 	requireUsage(t, err, "accepts 1 arg(s), received 2")

@@ -56,8 +56,8 @@ func TestPositionalUsageErrors(t *testing.T) {
 		want string
 	}{
 		{[]string{"create"}, "missing argument: create <app>/<env>"},
-		{[]string{"get"}, "missing argument: get <change-set>"},
-		{[]string{"discard"}, "missing argument: discard <change-set>"},
+		{[]string{"get"}, "missing argument: get <changeset>"},
+		{[]string{"discard"}, "missing argument: discard <changeset>"},
 		{[]string{"list", "shop/prod"}, `unknown argument "shop/prod"`},
 		{[]string{"bogus"}, `unknown command "bogus" for "changeset"`},
 	}
@@ -72,16 +72,16 @@ func TestPositionalUsageErrors(t *testing.T) {
 	}
 }
 
-// A change set is addressed by its cs- ID only; anything else is refused
+// A changeset is addressed by its cs- ID only; anything else is refused
 // before any sign-in.
 func TestChangeSetIDIsCheckedBeforeTheNetwork(t *testing.T) {
 	for _, bad := range []string{"cs-7F2A1C9D0E3B", "cs-7f2a1", "7f2a1c9d0e3b", envID} {
 		_, err := run(t, "get", bad)
-		requireUsage(t, err, `invalid change set "`+bad+`"`)
+		requireUsage(t, err, `invalid changeset "`+bad+`"`)
 		require.Contains(t, cmderr.Hint(err), "changeset list --env")
 
 		_, err = run(t, "discard", bad, "--force")
-		requireUsage(t, err, `invalid change set "`+bad+`"`)
+		requireUsage(t, err, `invalid changeset "`+bad+`"`)
 	}
 	_, err := run(t, "get", csID)
 	requireAccepted(t, err, "get", csID)
@@ -232,7 +232,7 @@ func TestSetAndAddRefuseBeforeTheNetwork(t *testing.T) {
 		{"set without =", []string{"set", csID, "api.image.tag"}, "is not component.path=value"},
 		{"set a whole component", []string{"set", csID, "api=1"}, "names no path inside the component"},
 		{"set an empty key", []string{"set", csID, "api.image..tag=v2"}, "has an empty key"},
-		{"set a bad id", []string{"set", "cs-1", "api.replicas=3"}, `invalid change set "cs-1"`},
+		{"set a bad id", []string{"set", "cs-1", "api.replicas=3"}, `invalid changeset "cs-1"`},
 		{"set nothing", []string{"set", csID}, "nothing to set"},
 		{"set --to with a path", []string{"set", csID, "api.image.tag=v2", "--to", "v2"}, "--to takes exactly one component"},
 		{"set --to on two", []string{"set", csID, "api", "web", "--to", "v2"}, "--to takes exactly one component"},
@@ -348,7 +348,7 @@ func downloaded(t *testing.T, h valuesfile.Header, tree map[string]any) string {
 }
 
 // An upload is checked against the header before any sign-in: a file from
-// another change set or component, or one with no header, is refused.
+// another changeset or component, or one with no header, is refused.
 func TestValuesUploadRefusesAFileFromElsewhere(t *testing.T) {
 	tree := map[string]any{"replicas": json.Number("3")}
 	upload := func(path string) error {
@@ -357,7 +357,7 @@ func TestValuesUploadRefusesAFileFromElsewhere(t *testing.T) {
 	}
 
 	err := upload(downloaded(t, valuesfile.Header{ChangeSet: "cs-000000000000", Component: "api", Revision: 3}, tree))
-	requireUsage(t, err, "was downloaded from change set cs-000000000000, not "+csID)
+	requireUsage(t, err, "was downloaded from changeset cs-000000000000, not "+csID)
 
 	err = upload(downloaded(t, valuesfile.Header{ChangeSet: csID, Component: "web", Revision: 3}, tree))
 	requireUsage(t, err, "holds the values of web, not api")
@@ -365,15 +365,15 @@ func TestValuesUploadRefusesAFileFromElsewhere(t *testing.T) {
 	dir := t.TempDir()
 	for name, body := range map[string]string{
 		"bare.yaml":        "replicas: 3\n",
-		"no-revision.yaml": "# change set: " + csID + "\n# component: api\nreplicas: 3\n",
-		"bad-revision.yaml": "# change set: " + csID + "\n# component: api\n# revision: head\n" +
+		"no-revision.yaml": "# changeset: " + csID + "\n# component: api\nreplicas: 3\n",
+		"bad-revision.yaml": "# changeset: " + csID + "\n# component: api\n# revision: head\n" +
 			"replicas: 3\n",
 		"no-names.yaml": "# revision: 3\nreplicas: 3\n",
 	} {
 		p := filepath.Join(dir, name)
 		require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
 		err = upload(p)
-		requireUsage(t, err, "has no change set, component and revision header")
+		requireUsage(t, err, "has no changeset, component and revision header")
 		require.Contains(t, cmderr.Hint(err), "admiral changeset values "+csID+" api", name)
 	}
 
@@ -429,7 +429,7 @@ func TestValuesUploadSendsTheTreeAndItsRevision(t *testing.T) {
 
 func TestValuesAndDiffArguments(t *testing.T) {
 	_, err := run(t, "values", csID)
-	requireUsage(t, err, "missing argument: values <change-set> <component>")
+	requireUsage(t, err, "missing argument: values <changeset> <component>")
 
 	_, err = run(t, "values", csID, "Api")
 	requireUsage(t, err, `invalid component name "Api"`)
@@ -438,7 +438,7 @@ func TestValuesAndDiffArguments(t *testing.T) {
 	require.ErrorContains(t, err, "unknown shorthand flag: 'f'")
 
 	_, err = run(t, "diff", "cs-1")
-	requireUsage(t, err, `invalid change set "cs-1"`)
+	requireUsage(t, err, `invalid changeset "cs-1"`)
 
 	for _, args := range [][]string{{"values", csID, "api"}, {"diff", csID}} {
 		_, err = run(t, args...)

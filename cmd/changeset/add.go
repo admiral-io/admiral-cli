@@ -27,11 +27,11 @@ func newAddCmd(opts *client.Options) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "add <change-set> <name> --from <component>:<tag>",
+		Use:   "add <changeset> <name> --from <component>:<tag>",
 		Short: "Add a component from the registry",
 		Long: `Add a component from the registry, under a name unique in the environment.
 
-The name is reserved until the change set is discarded or the component is
+The name is reserved until the changeset is discarded or the component is
 removed from it. A tag is resolved to its version now; only the version is
 stored.`,
 		Example: `  admiral changeset add cs-7f2a1c9d0e3b users-db --from cloud-sql:v1.2.0

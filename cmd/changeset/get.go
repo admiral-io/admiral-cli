@@ -31,14 +31,14 @@ func newGetCmd(opts *client.Options) *cobra.Command {
 	var ro renderedOptions
 
 	cmd := &cobra.Command{
-		Use:   "get <change-set>",
-		Short: "Get a change set",
-		Long: `Get a change set.
+		Use:   "get <changeset>",
+		Short: "Get a changeset",
+		Long: `Get a changeset.
 
 With --rendered, print a prepared revision's manifests and hooks instead: for
 each component a header naming it and its namespace, its findings as
 comments, its manifests, then its hooks. Secret values are masked. The
-revision is the one the change set's newest run planned unless --revision
+revision is the one the changeset's newest run planned unless --revision
 names another; get never prepares one, 'admiral changeset plan' does.
 --output-dir unpacks the whole artifact into a directory.`,
 		Example: `  admiral changeset get cs-7f2a1c9d0e3b
@@ -167,7 +167,7 @@ func getRendered(cmd *cobra.Command, c sdkclient.AdmiralClient, csID string, ro 
 	return nil
 }
 
-// lastPlanned is the revision of the change set's newest run, warning when
+// lastPlanned is the revision of the changeset's newest run, warning when
 // the head has moved past it.
 func lastPlanned(cmd *cobra.Command, c sdkclient.AdmiralClient, csID string) (string, error) {
 	ctx := cmd.Context()

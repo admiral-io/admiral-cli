@@ -22,7 +22,7 @@ func newSetCmd(opts *client.Options) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "set <change-set> <component>.<path>=<value>...",
+		Use:   "set <changeset> <component>.<path>=<value>...",
 		Short: "Set values, change a component's version, or place it",
 		Long: `Set values, change a component's version, or place it. One command cuts
 one revision.
@@ -32,10 +32,10 @@ A value reads as YAML, as with helm --set: 3 is a number, true a bool,
 another component's output. --set-string keeps the characters as a string.
 A dot inside a key is written \. or the key is quoted: api.annotations."a.b"=x.
 
-With --to, the one argument after the change set is a component, and it
+With --to, the one argument after the changeset is a component, and it
 moves to that tag or digest of the same registry component.
 
-With --namespace, the argument after the change set is a component, and its
+With --namespace, the argument after the changeset is a component, and its
 settings are replaced: the namespace its objects go to, and with
 --extra-namespace the others it may also write to. Values given after it
 land in the same revision.`,
@@ -87,7 +87,7 @@ land in the same revision.`,
 	return cmd
 }
 
-// setRequest is what one set command was given, after the change set.
+// setRequest is what one set command was given, after the changeset.
 type setRequest struct {
 	args            []string
 	to              string
