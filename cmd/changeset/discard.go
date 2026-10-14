@@ -14,12 +14,12 @@ func newDiscardCmd(opts *client.Options) *cobra.Command {
 	var force bool
 
 	cmd := &cobra.Command{
-		Use:   "discard <change-set>",
-		Short: "Discard an open change set",
-		Long: `Discard an open change set.
+		Use:   "discard <changeset>",
+		Short: "Discard an open changeset",
+		Long: `Discard an open changeset.
 
 The component names it reserved are released and it is closed. A closed
-change set cannot be edited again.`,
+changeset cannot be edited again.`,
 		Example: `  admiral changeset discard cs-7f2a1c9d0e3b
 
   # Skip the confirmation prompt
@@ -40,7 +40,7 @@ change set cannot be edited again.`,
 			}
 			defer c.Close() //nolint:errcheck
 
-			if err := input.Confirm(cmd, force, "Discard change set "+csID); err != nil {
+			if err := input.Confirm(cmd, force, "Discard changeset "+csID); err != nil {
 				return err
 			}
 			if _, err := c.ChangeSet().DiscardChangeSet(cmd.Context(), &changesetv1.DiscardChangeSetRequest{
@@ -49,7 +49,7 @@ change set cannot be edited again.`,
 				return err
 			}
 
-			output.Confirmed(cmd.ErrOrStderr(), "change set", csID, "discarded")
+			output.Confirmed(cmd.ErrOrStderr(), "changeset", csID, "discarded")
 			return nil
 		},
 	}

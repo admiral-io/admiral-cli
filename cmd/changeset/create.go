@@ -23,11 +23,11 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "create <app>/<env>",
-		Short: "Open a change set against an environment",
-		Long: `Open a change set against an environment.
+		Short: "Open a changeset against an environment",
+		Long: `Open a changeset against an environment.
 
 With --set or --set-string the edits cut revision 1 in the same request;
-without, the change set has no revision until its first edit. --plan starts
+without, the changeset has no revision until its first edit. --plan starts
 a run that plans revision 1 and waits for it, as 'admiral changeset plan'
 does.`,
 		Example: `  admiral changeset create shop/prod --title "Bump api to 1.4.0"
@@ -57,7 +57,7 @@ does.`,
 			}
 			if po.plan && len(es) == 0 {
 				return cmderr.UsageHint("Pass --set or --set-string, or plan after the first edit.",
-					"--plan needs a revision, and a change set created without edits has none")
+					"--plan needs a revision, and a changeset created without edits has none")
 			}
 
 			c, err := client.CreateClient(cmd.Context(), opts)
@@ -81,7 +81,7 @@ does.`,
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
 			printWarnings(p.Err(), resp.Warnings, resp.Revision.GetViolations())
-			output.Confirmed(p.Err(), "change set", resp.ChangeSet.Id, "created")
+			output.Confirmed(p.Err(), "changeset", resp.ChangeSet.Id, "created")
 			if po.plan {
 				return planRevision(cmd, opts, c.Run(), resp.ChangeSet, resp.Revision, po)
 			}

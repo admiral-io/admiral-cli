@@ -33,8 +33,8 @@ const maxExtraNamespaces = 16
 // changeSetID refuses a malformed ID before any sign-in or RPC.
 func changeSetID(s string) (string, error) {
 	if !changeSetIDPattern.MatchString(s) {
-		return "", cmderr.UsageHint("A change set ID is cs- and twelve characters; find it with 'admiral changeset list --env <app>/<env>'.",
-			"invalid change set %q", s)
+		return "", cmderr.UsageHint("A changeset ID is cs- and twelve characters; find it with 'admiral changeset list --env <app>/<env>'.",
+			"invalid changeset %q", s)
 	}
 	return s, nil
 }
@@ -82,7 +82,7 @@ func placementEdit(comp, namespace string, extra []string) (*changesetv1.Edit, e
 // revisionFlag registers --if-revision; ifRevision reads it back as nil
 // when it was not passed, since revision 0 is a real precondition.
 func revisionFlag(cmd *cobra.Command, dest *int32) {
-	cmd.Flags().Int32Var(dest, "if-revision", 0, "refuse unless the change set's head is this revision")
+	cmd.Flags().Int32Var(dest, "if-revision", 0, "refuse unless the changeset's head is this revision")
 }
 
 func ifRevision(cmd *cobra.Command, n int32) *int32 {
@@ -119,7 +119,7 @@ func edits(cmd *cobra.Command, opts *client.Options, csID string, ifRev *int32, 
 
 	p := output.NewPrinter(cmd, opts.OutputFormat)
 	printWarnings(p.Err(), resp.Warnings, resp.Revision.GetViolations())
-	output.Confirmed(p.Err(), "change set", csID, "revision "+strconv.Itoa(int(resp.Revision.GetNumber())))
+	output.Confirmed(p.Err(), "changeset", csID, "revision "+strconv.Itoa(int(resp.Revision.GetNumber())))
 	if po.plan {
 		return planRevision(cmd, opts, c.Run(), resp.ChangeSet, resp.Revision, po)
 	}

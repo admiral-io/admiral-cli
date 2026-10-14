@@ -13,7 +13,7 @@ type ComponentCmd struct {
 
 // NewComponentCmd is the registry: what has been published, addressed by
 // name and tag. Publish, tag, deprecate and revoke act here; add, update and copy
-// act inside a change set, on the other thing called a component.
+// act inside a changeset, on the other thing called a component.
 func NewComponentCmd(opts *client.Options) *ComponentCmd {
 	root := &ComponentCmd{}
 

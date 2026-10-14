@@ -25,9 +25,9 @@ func newPlanCmd(opts *client.Options) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "plan <change-set>",
-		Short: "Plan a change set's head revision",
-		Long: `Plan a change set's head revision.
+		Use:   "plan <changeset>",
+		Short: "Plan a changeset's head revision",
+		Long: `Plan a changeset's head revision.
 
 This starts a run. The run prepares the revision first, rendering every
 component it touches into one artifact that 'admiral changeset get

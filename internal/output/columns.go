@@ -11,7 +11,7 @@ import (
 // never drift apart.
 type Column[T any] struct {
 	// Header is shown in UPPER-HYPHEN form; spaces are converted to hyphens
-	// so `awk` column counting works ("CHANGE SET" renders as CHANGE-SET).
+	// so `awk` column counting works ("CREATED BY" renders as CREATED-BY).
 	Header string
 	// Cell renders the value. An empty result prints as <none>.
 	Cell func(T) string

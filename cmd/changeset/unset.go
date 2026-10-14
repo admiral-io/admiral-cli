@@ -17,7 +17,7 @@ func newUnsetCmd(opts *client.Options) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "unset <change-set> <component>.<path>...",
+		Use:   "unset <changeset> <component>.<path>...",
 		Short: "Remove values, so the defaults apply",
 		Long: `Remove values, so the defaults apply. One command cuts one revision.
 

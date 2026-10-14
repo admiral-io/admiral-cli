@@ -23,7 +23,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "list --env <app>/<env>",
-		Short: "List an environment's change sets",
+		Short: "List an environment's changesets",
 		Example: `  admiral changeset list --env shop/prod
 
   # Open ones only, IDs for scripting
@@ -79,7 +79,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
 			return p.PrintList(output.List{
-				Kind:          "change sets",
+				Kind:          "changesets",
 				Scope:         envTarget,
 				Items:         output.Messages(css),
 				Name:          func(i int) string { return css[i].Id },
@@ -89,7 +89,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 	}
 
 	flags.Env(cmd, &envTarget, opts)
-	flags.Enum(cmd, &status, "status", "", "only change sets in this status", "open", "applied", "closed")
+	flags.Enum(cmd, &status, "status", "", "only changesets in this status", "open", "applied", "closed")
 	flags.Paging(cmd, &paging)
 
 	return cmd

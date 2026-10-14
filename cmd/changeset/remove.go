@@ -16,9 +16,9 @@ func newRemoveCmd(opts *client.Options) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "remove <change-set> <component>",
+		Use:   "remove <changeset> <component>",
 		Short: "Remove a component",
-		Long: `Remove a component. A component this change set adds is dropped and its
+		Long: `Remove a component. A component this changeset adds is dropped and its
 name released; a live one is proposed for destruction. Nothing is destroyed
 by this command.
 
