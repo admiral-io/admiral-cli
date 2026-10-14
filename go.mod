@@ -3,13 +3,13 @@ module go.admiral.io/cli
 go 1.26.8
 
 require (
-	buf.build/gen/go/admiral/common/protocolbuffers/go v1.36.12-20261012215342-5b2dea6c71b8.2
+	buf.build/gen/go/admiral/common/protocolbuffers/go v1.36.12-20261014011555-22b2905b9cfc.2
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/go-jose/go-jose/v4 v4.1.5
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
 	go.admiral.io/bundle v1.1.0
-	go.admiral.io/sdk v1.40.0
+	go.admiral.io/sdk v1.42.0
 	golang.org/x/oauth2 v0.37.0
 	golang.org/x/sync v0.23.0
 	golang.org/x/sys v0.48.0
@@ -78,7 +78,7 @@ require (
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 	golang.org/x/tools v0.50.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20261005182115-fad411399dd8 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260928230214-8a89bd6388cc // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20261012220534-4341edf3f941 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20261005182115-fad411399dd8 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 )
