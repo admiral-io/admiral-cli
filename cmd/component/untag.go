@@ -16,7 +16,7 @@ import (
 )
 
 func newUntagCmd(opts *client.Options) *cobra.Command {
-	var force bool
+	var yes bool
 
 	cmd := &cobra.Command{
 		Use:   "untag <name>:<tag>",
@@ -28,7 +28,7 @@ nothing that is pinned, and the version stays in the history, readable by
 digest. A semver tag (v1.2.0) is immutable and cannot be removed; that is
 what makes it a release.`,
 		Example: `  admiral component untag cloud-sql:dev
-  admiral component untag cloud-sql:sha-3f9a2c1 --force`,
+  admiral component untag cloud-sql:sha-3f9a2c1 --yes`,
 		Args:              flags.ExactArgs(1),
 		ValidArgsFunction: complete.First(complete.Refs(opts)),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -40,8 +40,8 @@ what makes it a release.`,
 				return cmderr.Usage("%q names no tag; use <name>:<tag>", args[0])
 			}
 			// Before any network use: a run that cannot confirm and did not
-			// pass --force fails here, in milliseconds, with the usage error.
-			if err := input.RequireInteractiveOrForce(cmd, force); err != nil {
+			// pass --yes fails here, in milliseconds, with the usage error.
+			if err := input.RequireInteractiveOrYes(cmd, yes); err != nil {
 				return err
 			}
 
@@ -56,7 +56,7 @@ what makes it a release.`,
 				return err
 			}
 
-			if err := input.Confirm(cmd, force, fmt.Sprintf("Remove tag %s:%s", name, tag)); err != nil {
+			if err := input.Confirm(cmd, yes, fmt.Sprintf("Remove tag %s:%s", name, tag)); err != nil {
 				return err
 			}
 
@@ -71,7 +71,7 @@ what makes it a release.`,
 		},
 	}
 
-	cmd.Flags().BoolVarP(&force, "force", "f", false, "skip the confirmation prompt")
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip the confirmation prompt")
 
 	return cmd
 }

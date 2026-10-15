@@ -13,7 +13,7 @@ import (
 )
 
 func newDeleteCmd(opts *client.Options) *cobra.Command {
-	var force bool
+	var yes bool
 
 	cmd := &cobra.Command{
 		Use:   "delete <name>",
@@ -22,11 +22,11 @@ func newDeleteCmd(opts *client.Options) *cobra.Command {
 pulled with it stays published.`,
 		Example: `  admiral credential delete github
 
-  admiral credential delete github --force`,
+  admiral credential delete github --yes`,
 		Args:              flags.ExactArgs(1),
 		ValidArgsFunction: complete.First(complete.Credentials(opts)),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := input.RequireInteractiveOrForce(cmd, force); err != nil {
+			if err := input.RequireInteractiveOrYes(cmd, yes); err != nil {
 				return err
 			}
 			c, err := client.CreateClient(cmd.Context(), opts)
@@ -39,7 +39,7 @@ pulled with it stays published.`,
 			if err != nil {
 				return err
 			}
-			if err := input.Confirm(cmd, force, "Delete credential "+args[0]); err != nil {
+			if err := input.Confirm(cmd, yes, "Delete credential "+args[0]); err != nil {
 				return err
 			}
 			if _, err := c.Credential().DeleteCredential(cmd.Context(), &credentialv1.DeleteCredentialRequest{CredentialId: id}); err != nil {
@@ -50,7 +50,7 @@ pulled with it stays published.`,
 		},
 	}
 
-	cmd.Flags().BoolVarP(&force, "force", "f", false, "skip the confirmation prompt")
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip the confirmation prompt")
 
 	return cmd
 }

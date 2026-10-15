@@ -31,7 +31,7 @@ its resources stay where they are.`,
 		Aliases: []string{"rm"},
 		Args:    flags.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			csID, err := changeSetID(args[0])
+			ref, err := parseChangeSet(args[0])
 			if err != nil {
 				return err
 			}
@@ -44,7 +44,7 @@ its resources stay where they are.`,
 			if orphan {
 				e.Edit = &changesetv1.Edit_OrphanComponent{OrphanComponent: &changesetv1.OrphanComponent{Component: args[1]}}
 			}
-			return edits(cmd, opts, csID, ifRevision(cmd, ifRev), po, e)
+			return edits(cmd, opts, ref, ifRevision(cmd, ifRev), po, e)
 		},
 	}
 

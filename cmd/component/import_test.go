@@ -96,22 +96,22 @@ func TestParseSourceRefusesWhatDoesNotFit(t *testing.T) {
 	}
 }
 
-func TestPullRefusesLocallyWhatItCan(t *testing.T) {
-	_, err := run(t, "pull", "oci://ghcr.io/x/y", "--version", "1", "--name", "Not_Valid")
+func TestImportRefusesLocallyWhatItCan(t *testing.T) {
+	_, err := run(t, "import", "oci://ghcr.io/x/y", "--version", "1", "--name", "Not_Valid")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "lowercase letters, digits and hyphens")
 	assert.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 
-	_, err = run(t, "pull")
-	require.EqualError(t, err, "missing argument: pull <source>")
+	_, err = run(t, "import")
+	require.EqualError(t, err, "missing argument: import <source>")
 
 	bad := filepath.Join(t.TempDir(), "baseline.yaml")
 	require.NoError(t, os.WriteFile(bad, []byte("- a\n- b\n"), 0o644))
-	_, err = run(t, "pull", "oci://ghcr.io/x/y", "--version", "1", "--baseline-values", bad)
+	_, err = run(t, "import", "oci://ghcr.io/x/y", "--version", "1", "--baseline-values", bad)
 	require.ErrorContains(t, err, "values must be a map at the top level")
 	assert.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 
-	_, err = run(t, "pull", "oci://ghcr.io/x/y", "--version", "1", "--baseline-values", filepath.Join(t.TempDir(), "missing.yaml"))
+	_, err = run(t, "import", "oci://ghcr.io/x/y", "--version", "1", "--baseline-values", filepath.Join(t.TempDir(), "missing.yaml"))
 	require.ErrorContains(t, err, "cannot read --baseline-values")
 }
 

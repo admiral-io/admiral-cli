@@ -55,7 +55,7 @@ func TestIDPositionalIsAccepted(t *testing.T) {
 		case "update":
 			args = append(args, "--description", "x")
 		case "delete":
-			args = append(args, "--force") // a piped run cannot confirm
+			args = append(args, "--yes") // a piped run cannot confirm
 		}
 		_, err := run(t, args...)
 		require.Error(t, err)
@@ -74,12 +74,12 @@ func TestUpdateCmd_RequiresAtLeastOneField(t *testing.T) {
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 }
 
-// A piped run without --force is refused as a usage error before any
+// A piped run without --yes is refused as a usage error before any
 // sign-in or RPC, so a CI job that forgot the flag fails fast with exit 2
 // rather than exit 4 for not being signed in.
-func TestDeleteWithoutForceFailsBeforeNetwork(t *testing.T) {
+func TestDeleteWithoutYesFailsBeforeNetwork(t *testing.T) {
 	_, err := run(t, "delete", "shop")
-	require.EqualError(t, err, "--force required when not running interactively")
+	require.EqualError(t, err, "--yes required when not running interactively")
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 }
 

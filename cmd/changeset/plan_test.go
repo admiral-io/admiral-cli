@@ -40,7 +40,7 @@ func TestPlanFlagOnEachEditVerb(t *testing.T) {
 	values := downloaded(t, valuesfileHeader(3), map[string]any{})
 	verbs := [][]string{
 		{"create", "shop/prod", "--set", "api.replicas=3"},
-		{"add", csID, "users-db", "--from", "cloud-sql:v1"},
+		{"add", csID, "cloud-sql:v1"},
 		{"set", csID, "api.replicas=3"},
 		{"set", csID, "api", "--to", "v1.4.0"},
 		{"unset", csID, "api.replicas"},

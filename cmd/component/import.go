@@ -20,7 +20,7 @@ import (
 	registryv1 "go.admiral.io/sdk/proto/admiral/api/registry/v1"
 )
 
-func newPullCmd(opts *client.Options) *cobra.Command {
+func newImportCmd(opts *client.Options) *cobra.Command {
 	var (
 		repo        string
 		version     string
@@ -35,14 +35,14 @@ func newPullCmd(opts *client.Options) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "pull <source>",
+		Use:   "import <source>",
 		Short: "Publish a copy of an artifact you do not own",
 		Long: `Publish a copy of an artifact you do not own.
 
 The registry fetches the source, closes it the way publish does, and
 publishes the result as a version with the source recorded as its
 provenance. What is published is a copy: the bytes reviewed, whatever
-upstream does to the tag later. Pulling the same thing twice yields the
+upstream does to the tag later. Importing the same thing twice yields the
 same version.
 
 The source says what it is:
@@ -69,24 +69,24 @@ naming the host.
 --baseline-values sets the organization's defaults for the artifact, a
 YAML or JSON object laid over its own defaults (a chart's values.yaml, a
 module's variable defaults) before any environment's values. They are part
-of the version: pulling with different baseline values is a new version.`,
+of the version: importing with different baseline values is a new version.`,
 		Example: `  # A chart from a repository, as cert-manager
-  admiral component pull cert-manager --repo https://charts.jetstack.io --version v1.16.2
+  admiral component import cert-manager --repo https://charts.jetstack.io --version v1.16.2
 
   # A chart from an OCI registry, as argo-cd
-  admiral component pull oci://ghcr.io/argoproj/argo-helm/argo-cd --version 7.7.0
+  admiral component import oci://ghcr.io/argoproj/argo-helm/argo-cd --version 7.7.0
 
   # A registry module at the newest 8.x, as cloud-armor
-  admiral component pull GoogleCloudPlatform/cloud-armor/google --version '~> 8.0'
+  admiral component import GoogleCloudPlatform/cloud-armor/google --version '~> 8.0'
 
   # One directory of a private repository, over SSH with a deploy key
-  admiral component pull git@github.com:acme/infra.git --ref v2.1.0 --path modules/vpc --credential infra-deploy
+  admiral component import git@github.com:acme/infra.git --ref v2.1.0 --path modules/vpc --credential infra-deploy
 
   # A private chart, under a name of your own, tagged
-  admiral component pull oci://ghcr.io/acme/charts/base --version 1.4.0 --name base-upstream --tag stable --credential github
+  admiral component import oci://ghcr.io/acme/charts/base --version 1.4.0 --name base-upstream --tag stable --credential github
 
   # A chart with the organization's defaults laid over its own
-  admiral component pull cert-manager --repo https://charts.jetstack.io --version v1.16.2 --baseline-values cert-manager.yaml`,
+  admiral component import cert-manager --repo https://charts.jetstack.io --version v1.16.2 --baseline-values cert-manager.yaml`,
 		Args: flags.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			labels, err := flags.ParseLabels(labelStrs)
@@ -123,7 +123,7 @@ of the version: pulling with different baseline values is a new version.`,
 			}
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
-			output.Writef(p.Err(), "Pulling %s\n", args[0])
+			output.Writef(p.Err(), "Importing %s\n", args[0])
 			resp, err := c.Registry().PullComponent(cmd.Context(), &registryv1.PullComponentRequest{
 				Name:               name,
 				Source:             src,
@@ -138,7 +138,7 @@ of the version: pulling with different baseline values is a new version.`,
 			}
 			ver := resp.Version
 			if prov := ver.Provenance; prov != nil {
-				output.Writef(p.Err(), "Pulled %s%s -> %s\n", prov.Uri, atRef(prov.Ref), prov.Commit)
+				output.Writef(p.Err(), "Imported %s%s -> %s\n", prov.Uri, atRef(prov.Ref), prov.Commit)
 			}
 			reportPublished(p, resp.Component, ver, resp.Unchanged)
 			return p.PrintOne(ver, resp.Component.Name+"@"+ver.Digest, versionTable.Render(p, ver))
@@ -153,7 +153,7 @@ of the version: pulling with different baseline values is a new version.`,
 	cmd.Flags().StringArrayVarP(&tags, "tag", "t", nil, "tag to set on the version (repeatable)")
 	cmd.Flags().StringVar(&description, "description", "", "component description, applied when the component is created")
 	flags.Label(cmd, &labelStrs, "label to attach when the component is created (key=value, repeatable)")
-	cmd.Flags().StringArrayVar(&credentials, "credential", nil, "credential the pull may present, by name or ID (repeatable)")
+	cmd.Flags().StringArrayVar(&credentials, "credential", nil, "credential the import may present, by name or ID (repeatable)")
 	complete.Flag(cmd, "credential", complete.Credentials(opts))
 	cmd.Flags().StringVar(&baseline, "baseline-values", "", "file of default values (YAML or JSON object) laid over the artifact's own")
 	_ = cmd.MarkFlagFilename("baseline-values", "yaml", "yml", "json")

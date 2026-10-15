@@ -34,9 +34,10 @@ component it touches into one artifact that 'admiral changeset get
 --rendered' reads, then an agent of the environment plans it.
 
 The command prints the run's ID, waits until the plan is done and prints
-the run. It exits 1 if the run fails or is superseded, 124 if
---wait-timeout elapses; the run continues on the server either way.
-Approve and apply a planned run with 'admiral run'.`,
+the run and its diff, resource by resource. It exits 1 if the run fails or
+is superseded, 124 if --wait-timeout elapses; the run continues on the
+server either way. Approve and apply the plan with 'admiral changeset
+approve' and 'admiral changeset apply'.`,
 		Example: `  admiral changeset plan cs-7f2a1c9d0e3b
 
   # Start the run and return
@@ -46,7 +47,7 @@ Approve and apply a planned run with 'admiral run'.`,
   admiral changeset plan cs-7f2a1c9d0e3b --if-revision 4`,
 		Args: flags.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			csID, err := changeSetID(args[0])
+			ref, err := parseChangeSet(args[0])
 			if err != nil {
 				return err
 			}
@@ -54,7 +55,7 @@ Approve and apply a planned run with 'admiral run'.`,
 				return err
 			}
 
-			c, err := client.CreateClient(cmd.Context(), opts)
+			c, csID, err := dial(cmd, opts, ref)
 			if err != nil {
 				return err
 			}
@@ -91,9 +92,15 @@ type planOptions struct {
 }
 
 func waitFlags(cmd *cobra.Command, po *planOptions) {
+	waitFlagsFor(cmd, po, "the plan")
+}
+
+// waitFlagsFor names what --wait-timeout waits for: the plan, or on apply
+// the apply.
+func waitFlagsFor(cmd *cobra.Command, po *planOptions, what string) {
 	cmd.Flags().BoolVar(&po.noWait, "no-wait", false, "return once the run is started")
 	cmd.Flags().DurationVar(&po.waitTimeout, "wait-timeout", defaultWaitTimeout,
-		"how long to wait for the plan; exits 124 when it elapses")
+		"how long to wait for "+what+"; exits 124 when it elapses")
 }
 
 // planFlags registers --plan and its wait flags on an edit verb.
@@ -141,6 +148,15 @@ func planRevision(cmd *cobra.Command, opts *client.Options, runs runv1.RunAPICli
 	}
 	if err := runcmd.Print(p, r); err != nil {
 		return err
+	}
+	// Under -o json|yaml the run is the whole answer; 'run diff' has the rest.
+	if r.GetStatus() == runv1.Run_STATUS_PLANNED && opts.OutputFormat.IsTable() {
+		diff, err := runs.GetRunPlanDiff(cmd.Context(), &runv1.GetRunPlanDiffRequest{RunId: r.GetId()})
+		if err != nil {
+			return err
+		}
+		output.Writef(p.Out(), "\n")
+		runcmd.WriteDiff(p.Out(), diff.GetDiff())
 	}
 	return runcmd.Outcome(r)
 }

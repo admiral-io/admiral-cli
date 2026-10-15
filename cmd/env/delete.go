@@ -15,7 +15,7 @@ import (
 func newDeleteCmd(opts *client.Options) *cobra.Command {
 	var (
 		appName string
-		force   bool
+		yes     bool
 	)
 
 	cmd := &cobra.Command{
@@ -31,7 +31,7 @@ func newDeleteCmd(opts *client.Options) *cobra.Command {
   admiral env delete env-3k9x2m7qpl0a
 
   # Skip the confirmation prompt
-  admiral env delete billing/staging --force`,
+  admiral env delete billing/staging --yes`,
 		Args:              flags.ExactArgs(1),
 		ValidArgsFunction: complete.First(complete.Envs(opts)),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -40,8 +40,8 @@ func newDeleteCmd(opts *client.Options) *cobra.Command {
 				return err
 			}
 			// Before any network use: a run that cannot confirm and did not
-			// pass --force fails here, in milliseconds, with the usage error.
-			if err := input.RequireInteractiveOrForce(cmd, force); err != nil {
+			// pass --yes fails here, in milliseconds, with the usage error.
+			if err := input.RequireInteractiveOrYes(cmd, yes); err != nil {
 				return err
 			}
 
@@ -60,7 +60,7 @@ func newDeleteCmd(opts *client.Options) *cobra.Command {
 				return err
 			}
 
-			if err := input.Confirm(cmd, force, "Delete environment "+display); err != nil {
+			if err := input.Confirm(cmd, yes, "Delete environment "+display); err != nil {
 				return err
 			}
 
@@ -76,7 +76,7 @@ func newDeleteCmd(opts *client.Options) *cobra.Command {
 	}
 
 	flags.App(cmd, &appName, opts)
-	cmd.Flags().BoolVarP(&force, "force", "f", false, "skip the confirmation prompt")
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip the confirmation prompt")
 
 	return cmd
 }

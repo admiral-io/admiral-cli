@@ -69,6 +69,17 @@ func First(f Func) Func {
 	}
 }
 
+// Second restricts f to the second positional, for a command whose first
+// names its parent (a changeset) and whose second is what f completes.
+func Second(f Func) Func {
+	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if len(args) != 1 {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		return f(cmd, args, toComplete)
+	}
+}
+
 // Static offers a fixed list of values, for enum flags (style guide §1.5).
 // No client is built and nothing is filtered by the server, so it is safe
 // on commands that never talk to it.
@@ -190,7 +201,7 @@ func Refs(opts *client.Options) Func {
 }
 
 // Credentials offers credential names, for a positional and for
-// --credential on a pull.
+// --credential on an import.
 func Credentials(opts *client.Options) Func {
 	return func(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return withClient(cmd, opts, toComplete, func(ctx context.Context, c sdkclient.AdmiralClient) ([]Candidate, error) {

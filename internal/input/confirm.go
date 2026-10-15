@@ -15,14 +15,14 @@ import (
 var ErrCanceled = &cmderr.Error{Err: fmt.Errorf("canceled"), Code: cmderr.ExitError}
 
 // Confirm asks a y/N question on stderr and reads the answer from stdin. It
-// is skipped when force is true. When the session is not interactive
+// is skipped when yes is true. When the session is not interactive
 // (stdin or stderr is not a terminal, ADMIRAL_NO_INPUT or CI is set, or an
 // AI agent is driving) it fails with a usage error instead of hanging.
 //
 // prompt is a question without the trailing "?": "Delete environment
 // shop/staging". Declining returns ErrCanceled.
-func Confirm(cmd *cobra.Command, force bool, prompt string) error {
-	if err := RequireInteractiveOrForce(cmd, force); err != nil || force {
+func Confirm(cmd *cobra.Command, yes bool, prompt string) error {
+	if err := RequireInteractiveOrYes(cmd, yes); err != nil || yes {
 		return err
 	}
 	ios := iostreams.FromCommand(cmd)
@@ -43,9 +43,9 @@ func Confirm(cmd *cobra.Command, force bool, prompt string) error {
 // ConfirmName is the severe-tier confirmation: it prints warning (a
 // sentence such as "Deleting shop is not reversible and removes 2
 // environments.") and requires the user to type name verbatim. Skipped when
-// force is true; a usage error when not interactive.
-func ConfirmName(cmd *cobra.Command, force bool, warning, name string) error {
-	if err := RequireInteractiveOrForce(cmd, force); err != nil || force {
+// yes is true; a usage error when not interactive.
+func ConfirmName(cmd *cobra.Command, yes bool, warning, name string) error {
+	if err := RequireInteractiveOrYes(cmd, yes); err != nil || yes {
 		return err
 	}
 	ios := iostreams.FromCommand(cmd)
@@ -64,16 +64,16 @@ func ConfirmName(cmd *cobra.Command, force bool, warning, name string) error {
 	return nil
 }
 
-// RequireInteractiveOrForce is the check Confirm and ConfirmName make,
+// RequireInteractiveOrYes is the check Confirm and ConfirmName make,
 // exposed so a command can make it first: before signing in, dialing, or
-// resolving names. A CI job that forgot --force then fails in
+// resolving names. A CI job that forgot --yes then fails in
 // milliseconds with the usage error (exit 2) rather than after a round of
 // RPCs, or with exit 4 because it was not signed in either.
-func RequireInteractiveOrForce(cmd *cobra.Command, force bool) error {
-	if force || iostreams.FromCommand(cmd).Interactive() {
+func RequireInteractiveOrYes(cmd *cobra.Command, yes bool) error {
+	if yes || iostreams.FromCommand(cmd).Interactive() {
 		return nil
 	}
-	return cmderr.Usage("--force required when not running interactively")
+	return cmderr.Usage("--yes required when not running interactively")
 }
 
 // readLine reads one answer through the Streams' shared reader, without

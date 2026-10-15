@@ -297,11 +297,17 @@ func newDiffCmd(opts *client.Options) *cobra.Command {
 			if !opts.OutputFormat.IsTable() {
 				return p.PrintResource(resp, nil)
 			}
-			for _, rd := range resp.GetDiff().GetResources() {
-				output.Writef(p.Out(), "# %s: %s\n%s\n", rd.GetComponent(), resourceName(rd.GetResource()), rd.GetDiff())
-			}
+			WriteDiff(p.Out(), resp.GetDiff())
 			return nil
 		},
+	}
+}
+
+// WriteDiff writes a plan's diffs resource by resource, as 'run diff'
+// and the changeset verbs that show a plan before acting print them.
+func WriteDiff(w io.Writer, d *agentv1.PlanDiff) {
+	for _, rd := range d.GetResources() {
+		output.Writef(w, "# %s: %s\n%s\n", rd.GetComponent(), resourceName(rd.GetResource()), rd.GetDiff())
 	}
 }
 
