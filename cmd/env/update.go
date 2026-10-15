@@ -46,7 +46,7 @@ one that is dropped stops serving the environment.`,
   admiral env update billing/staging --namespace billing-staging
 
   # Deploy through two agents
-  admiral env update billing/prod --agent prod-cluster --agent prod-iam
+  admiral env update billing/prod --agent prod --agent prod-iam
 
   # Applies need one approval
   admiral env update billing/prod --approvals 1

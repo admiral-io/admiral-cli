@@ -32,10 +32,10 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
   admiral env create staging --app billing
 
   # Deploy through an agent, into a namespace of your choosing
-  admiral env create billing/prod --agent prod-cluster --namespace billing
+  admiral env create billing/prod --agent prod --namespace billing
 
   # Applies need two approvals
-  admiral env create billing/prod --agent prod-cluster --approvals 2`,
+  admiral env create billing/prod --agent prod --approvals 2`,
 		Args:              flags.ExactArgs(1),
 		ValidArgsFunction: complete.First(complete.NewEnv(opts)),
 		RunE: func(cmd *cobra.Command, args []string) error {
