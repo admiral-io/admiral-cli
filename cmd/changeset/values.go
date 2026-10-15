@@ -45,7 +45,7 @@ A key missing from the file is removed, so its default applies.`,
 			}
 
 			if valuesPath != "" {
-				data, err := readValuesFile(valuesPath)
+				data, err := readValuesFile(cmd, valuesPath)
 				if err != nil {
 					return err
 				}

@@ -22,10 +22,17 @@ import (
 // run executes the changeset tree with no stored credential, so anything
 // that gets past argument handling fails at client creation, which tells a
 // usage error apart from a command that was accepted.
-func run(t *testing.T, args ...string) (string, error) {
+// newTestRoot is the changeset command with no credentials, so a command
+// that gets past its own checks fails at client creation.
+func newTestRoot(t *testing.T) *ChangeSetCmd {
 	t.Helper()
 	os.Unsetenv(credentials.EnvAPIKey)
-	root := NewChangeSetCmd(&client.Options{ConfigDir: t.TempDir()})
+	return NewChangeSetCmd(&client.Options{ConfigDir: t.TempDir()})
+}
+
+func run(t *testing.T, args ...string) (string, error) {
+	t.Helper()
+	root := newTestRoot(t)
 	var out, errOut bytes.Buffer
 	root.Cmd.SetOut(&out)
 	root.Cmd.SetErr(&errOut)
@@ -242,10 +249,10 @@ func TestSetAndAddRefuseBeforeTheNetwork(t *testing.T) {
 		{"unset a whole component", []string{"unset", csID, "api"}, "names no path inside the component"},
 		{"unset nothing", []string{"unset", csID}, "missing argument: unset"},
 		{"remove a bad name", []string{"remove", csID, "Api"}, `invalid component name "Api"`},
-		{"add a bad name", []string{"add", csID, "Users_DB", "--from", "cloud-sql:v1"}, `invalid component name "Users_DB"`},
-		{"add without a tag", []string{"add", csID, "users-db", "--from", "cloud-sql"}, `--from "cloud-sql" names no tag or digest`},
-		{"add an empty tag", []string{"add", csID, "users-db", "--from", "cloud-sql:"}, "names no tag or digest"},
-		{"add an empty digest", []string{"add", csID, "users-db", "--from", "cloud-sql@"}, "names no tag or digest"},
+		{"add a bad name", []string{"add", csID, "cloud-sql:v1", "--name", "Users_DB"}, `invalid component name "Users_DB"`},
+		{"add without a tag", []string{"add", csID, "cloud-sql"}, `"cloud-sql" names no tag or digest`},
+		{"add an empty tag", []string{"add", csID, "cloud-sql:"}, "names no tag or digest"},
+		{"add an empty digest", []string{"add", csID, "cloud-sql@"}, "names no tag or digest"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -254,12 +261,16 @@ func TestSetAndAddRefuseBeforeTheNetwork(t *testing.T) {
 		})
 	}
 
-	_, err := run(t, "add", csID, "users-db")
-	require.ErrorContains(t, err, `required flag(s) "from" not set`)
+	_, err := run(t, "add", csID)
+	require.ErrorContains(t, err, "missing argument: add <changeset> <component>:<tag>")
+
+	// The name is the reference now; --from is gone.
+	_, err = run(t, "add", csID, "users-db", "--from", "cloud-sql:v1")
+	require.ErrorContains(t, err, "unknown flag: --from")
 
 	// -f is not a values flag; a values file is --values.
 	for _, args := range [][]string{
-		{"add", csID, "users-db", "--from", "cloud-sql:v1", "-f", "values.yaml"},
+		{"add", csID, "cloud-sql:v1", "-f", "values.yaml"},
 		{"create", "shop/prod", "-f", "values.yaml"},
 	} {
 		_, err := run(t, args...)
@@ -282,8 +293,8 @@ func TestSetAndAddRefuseBeforeTheNetwork(t *testing.T) {
 		{"unset", csID, "api.image.tag", `api.annotations."a.b"`},
 		{"remove", csID, "api"},
 		{"rm", csID, "api"},
-		{"add", csID, "users-db", "--from", "cloud-sql:v1.2.0"},
-		{"add", csID, "users-db", "--from", "cloud-sql@sha256:3f9a2c1d"},
+		{"add", csID, "cloud-sql:v1.2.0"},
+		{"add", csID, "cloud-sql@sha256:3f9a2c1d", "--name", "users-db"},
 	} {
 		_, err := run(t, args...)
 		requireAccepted(t, err, args...)
@@ -311,7 +322,7 @@ func TestAddFromValuesFile(t *testing.T) {
 		return p
 	}
 	add := func(path string) (string, error) {
-		return run(t, "add", csID, "users-db", "--from", "cloud-sql:v1", "--values", path)
+		return run(t, "add", csID, "cloud-sql:v1", "--name", "users-db", "--values", path)
 	}
 
 	_, err := add(filepath.Join(dir, "missing.yaml"))
@@ -484,7 +495,7 @@ func TestComponentNameLimit(t *testing.T) {
 	requireUsage(t, componentName(name54), "invalid component name")
 
 	for _, args := range [][]string{
-		{"add", csID, name54, "--from", "cloud-sql:v1"},
+		{"add", csID, "cloud-sql:v1", "--name", name54},
 		{"set", csID, name54 + ".replicas=3"},
 		{"set", csID, name54, "--to", "v2"},
 		{"set", csID, name54, "--namespace", "shop"},
@@ -499,7 +510,7 @@ func TestComponentNameLimit(t *testing.T) {
 
 	_, err := registryRef(strings.Repeat("r", 63) + ":v1")
 	require.NoError(t, err, "a registry name keeps the registry's 63")
-	_, err = run(t, "add", csID, name53, "--from", strings.Repeat("r", 63)+":v1")
+	_, err = run(t, "add", csID, strings.Repeat("r", 63)+":v1", "--name", name53)
 	requireAccepted(t, err, "add", name53)
 }
 
