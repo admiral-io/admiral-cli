@@ -79,19 +79,27 @@ func TestPositionalUsageErrors(t *testing.T) {
 	}
 }
 
-// A changeset is addressed by its cs- ID only; anything else is refused
-// before any sign-in.
-func TestChangeSetIDIsCheckedBeforeTheNetwork(t *testing.T) {
+// A changeset is addressed by its cs- ID or by app/env; anything else is
+// refused before any sign-in.
+func TestChangeSetIsCheckedBeforeTheNetwork(t *testing.T) {
 	for _, bad := range []string{"cs-7F2A1C9D0E3B", "cs-7f2a1", "7f2a1c9d0e3b", envID} {
 		_, err := run(t, "get", bad)
 		requireUsage(t, err, `invalid changeset "`+bad+`"`)
-		require.Contains(t, cmderr.Hint(err), "changeset list --env")
+		require.Contains(t, cmderr.Hint(err), "app/env")
 
 		_, err = run(t, "discard", bad, "--yes")
 		requireUsage(t, err, `invalid changeset "`+bad+`"`)
 	}
-	_, err := run(t, "get", csID)
-	requireAccepted(t, err, "get", csID)
+	for _, bad := range []string{"shop/", "/dev", "shop/dev/x"} {
+		_, err := run(t, "plan", bad)
+		requireUsage(t, err, `invalid environment "`+bad+`": expected app/env`)
+	}
+	for _, good := range []string{csID, "shop/dev"} {
+		_, err := run(t, "get", good)
+		requireAccepted(t, err, "get", good)
+		_, err = run(t, "add", good, "hello:v0.1.0")
+		requireAccepted(t, err, "add", good)
+	}
 }
 
 // create takes the environment as app/env or a UUID; a bare name has no
@@ -417,8 +425,9 @@ func TestValuesUploadSendsTheTreeAndItsRevision(t *testing.T) {
 	require.Contains(t, string(data), "!ref users-db.host", "a download writes a reference as !ref")
 
 	var stderr bytes.Buffer
-	e, rev, err := uploadEdit(&stderr, path, csID, "api", data)
+	e, rev, fromCS, err := uploadEdit(&stderr, path, changeSetRef{id: csID}, "api", data)
 	require.NoError(t, err)
+	assert.Equal(t, csID, fromCS)
 	rv := e.GetReplaceValues()
 	require.NotNil(t, rv)
 	assert.Equal(t, "api", rv.Component)
@@ -432,7 +441,8 @@ func TestValuesUploadSendsTheTreeAndItsRevision(t *testing.T) {
 	path = downloaded(t, valuesfile.Header{ChangeSet: csID, Component: "api", Revision: 0}, map[string]any{})
 	data, err = os.ReadFile(path)
 	require.NoError(t, err)
-	e, rev, err = uploadEdit(&stderr, path, csID, "api", data)
+	// By app/env the header is not compared until the environment resolves.
+	e, rev, _, err = uploadEdit(&stderr, path, changeSetRef{app: "shop", env: "dev"}, "api", data)
 	require.NoError(t, err)
 	assert.Equal(t, `{}`, e.GetReplaceValues().TreeJson)
 	assert.Equal(t, int32(0), rev)

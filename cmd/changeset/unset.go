@@ -25,7 +25,7 @@ To clear a default instead, set the path to null.`,
 		Example: `  admiral changeset unset cs-7f2a1c9d0e3b api.image.tag api.replicas`,
 		Args:    flags.RangeArgs(2, 1+maxEdits),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			csID, err := changeSetID(args[0])
+			ref, err := parseChangeSet(args[0])
 			if err != nil {
 				return err
 			}
@@ -43,7 +43,7 @@ To clear a default instead, set the path to null.`,
 					Path:      pathSegments(path),
 				}}})
 			}
-			return edits(cmd, opts, csID, ifRevision(cmd, ifRev), po, es...)
+			return edits(cmd, opts, ref, ifRevision(cmd, ifRev), po, es...)
 		},
 	}
 

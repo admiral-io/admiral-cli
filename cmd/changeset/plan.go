@@ -46,7 +46,7 @@ Approve and apply a planned run with 'admiral run'.`,
   admiral changeset plan cs-7f2a1c9d0e3b --if-revision 4`,
 		Args: flags.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			csID, err := changeSetID(args[0])
+			ref, err := parseChangeSet(args[0])
 			if err != nil {
 				return err
 			}
@@ -54,7 +54,7 @@ Approve and apply a planned run with 'admiral run'.`,
 				return err
 			}
 
-			c, err := client.CreateClient(cmd.Context(), opts)
+			c, csID, err := dial(cmd, opts, ref)
 			if err != nil {
 				return err
 			}

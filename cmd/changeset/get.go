@@ -56,7 +56,7 @@ names another; get never prepares one, 'admiral changeset plan' does.
   admiral changeset get cs-7f2a1c9d0e3b --rendered --output-dir ./rendered`,
 		Args: flags.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			csID, err := changeSetID(args[0])
+			ref, err := parseChangeSet(args[0])
 			if err != nil {
 				return err
 			}
@@ -64,7 +64,7 @@ names another; get never prepares one, 'admiral changeset plan' does.
 				return err
 			}
 
-			c, err := client.CreateClient(cmd.Context(), opts)
+			c, csID, err := dial(cmd, opts, ref)
 			if err != nil {
 				return err
 			}

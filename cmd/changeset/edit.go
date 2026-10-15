@@ -13,6 +13,7 @@ import (
 	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/output"
 	"go.admiral.io/cli/internal/valuesfile"
+	sdkclient "go.admiral.io/sdk/client"
 	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
 )
 
@@ -29,15 +30,6 @@ var (
 
 // maxExtraNamespaces is the API's cap on a component's extra namespaces.
 const maxExtraNamespaces = 16
-
-// changeSetID refuses a malformed ID before any sign-in or RPC.
-func changeSetID(s string) (string, error) {
-	if !changeSetIDPattern.MatchString(s) {
-		return "", cmderr.UsageHint("A changeset ID is cs- and twelve characters; find it with 'admiral changeset list --env <app>/<env>'.",
-			"invalid changeset %q", s)
-	}
-	return s, nil
-}
 
 func componentName(s string) error {
 	if !componentPattern.MatchString(s) {
@@ -95,19 +87,23 @@ func ifRevision(cmd *cobra.Command, n int32) *int32 {
 // edits sends one EditChangeSet, so each command is one revision, and
 // prints what it cut. With --plan the answer is the run that plans the
 // revision instead, and the revision is only confirmed on stderr.
-func edits(cmd *cobra.Command, opts *client.Options, csID string, ifRev *int32, po planOptions, es ...*changesetv1.Edit) error {
+func edits(cmd *cobra.Command, opts *client.Options, ref changeSetRef, ifRev *int32, po planOptions, es ...*changesetv1.Edit) error {
 	if len(es) > maxEdits {
 		return cmderr.Usage("%d edits in one command; the limit is %d", len(es), maxEdits)
 	}
 	if err := po.check(cmd); err != nil {
 		return err
 	}
-	c, err := client.CreateClient(cmd.Context(), opts)
+	c, csID, err := dial(cmd, opts, ref)
 	if err != nil {
 		return err
 	}
 	defer c.Close() //nolint:errcheck
+	return send(cmd, opts, c, csID, ifRev, po, es...)
+}
 
+// send is edits once the changeset is known.
+func send(cmd *cobra.Command, opts *client.Options, c sdkclient.AdmiralClient, csID string, ifRev *int32, po planOptions, es ...*changesetv1.Edit) error {
 	resp, err := c.ChangeSet().EditChangeSet(cmd.Context(), &changesetv1.EditChangeSetRequest{
 		ChangeSetId: csID,
 		IfRevision:  ifRev,

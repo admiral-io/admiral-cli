@@ -61,7 +61,7 @@ component and its values are one revision.`,
   YAML`,
 		Args: flags.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			csID, err := changeSetID(args[0])
+			ref, err := parseChangeSet(args[0])
 			if err != nil {
 				return err
 			}
@@ -85,7 +85,7 @@ component and its values are one revision.`,
 			if err != nil {
 				return err
 			}
-			return edits(cmd, opts, csID, ifRevision(cmd, ifRev), po, es...)
+			return edits(cmd, opts, ref, ifRevision(cmd, ifRev), po, es...)
 		},
 	}
 

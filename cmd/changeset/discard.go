@@ -26,7 +26,7 @@ changeset cannot be edited again.`,
   admiral changeset discard cs-7f2a1c9d0e3b --yes`,
 		Args: flags.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			csID, err := changeSetID(args[0])
+			ref, err := parseChangeSet(args[0])
 			if err != nil {
 				return err
 			}
@@ -34,7 +34,7 @@ changeset cannot be edited again.`,
 				return err
 			}
 
-			c, err := client.CreateClient(cmd.Context(), opts)
+			c, csID, err := dial(cmd, opts, ref)
 			if err != nil {
 				return err
 			}

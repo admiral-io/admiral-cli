@@ -57,7 +57,7 @@ land in the same revision.`,
   admiral changeset set cs-7f2a1c9d0e3b api --namespace ""`,
 		Args: flags.RangeArgs(1, 1+maxEdits),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			csID, err := changeSetID(args[0])
+			ref, err := parseChangeSet(args[0])
 			if err != nil {
 				return err
 			}
@@ -73,7 +73,7 @@ land in the same revision.`,
 			if err != nil {
 				return err
 			}
-			return edits(cmd, opts, csID, ifRevision(cmd, ifRev), po, es...)
+			return edits(cmd, opts, ref, ifRevision(cmd, ifRev), po, es...)
 		},
 	}
 
