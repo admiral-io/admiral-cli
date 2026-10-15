@@ -85,7 +85,7 @@ func newStatusCmd(opts *client.Options, v statusVerb) *cobra.Command {
 	var (
 		reason    string
 		successor string
-		force     bool
+		yes       bool
 	)
 
 	use := v.use + " <name>[:<tag>|@<digest>] --reason <text>"
@@ -113,7 +113,7 @@ func newStatusCmd(opts *client.Options, v statusVerb) *cobra.Command {
 			case reason == "" && (ref != "" || v.component == registryv1.Component_STATUS_DEPRECATED):
 				return cmderr.Usage("--reason is required")
 			}
-			if err := input.RequireInteractiveOrForce(cmd, force); err != nil {
+			if err := input.RequireInteractiveOrYes(cmd, yes); err != nil {
 				return err
 			}
 
@@ -130,14 +130,14 @@ func newStatusCmd(opts *client.Options, v statusVerb) *cobra.Command {
 			p := output.NewPrinter(cmd, opts.OutputFormat)
 
 			if ref == "" {
-				return setComponentStatus(cmd, p, c, v, componentID, name, reason, successor, force)
+				return setComponentStatus(cmd, p, c, v, componentID, name, reason, successor, yes)
 			}
 
 			digest, err := digestOf(cmd.Context(), c, componentID, ref)
 			if err != nil {
 				return err
 			}
-			if err := input.Confirm(cmd, force,
+			if err := input.Confirm(cmd, yes,
 				fmt.Sprintf("%s %s@%s", v.verb, name, shortDigest(digest))); err != nil {
 				return err
 			}
@@ -157,12 +157,12 @@ func newStatusCmd(opts *client.Options, v statusVerb) *cobra.Command {
 		cmd.Flags().StringVar(&successor, "successor", "", "the component to use instead, by name or ID")
 		complete.Flag(cmd, "successor", complete.Components(opts))
 	}
-	cmd.Flags().BoolVarP(&force, "force", "f", false, "skip the confirmation prompt")
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip the confirmation prompt")
 
 	return cmd
 }
 
-func setComponentStatus(cmd *cobra.Command, p *output.Printer, c sdkclient.AdmiralClient, v statusVerb, componentID, name, reason, successor string, force bool) error {
+func setComponentStatus(cmd *cobra.Command, p *output.Printer, c sdkclient.AdmiralClient, v statusVerb, componentID, name, reason, successor string, yes bool) error {
 	var successorID string
 	if successor != "" {
 		id, err := resolve.Component(cmd.Context(), c.Registry(), successor)
@@ -171,7 +171,7 @@ func setComponentStatus(cmd *cobra.Command, p *output.Printer, c sdkclient.Admir
 		}
 		successorID = id
 	}
-	if err := input.Confirm(cmd, force, fmt.Sprintf("%s %s", v.verb, name)); err != nil {
+	if err := input.Confirm(cmd, yes, fmt.Sprintf("%s %s", v.verb, name)); err != nil {
 		return err
 	}
 	resp, err := c.Registry().SetComponentStatus(cmd.Context(), &registryv1.SetComponentStatusRequest{

@@ -16,7 +16,7 @@ func uniqueName(prefix string) string {
 func TestApp_RoundTrip(t *testing.T) {
 	cli := newServerCLI(t)
 	name := uniqueName("e2e-app")
-	t.Cleanup(func() { cli.Run("app", "delete", name, "--force") })
+	t.Cleanup(func() { cli.Run("app", "delete", name, "--yes") })
 
 	cli.Run("auth", "status").Succeeds().StdoutContains("Authenticated:  yes")
 
@@ -64,12 +64,12 @@ func TestApp_RoundTrip(t *testing.T) {
 	// A second create with the same name is a runtime failure, not usage.
 	cli.Run("app", "create", name).Exits(1)
 
-	// delete without --force cannot prompt off a pipe: usage error, and
+	// delete without --yes cannot prompt off a pipe: usage error, and
 	// the application is still there.
-	cli.Run("app", "delete", name).Exits(exitUsage).StderrContains("--force")
+	cli.Run("app", "delete", name).Exits(exitUsage).StderrContains("--yes")
 	cli.Run("app", "get", name, "-o", "name").Succeeds().StdoutIs(name + "\n")
 
-	cli.Run("app", "delete", name, "--force").Succeeds().
+	cli.Run("app", "delete", name, "--yes").Succeeds().
 		StderrContains(fmt.Sprintf("application %q deleted", name))
 	cli.Run("app", "get", name).Exits(1).StderrContains("not found")
 }

@@ -70,7 +70,7 @@ func TestSecretsAreRefusedLocallyWhatCanBe(t *testing.T) {
 		{[]string{"create", "github-app", "app", "--app-id", "1", "--installation-id", "2"}, "--private-key-file or --private-key-stdin is required"},
 		{[]string{"update", "gh"}, "at least one of"},
 		{[]string{"update", "gh", "--allowed-host", "a", "--clear-allowed-hosts"}, "not both"},
-		{[]string{"delete", "gh"}, "--force required when not running interactively"},
+		{[]string{"delete", "gh"}, "--yes required when not running interactively"},
 	}
 	for _, tc := range cases {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {

@@ -141,7 +141,7 @@ func TestStatusVerbsRefuseLocallyWhatCannotApply(t *testing.T) {
 	}
 
 	// Restoring a component needs no reason; it proceeds past the checks.
-	_, err := run(t, "restore", "cloud-sql", "--force")
+	_, err := run(t, "restore", "cloud-sql", "--yes")
 	require.Error(t, err)
 	assert.NotEqual(t, cmderr.ExitUsage, cmderr.Code(err))
 

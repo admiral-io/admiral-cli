@@ -311,7 +311,7 @@ func TestRoot_ExitCodes(t *testing.T) {
 		contains []string
 	}{
 		{"usage", cmderr.Usage("bad thing"), cmderr.ExitUsage, []string{"Error: bad thing"}},
-		{"usage with hint", cmderr.UsageHint("Try --force.", "needs a terminal"), cmderr.ExitUsage, []string{"Error: needs a terminal", "Try --force."}},
+		{"usage with hint", cmderr.UsageHint("Try --yes.", "needs a terminal"), cmderr.ExitUsage, []string{"Error: needs a terminal", "Try --yes."}},
 		{"not signed in", credentials.ErrNotAuthenticated, cmderr.ExitAuth, []string{"Error: not signed in", "Run 'admiral auth login' to sign in, or set ADMIRAL_API_KEY."}},
 		{"session expired", credentials.ErrSessionExpired, cmderr.ExitAuth, []string{"Run 'admiral auth login'"}},
 		{"server unauthenticated", status.Error(codes.Unauthenticated, "key revoked"), cmderr.ExitAuth, []string{"Error: not signed in: key revoked", "Run 'admiral auth login'"}},

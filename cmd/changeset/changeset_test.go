@@ -80,7 +80,7 @@ func TestChangeSetIDIsCheckedBeforeTheNetwork(t *testing.T) {
 		requireUsage(t, err, `invalid changeset "`+bad+`"`)
 		require.Contains(t, cmderr.Hint(err), "changeset list --env")
 
-		_, err = run(t, "discard", bad, "--force")
+		_, err = run(t, "discard", bad, "--yes")
 		requireUsage(t, err, `invalid changeset "`+bad+`"`)
 	}
 	_, err := run(t, "get", csID)
@@ -146,16 +146,16 @@ func TestList_RequiresAnEnvironmentPath(t *testing.T) {
 	}
 }
 
-// discard is the moderate confirmation tier: a piped run needs --force,
+// discard is the moderate confirmation tier: a piped run needs --yes,
 // and says so before any sign-in.
-func TestDiscardWithoutForceFailsBeforeNetwork(t *testing.T) {
+func TestDiscardWithoutYesFailsBeforeNetwork(t *testing.T) {
 	_, err := run(t, "discard", csID)
-	require.EqualError(t, err, "--force required when not running interactively")
+	require.EqualError(t, err, "--yes required when not running interactively")
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 
-	for _, force := range []string{"--force", "-f"} {
-		_, err = run(t, "discard", csID, force)
-		requireAccepted(t, err, "discard", csID, force)
+	for _, yes := range []string{"--yes", "-y"} {
+		_, err = run(t, "discard", csID, yes)
+		requireAccepted(t, err, "discard", csID, yes)
 	}
 }
 
@@ -257,7 +257,7 @@ func TestSetAndAddRefuseBeforeTheNetwork(t *testing.T) {
 	_, err := run(t, "add", csID, "users-db")
 	require.ErrorContains(t, err, `required flag(s) "from" not set`)
 
-	// -f is --force everywhere; a values file is --values.
+	// -f is not a values flag; a values file is --values.
 	for _, args := range [][]string{
 		{"add", csID, "users-db", "--from", "cloud-sql:v1", "-f", "values.yaml"},
 		{"create", "shop/prod", "-f", "values.yaml"},

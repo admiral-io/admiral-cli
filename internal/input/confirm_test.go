@@ -33,7 +33,7 @@ func TestConfirm_ForceSkipsPrompt(t *testing.T) {
 func TestConfirm_NotInteractiveIsUsageError(t *testing.T) {
 	cmd, _ := pipedCmd("y\n")
 	err := Confirm(cmd, false, "Delete foo")
-	require.EqualError(t, err, "--force required when not running interactively")
+	require.EqualError(t, err, "--yes required when not running interactively")
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 }
 
@@ -103,13 +103,13 @@ func TestPrompts_ShareOneReader(t *testing.T) {
 	require.NoError(t, ConfirmName(cmd, false, "", "shop"))
 }
 
-func TestRequireInteractiveOrForce(t *testing.T) {
+func TestRequireInteractiveOrYes(t *testing.T) {
 	cmd, _ := pipedCmd("")
-	err := RequireInteractiveOrForce(cmd, false)
-	require.EqualError(t, err, "--force required when not running interactively")
+	err := RequireInteractiveOrYes(cmd, false)
+	require.EqualError(t, err, "--yes required when not running interactively")
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
-	require.NoError(t, RequireInteractiveOrForce(cmd, true))
+	require.NoError(t, RequireInteractiveOrYes(cmd, true))
 
 	cmd, _ = interactiveCmd(t, "")
-	require.NoError(t, RequireInteractiveOrForce(cmd, false))
+	require.NoError(t, RequireInteractiveOrYes(cmd, false))
 }

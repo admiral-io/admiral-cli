@@ -16,26 +16,26 @@ import (
 
 func newDeleteCmd(opts *client.Options) *cobra.Command {
 	var (
-		force bool
+		yes bool
 	)
 
 	cmd := &cobra.Command{
 		Use:   "delete <name>",
 		Short: "Delete an application",
 		Long: `Delete an application and everything in it: its environments, components,
-and runs. You must type the application name to confirm, or pass --force to
+and runs. You must type the application name to confirm, or pass --yes to
 skip the prompt.`,
 		Example: `  # Delete an application by name (prompts for the name to confirm)
   admiral app delete billing-api
 
   # Skip the prompt
-  admiral app delete billing-api --force`,
+  admiral app delete billing-api --yes`,
 		Args:              flags.ExactArgs(1),
 		ValidArgsFunction: complete.First(complete.Apps(opts)),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Before any network use: a run that cannot confirm and did not
-			// pass --force fails here, in milliseconds, with the usage error.
-			if err := input.RequireInteractiveOrForce(cmd, force); err != nil {
+			// pass --yes fails here, in milliseconds, with the usage error.
+			if err := input.RequireInteractiveOrYes(cmd, yes); err != nil {
 				return err
 			}
 			c, err := client.CreateClient(cmd.Context(), opts)
@@ -61,7 +61,7 @@ skip the prompt.`,
 			}
 
 			prompt := fmt.Sprintf("Deleting %s is not reversible and removes all of its environments, components and runs.", name)
-			if err := input.ConfirmName(cmd, force, prompt, name); err != nil {
+			if err := input.ConfirmName(cmd, yes, prompt, name); err != nil {
 				return err
 			}
 
@@ -76,7 +76,7 @@ skip the prompt.`,
 		},
 	}
 
-	cmd.Flags().BoolVarP(&force, "force", "f", false, "skip the confirmation prompt")
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip the confirmation prompt")
 
 	return cmd
 }

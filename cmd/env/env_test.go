@@ -114,7 +114,7 @@ func TestWellFormedTargetsAreAccepted(t *testing.T) {
 	for _, verb := range []string{"get", "describe", "delete"} {
 		for _, args := range [][]string{{verb, "shop/prod"}, {verb, "prod", "--app", "shop"}, {verb, envID}} {
 			if verb == "delete" {
-				args = append(args, "--force") // a piped run cannot confirm
+				args = append(args, "--yes") // a piped run cannot confirm
 			}
 			_, err := run(t, args...)
 			require.ErrorIs(t, err, credentials.ErrNotAuthenticated, "%v: should fail at client creation, not usage", args)
@@ -137,11 +137,11 @@ func TestCreate_RejectsBadLabel(t *testing.T) {
 	require.ErrorContains(t, err, `invalid label format "novalue"`)
 }
 
-// A piped run without --force is refused before any sign-in or RPC, but
+// A piped run without --yes is refused before any sign-in or RPC, but
 // a malformed target is reported first.
-func TestDeleteWithoutForceFailsBeforeNetwork(t *testing.T) {
+func TestDeleteWithoutYesFailsBeforeNetwork(t *testing.T) {
 	_, err := run(t, "delete", "shop/prod")
-	require.EqualError(t, err, "--force required when not running interactively")
+	require.EqualError(t, err, "--yes required when not running interactively")
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 
 	_, err = run(t, "delete", "shop/prod", "--app", "shop")
