@@ -9,17 +9,22 @@ import (
 
 	"go.admiral.io/cli/internal/cmderr"
 	sdkclient "go.admiral.io/sdk/client"
+	agentv1 "go.admiral.io/sdk/proto/admiral/api/agent/v1"
 	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
 	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
 	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
+	runv1 "go.admiral.io/sdk/proto/admiral/api/run/v1"
 )
 
 // fakeClient knows one application, shop, with one environment, dev, and
 // answers ListChangeSets from open.
 type fakeClient struct {
 	sdkclient.AdmiralClient
-	cs *changeSetClient
+	cs   *changeSetClient
+	runs *runClient
 }
+
+func (f *fakeClient) Run() runv1.RunAPIClient { return f.runs }
 
 func (f *fakeClient) Application() applicationv1.ApplicationAPIClient { return appClient{} }
 func (f *fakeClient) Environment() environmentv1.EnvironmentAPIClient { return envClient{} }
@@ -50,6 +55,11 @@ type changeSetClient struct {
 	changesetv1.ChangeSetAPIClient
 	open []*changesetv1.ChangeSet
 	req  *changesetv1.ListChangeSetsRequest
+	got  *changesetv1.ChangeSet
+}
+
+func (m *changeSetClient) GetChangeSet(context.Context, *changesetv1.GetChangeSetRequest, ...grpc.CallOption) (*changesetv1.GetChangeSetResponse, error) {
+	return &changesetv1.GetChangeSetResponse{ChangeSet: m.got}, nil
 }
 
 func (m *changeSetClient) ListChangeSets(_ context.Context, req *changesetv1.ListChangeSetsRequest, _ ...grpc.CallOption) (*changesetv1.ListChangeSetsResponse, error) {
@@ -103,4 +113,19 @@ func TestResolveSeveralOpenChangeSetsRefuses(t *testing.T) {
 	require.Contains(t, msg, `cs-aaaaaaaaaaaa  "Add orders"`)
 	require.Contains(t, msg, `cs-bbbbbbbbbbbb  "Bump api"`)
 	require.Contains(t, msg, "(behind)")
+}
+
+// runClient answers for one run and its diff.
+type runClient struct {
+	runv1.RunAPIClient
+	run  *runv1.Run
+	diff *agentv1.PlanDiff
+}
+
+func (m *runClient) GetRun(context.Context, *runv1.GetRunRequest, ...grpc.CallOption) (*runv1.GetRunResponse, error) {
+	return &runv1.GetRunResponse{Run: m.run}, nil
+}
+
+func (m *runClient) GetRunPlanDiff(context.Context, *runv1.GetRunPlanDiffRequest, ...grpc.CallOption) (*runv1.GetRunPlanDiffResponse, error) {
+	return &runv1.GetRunPlanDiffResponse{Diff: m.diff}, nil
 }
