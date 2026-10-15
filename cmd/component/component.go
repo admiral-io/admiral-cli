@@ -37,7 +37,7 @@ or NAME@ID (cloud-sql@ver-7q2k9m4x8p1c).`,
 
 	cmd.AddCommand(
 		newPublishCmd(opts),
-		newPullCmd(opts),
+		newImportCmd(opts),
 		newListCmd(opts),
 		newGetCmd(opts),
 		newTagCmd(opts),

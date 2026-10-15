@@ -190,7 +190,7 @@ func Refs(opts *client.Options) Func {
 }
 
 // Credentials offers credential names, for a positional and for
-// --credential on a pull.
+// --credential on an import.
 func Credentials(opts *client.Options) Func {
 	return func(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return withClient(cmd, opts, toComplete, func(ctx context.Context, c sdkclient.AdmiralClient) ([]Candidate, error) {
