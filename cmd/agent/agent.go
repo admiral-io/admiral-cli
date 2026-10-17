@@ -14,10 +14,11 @@ type AgentCmd struct {
 func NewAgentCmd(opts *client.Options) *AgentCmd {
 	cmd := &cobra.Command{
 		Use:   "agent",
-		Short: "Manage agents and the providers they sign in through",
+		Short: "Manage agents",
 		Long: `Manage agents. An agent runs work where your infrastructure is: a
-Kubernetes cluster, or a Terraform runner. It signs in with a short-lived
-token its workload identity provider issues, so no long-lived secret exists.
+kubernetes agent applies manifests and Helm charts, an infra agent runs
+Terraform or OpenTofu. Each runs as a service account made with it, and signs
+in with a short-lived token from where it runs, so no long-lived secret exists.
 
 An environment deploys through the agents assigned to it, and may be
 assigned only an agent granted to the organization, a team, its application
@@ -38,7 +39,6 @@ Commands accept an agent name or ID as the positional argument.`,
 		newGrantCmd(opts),
 		newGrantsCmd(opts),
 		newRevokeCmd(opts),
-		newProviderCmd(opts),
 	)
 	return &AgentCmd{Cmd: cmd}
 }

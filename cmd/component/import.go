@@ -124,7 +124,7 @@ of the version: importing with different baseline values is a new version.`,
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
 			output.Writef(p.Err(), "Importing %s\n", args[0])
-			resp, err := c.Registry().PullComponent(cmd.Context(), &registryv1.PullComponentRequest{
+			resp, err := c.Registry().ImportComponent(cmd.Context(), &registryv1.ImportComponentRequest{
 				Name:               name,
 				Source:             src,
 				CredentialIds:      ids,
@@ -197,7 +197,7 @@ var archiveExtensions = []string{".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tar.x
 // parseSource reads the kind off the source's form, then checks the flags
 // against it: a flag that belongs to another kind is a usage error rather
 // than silently ignored.
-func parseSource(arg string, f sourceFlags) (*registryv1.PullSource, error) {
+func parseSource(arg string, f sourceFlags) (*registryv1.ImportSource, error) {
 	arg = strings.TrimSpace(arg)
 	if arg == "" {
 		return nil, cmderr.Usage("source is required")
@@ -226,7 +226,7 @@ func parseSource(arg string, f sourceFlags) (*registryv1.PullSource, error) {
 		if err := gitOnly("a chart"); err != nil {
 			return nil, err
 		}
-		return &registryv1.PullSource{Source: &registryv1.PullSource_HelmChart_{HelmChart: &registryv1.PullSource_HelmChart{
+		return &registryv1.ImportSource{Source: &registryv1.ImportSource_HelmChart_{HelmChart: &registryv1.ImportSource_HelmChart{
 			Repository: f.repo, Chart: arg, Version: f.version,
 		}}}, nil
 
@@ -237,7 +237,7 @@ func parseSource(arg string, f sourceFlags) (*registryv1.PullSource, error) {
 		if err := gitOnly("a chart"); err != nil {
 			return nil, err
 		}
-		return &registryv1.PullSource{Source: &registryv1.PullSource_OciChart{OciChart: &registryv1.PullSource_OCIChart{
+		return &registryv1.ImportSource{Source: &registryv1.ImportSource_OciChart{OciChart: &registryv1.ImportSource_OCIChart{
 			Reference: arg, Version: f.version,
 		}}}, nil
 
@@ -248,7 +248,7 @@ func parseSource(arg string, f sourceFlags) (*registryv1.PullSource, error) {
 		if f.version != "" {
 			return nil, cmderr.Usage("a git repository is pinned with --ref, not --version")
 		}
-		return &registryv1.PullSource{Source: &registryv1.PullSource_GitTree_{GitTree: &registryv1.PullSource_GitTree{
+		return &registryv1.ImportSource{Source: &registryv1.ImportSource_GitTree_{GitTree: &registryv1.ImportSource_GitTree{
 			Url: gitURL(arg), Ref: f.ref, Path: f.path,
 		}}}, nil
 
@@ -262,7 +262,7 @@ func parseSource(arg string, f sourceFlags) (*registryv1.PullSource, error) {
 		if f.version != "" {
 			return nil, cmderr.Usage("an archive has no --version; it is what the URL names")
 		}
-		return &registryv1.PullSource{Source: &registryv1.PullSource_Archive_{Archive: &registryv1.PullSource_Archive{Url: arg}}}, nil
+		return &registryv1.ImportSource{Source: &registryv1.ImportSource_Archive_{Archive: &registryv1.ImportSource_Archive{Url: arg}}}, nil
 
 	case isRegistryModule(arg):
 		if err := notRepo("a registry module"); err != nil {
@@ -271,7 +271,7 @@ func parseSource(arg string, f sourceFlags) (*registryv1.PullSource, error) {
 		if err := gitOnly("a registry module"); err != nil {
 			return nil, err
 		}
-		return &registryv1.PullSource{Source: &registryv1.PullSource_RegistryModule_{RegistryModule: &registryv1.PullSource_RegistryModule{
+		return &registryv1.ImportSource{Source: &registryv1.ImportSource_RegistryModule_{RegistryModule: &registryv1.ImportSource_RegistryModule{
 			Address: arg, Version: f.version,
 		}}}, nil
 	}

@@ -19,6 +19,7 @@ import (
 	invitationv1 "go.admiral.io/sdk/proto/admiral/api/invitation/v1"
 	registryv1 "go.admiral.io/sdk/proto/admiral/api/registry/v1"
 	runv1 "go.admiral.io/sdk/proto/admiral/api/run/v1"
+	serviceaccountv1 "go.admiral.io/sdk/proto/admiral/api/serviceaccount/v1"
 	tenantv1 "go.admiral.io/sdk/proto/admiral/api/tenant/v1"
 	userv1 "go.admiral.io/sdk/proto/admiral/api/user/v1"
 )
@@ -78,10 +79,6 @@ func newSessionClient(hostPort string, tok *bearerToken, mode transportMode, int
 
 func (c *sessionClient) Agent() agentv1.AgentAPIClient { return agentv1.NewAgentAPIClient(c.conn) }
 
-func (c *sessionClient) WorkloadIdentityProvider() agentv1.WorkloadIdentityProviderAPIClient {
-	return agentv1.NewWorkloadIdentityProviderAPIClient(c.conn)
-}
-
 func (c *sessionClient) Job() agentv1.JobAPIClient { return agentv1.NewJobAPIClient(c.conn) }
 
 func (c *sessionClient) ApiKey() apikeyv1.ApiKeyAPIClient { return apikeyv1.NewApiKeyAPIClient(c.conn) }
@@ -119,6 +116,14 @@ func (c *sessionClient) Registry() registryv1.RegistryAPIClient {
 }
 
 func (c *sessionClient) Run() runv1.RunAPIClient { return runv1.NewRunAPIClient(c.conn) }
+
+func (c *sessionClient) ServiceAccount() serviceaccountv1.ServiceAccountAPIClient {
+	return serviceaccountv1.NewServiceAccountAPIClient(c.conn)
+}
+
+func (c *sessionClient) Issuer() serviceaccountv1.IssuerAPIClient {
+	return serviceaccountv1.NewIssuerAPIClient(c.conn)
+}
 
 func (c *sessionClient) Tenant() tenantv1.TenantAPIClient { return tenantv1.NewTenantAPIClient(c.conn) }
 
