@@ -1,10 +1,14 @@
 package agent
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
@@ -13,6 +17,7 @@ import (
 	"go.admiral.io/cli/internal/resolve"
 	sdkclient "go.admiral.io/sdk/client"
 	agentv1 "go.admiral.io/sdk/proto/admiral/api/agent/v1"
+	serviceaccountv1 "go.admiral.io/sdk/proto/admiral/api/serviceaccount/v1"
 )
 
 func newListCmd(opts *client.Options) *cobra.Command {
@@ -51,7 +56,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 func newGetCmd(opts *client.Options) *cobra.Command {
 	return &cobra.Command{
 		Use:   "get <agent>",
-		Short: "Get an agent, with what it last reported",
+		Short: "Get an agent, with what it last reported and whether it has enrolled",
 		Args:  flags.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := client.CreateClient(cmd.Context(), opts)
@@ -67,37 +72,73 @@ func newGetCmd(opts *client.Options) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			a := resp.GetAgent()
 			p := output.NewPrinter(cmd, opts.OutputFormat)
-			return p.PrintOne(resp.GetAgent(), resp.GetAgent().GetName(), agentTable.Render(p, resp.GetAgent()))
+			if err := p.PrintOne(a, a.GetName(), agentTable.Render(p, a)); err != nil {
+				return err
+			}
+			if !opts.OutputFormat.IsTable() {
+				return nil
+			}
+			return writeServiceAccount(cmd.Context(), p.Out(), c, a)
 		},
 	}
 }
 
+// writeServiceAccount follows the agent to its service account, which is
+// where enrollment records the issuer and subject it signs in with.
+func writeServiceAccount(ctx context.Context, w io.Writer, c sdkclient.AdmiralClient, a *agentv1.Agent) error {
+	resp, err := c.ServiceAccount().GetServiceAccount(ctx,
+		&serviceaccountv1.GetServiceAccountRequest{ServiceAccountId: a.GetServiceAccountId()})
+	if err != nil && status.Code(err) != codes.PermissionDenied {
+		return err
+	}
+	sa := resp.GetServiceAccount()
+	d := output.NewDescribe()
+	d.Field("Service Account", a.GetServiceAccountId())
+	switch {
+	case err != nil:
+		// Reading an agent does not imply reading its service account.
+		d.Field("Enrolled", "needs serviceaccount:read")
+	case sa.GetEnrolledAt() == nil:
+		d.Field("Enrolled", "not enrolled")
+	default:
+		d.Field("Enrolled", output.FormatDescribeTime(sa.GetEnrolledAt()))
+		d.Field("Subject", sa.GetSubject())
+		d.Field("Issuer", sa.GetIssuerId())
+	}
+	fmt.Fprintln(w)
+	return d.Render(w)
+}
+
+var agentKinds = map[string]agentv1.Agent_Kind{
+	"kubernetes": agentv1.Agent_KIND_KUBERNETES,
+	"infra":      agentv1.Agent_KIND_INFRA,
+}
+
 func newCreateCmd(opts *client.Options) *cobra.Command {
 	var (
-		provider, subject, kind string
-		grants                  []string
-		profiles                []string
+		kind     string
+		grants   []string
+		profiles []string
 	)
 	cmd := &cobra.Command{
 		Use:   "create <name>",
-		Short: "Create an agent",
-		Long: `Create an agent that signs in as --subject at --provider. For a
-Kubernetes agent the subject is its service account,
-system:serviceaccount:<namespace>:<name>.
+		Short: "Create an agent and its one-time enrollment key",
+		Long: `Create an agent. Admiral makes the service account it runs as, and
+returns a single-use enrollment key. Install the agent with the key where it
+runs; on its first start it enrolls, and Admiral records the issuer and
+subject it signs in with from then on.
 
-When the provider has no keys yet, the answer carries a single-use
-enrollment key: give it to the agent, which enrolls the provider's keys from
-inside the cluster.
+A kubernetes agent is installed with Helm into its own namespace,
+admiral-system, never one it deploys into. The command prints the install.
 
 The tenant's first agent is granted to the whole organization unless
 --grant says otherwise; later ones serve nobody until granted.`,
-		Example: `  # A Kubernetes agent in a kind cluster
-  admiral agent create kind --provider kind \
-    --subject system:serviceaccount:admiral:admiral-agent
+		Example: `  admiral agent create dev --kind kubernetes
 
   # Granted to one application only
-  admiral agent create prod --provider gke --subject system:serviceaccount:admiral:agent --grant app:shop`,
+  admiral agent create prod --kind kubernetes --grant app:shop`,
 		Args: flags.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := client.CreateClient(cmd.Context(), opts)
@@ -105,20 +146,7 @@ The tenant's first agent is granted to the whole organization unless
 				return err
 			}
 			defer c.Close() //nolint:errcheck // best-effort cleanup
-			providerID, err := resolve.Provider(cmd.Context(), c.WorkloadIdentityProvider(), provider)
-			if err != nil {
-				return err
-			}
-			k := agentv1.Agent_KIND_KUBERNETES
-			if kind == "terraform" {
-				k = agentv1.Agent_KIND_TERRAFORM
-			}
-			req := &agentv1.CreateAgentRequest{Agent: &agentv1.Agent{
-				Name: args[0], Kind: k,
-				Identity: &agentv1.AgentIdentity{Method: &agentv1.AgentIdentity_Workload{Workload: &agentv1.WorkloadIdentity{
-					ProviderId: providerID, Subject: subject,
-				}}},
-			}}
+			req := &agentv1.CreateAgentRequest{Agent: &agentv1.Agent{Name: args[0], Kind: agentKinds[kind]}}
 			for _, g := range grants {
 				grant, err := parseGrant(cmd, c, g, profiles)
 				if err != nil {
@@ -126,29 +154,64 @@ The tenant's first agent is granted to the whole organization unless
 				}
 				req.Grants = append(req.Grants, grant)
 			}
-			resp, err := c.Agent().CreateAgent(cmd.Context(), req)
-			if err != nil {
-				return err
-			}
-			p := output.NewPrinter(cmd, opts.OutputFormat)
-			if err := p.PrintResource(resp, agentTable.Render(p, resp.GetAgent())); err != nil {
-				return err
-			}
-			if key := resp.GetEnrollmentKey(); key != nil && opts.OutputFormat.IsTable() {
-				fmt.Fprintf(p.Out(), "\nEnrollment key (single use, expires %s):\n%s\n",
-					output.FormatDescribeTime(key.GetExpiresAt()), key.GetSecret())
-			}
-			return nil
+			return createAgent(cmd, c, opts.OutputFormat, req)
 		},
 	}
-	cmd.Flags().StringVar(&provider, "provider", "", "workload identity provider, by name or ID")
-	cmd.Flags().StringVar(&subject, "subject", "", "the subject the provider's tokens name")
-	flags.Enum(cmd, &kind, "kind", "kubernetes", "what the agent runs", "kubernetes", "terraform")
+	flags.Enum(cmd, &kind, "kind", "", "what the agent deploys", "kubernetes", "infra")
 	cmd.Flags().StringArrayVar(&grants, "grant", nil, "grant use to org, app:<name>, env:<app/env> or group:<id> (repeatable)")
 	cmd.Flags().StringArrayVar(&profiles, "profile", nil, "profiles the grants cover (repeatable; none covers all)")
-	_ = cmd.MarkFlagRequired("provider")
-	_ = cmd.MarkFlagRequired("subject")
+	_ = cmd.MarkFlagRequired("kind")
 	return cmd
+}
+
+func createAgent(cmd *cobra.Command, c sdkclient.AdmiralClient, format output.Format, req *agentv1.CreateAgentRequest) error {
+	resp, err := c.Agent().CreateAgent(cmd.Context(), req)
+	if err != nil {
+		return err
+	}
+	p := output.NewPrinter(cmd, format)
+	if err := p.PrintResource(resp, agentTable.Render(p, resp.GetAgent())); err != nil {
+		return err
+	}
+	if !format.IsTable() {
+		return nil
+	}
+	writeEnrollment(p.Out(), resp.GetAgent(), resp.GetEnrollmentKey())
+	return nil
+}
+
+// agentChart is the chart a kubernetes agent installs from. The OCI
+// reference needs no helm repo add.
+const agentChart = "oci://ghcr.io/admiral-io/admiral-helm/admiral-k8s-agent"
+
+// writeEnrollment prints the agent's id, its key with the expiry the server
+// set, and for a kubernetes agent the Helm install that enrolls it.
+func writeEnrollment(w io.Writer, a *agentv1.Agent, key *agentv1.EnrollmentKey) {
+	fmt.Fprintf(w, "\nAgent %s created.\n", a.GetId())
+	fmt.Fprintf(w, "\nEnrollment key (single use, expires %s):\n%s\n",
+		output.FormatDescribeTime(key.GetExpiresAt()), key.GetSecret())
+	if a.GetKind() != agentv1.Agent_KIND_KUBERNETES {
+		fmt.Fprintln(w, "\nInstalling an infra agent is not covered here yet. Give it this key on its first start.")
+		return
+	}
+	// The key goes in a Secret, not a --set, so it never lands in the
+	// release's stored values.
+	// The release name holds the chart's name, so the chart uses it as is
+	// rather than appending its own: the Kubernetes service account, and so
+	// the subject the agent enrolls with, is admiral-k8s-agent-<name>.
+	release := "admiral-k8s-agent-" + a.GetName()
+	secret := release + "-enrollment"
+	fmt.Fprintf(w, `
+Install it where it runs, before the key expires:
+
+  kubectl create namespace admiral-system
+  kubectl -n admiral-system create secret generic %s \
+    --from-literal=key=%s
+  helm install %s %s \
+    --namespace admiral-system \
+    --set admiral.serviceAccountId=%s \
+    --set enrollment.existingSecret=%s
+`, secret, key.GetSecret(), release, agentChart, a.GetServiceAccountId(), secret)
 }
 
 func newDeleteCmd(opts *client.Options) *cobra.Command {
@@ -181,9 +244,9 @@ func newEnrollmentKeyCmd(opts *client.Options) *cobra.Command {
 	return &cobra.Command{
 		Use:   "enrollment-key <agent>",
 		Short: "Issue a new single-use enrollment key",
-		Long: `Issue a single-use key the agent enrolls its provider's keys with. It
-expires within an hour and replaces any key issued before. Only for a
-provider that is still pending.`,
+		Long: `Issue a single-use key the agent enrolls with, for one that has not
+enrolled or must enroll again (reinstalled under another Kubernetes service
+account, say). It replaces any key issued before.`,
 		Args: flags.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := client.CreateClient(cmd.Context(), opts)
