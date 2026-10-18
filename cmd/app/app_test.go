@@ -2,13 +2,19 @@ package app
 
 import (
 	"bytes"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/credentials"
+	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
+	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
+	runv1 "go.admiral.io/sdk/proto/admiral/api/run/v1"
 )
 
 func run(t *testing.T, args ...string) (string, error) {
@@ -92,4 +98,29 @@ func TestListAllExcludesPageToken(t *testing.T) {
 
 	_, err = run(t, "list", "--all")
 	require.ErrorIs(t, err, credentials.ErrNotAuthenticated, "--all alone proceeds to the client")
+}
+
+func TestEnvironmentRowsSayWhatRunsWhere(t *testing.T) {
+	ago := timestamppb.New(time.Now().Add(-39 * time.Minute))
+	envs := []*environmentv1.Environment{
+		{Id: "env-dev000000001", Name: "dev", LastApply: &environmentv1.LastApply{ChangeSetId: "cs-aaaaaaaaaaaa", AppliedAt: ago}},
+		{Id: "env-prod00000001", Name: "prod", LastApply: &environmentv1.LastApply{ChangeSetId: "cs-bbbbbbbbbbbb", AppliedAt: ago},
+			Hold: &environmentv1.Hold{ChangeSetId: "cs-cccccccccccc"}},
+		{Id: "env-stage0000001", Name: "staging"},
+	}
+	comps := []*environmentv1.EnvironmentComponent{
+		{EnvironmentId: "env-dev000000001", Name: "podinfo", Version: &changesetv1.VersionRef{Reference: "6.8.0", Digest: "sha256:3902c9ddbe75aaaa"}},
+		{EnvironmentId: "env-prod00000001", Name: "podinfo", Version: &changesetv1.VersionRef{VersionId: "ver-x", Digest: "sha256:d0659ccea357aaaa"}},
+	}
+	runs := []*runv1.Run{{EnvironmentId: "env-dev000000001", Status: runv1.Run_STATUS_APPLYING}}
+
+	rows := environmentRows(envs, comps, nil, map[string][]string{"ver-x": {"6.7.1"}}, runs)
+	require.Equal(t, [][]string{
+		{"dev", "podinfo 6.8.0 (sha256:3902c9ddbe75)", "cs-aaaaaaaaaaaa 39m ago", "applying"},
+		{"prod", "podinfo 6.7.1 (sha256:d0659ccea357)", "cs-bbbbbbbbbbbb 39m ago", "held by cs-cccccccccccc"},
+		{"staging", "", "", "never applied"},
+	}, rows)
+
+	rows = environmentRows(envs[:1], nil, errors.New("denied"), nil, nil)
+	require.Equal(t, "<unavailable>", rows[0][1])
 }

@@ -4,10 +4,16 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"regexp"
+	"strings"
 	"time"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/output"
+	agentv1 "go.admiral.io/sdk/proto/admiral/api/agent/v1"
 	runv1 "go.admiral.io/sdk/proto/admiral/api/run/v1"
 )
 
@@ -31,6 +37,15 @@ func Settled(s runv1.Run_Status) bool {
 	return true
 }
 
+// settled is Settled, and for a planned run also that its plan is readable:
+// the status can turn planned a moment before the plan it names is recorded.
+func settled(r *runv1.Run) bool {
+	if r.GetStatus() == runv1.Run_STATUS_PLANNED && r.GetPlan().GetPlanDigest() == "" {
+		return false
+	}
+	return Settled(r.GetStatus())
+}
+
 type errWaitElapsed struct{ last *runv1.Run }
 
 func (errWaitElapsed) Error() string { return "wait elapsed" }
@@ -40,11 +55,11 @@ func (errWaitElapsed) Error() string { return "wait elapsed" }
 // the run.
 func Wait(ctx context.Context, c runv1.RunAPIClient, cur *runv1.Run, timeout time.Duration, progress io.Writer) (*runv1.Run, error) {
 	if !Settled(cur.GetStatus()) {
-		output.Writef(progress, "Run %s is %s\n", cur.GetId(), describeStatus(cur))
+		output.Writef(progress, "Run %s is %s\n", cur.GetId(), progressStatus(cur))
 	}
 	deadline := time.Now().Add(timeout)
 	delay := pollFirst
-	for !Settled(cur.GetStatus()) {
+	for !settled(cur) {
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
 			return cur, errWaitElapsed{last: cur}
@@ -61,8 +76,8 @@ func Wait(ctx context.Context, c runv1.RunAPIClient, cur *runv1.Run, timeout tim
 			return cur, err
 		}
 		next := resp.GetRun()
-		if next.GetStatus() != cur.GetStatus() && !Settled(next.GetStatus()) {
-			output.Writef(progress, "Run %s is %s\n", next.GetId(), describeStatus(next))
+		if progressStatus(next) != progressStatus(cur) && !Settled(next.GetStatus()) {
+			output.Writef(progress, "Run %s is %s\n", next.GetId(), progressStatus(next))
 		}
 		cur = next
 		delay = min(delay*3/2, pollMax)
@@ -98,12 +113,52 @@ func Outcome(r *runv1.Run) error {
 		return cmderr.Reported(&cmderr.Error{
 			Err:  fmt.Errorf("run %s applied partway; the environment is held", r.GetId()),
 			Code: cmderr.ExitError,
-			Hint: fmt.Sprintf("Revert the changeset, or run 'admiral run accept %s --reason ...'.", r.GetId()),
+			Hint: HoldHint(r.GetChangeSetId(), r.GetId()),
 		})
 	case runv1.Run_STATUS_SUPERSEDED:
 		return cmderr.Reported(fmt.Errorf("run %s was superseded by a newer plan", r.GetId()))
 	}
 	return nil
+}
+
+var changeSetIDPattern = regexp.MustCompile(`cs-[0-9a-z]{12}`)
+
+// HoldHint is how to release an environment a partial apply holds: undo the
+// changeset, or accept what landed.
+func HoldHint(changeSetID, runID string) string {
+	accept := "'admiral run accept " + runID + " --reason ...'"
+	if runID == "" {
+		accept = "'admiral run accept <run> --reason ...'"
+	}
+	if changeSetID == "" {
+		return "Run " + accept + " to accept what landed."
+	}
+	return fmt.Sprintf("Run 'admiral changeset revert %s' to undo it, or %s to accept what landed.", changeSetID, accept)
+}
+
+// waitWords says why a queued run waits, for the progress line.
+var waitWords = map[agentv1.WaitReason]string{
+	agentv1.WaitReason_WAIT_REASON_NO_AGENT_ASSIGNED:     "waiting: the environment has no agent",
+	agentv1.WaitReason_WAIT_REASON_AGENT_NOT_GRANTED:     "waiting: the agent is not granted to this environment",
+	agentv1.WaitReason_WAIT_REASON_AGENT_OFFLINE:         "waiting: the agent is offline",
+	agentv1.WaitReason_WAIT_REASON_AGENT_AT_CAPACITY:     "waiting for the agent to finish other work",
+	agentv1.WaitReason_WAIT_REASON_AGENT_TOO_OLD:         "waiting: the agent is too old for this job",
+	agentv1.WaitReason_WAIT_REASON_ENVIRONMENT_BUSY:      "waiting: another apply holds the environment",
+	agentv1.WaitReason_WAIT_REASON_AGENT_NOT_ENROLLED:    "waiting: the agent has not enrolled",
+	agentv1.WaitReason_WAIT_REASON_PROFILE_MISSING:       "waiting: the agent has not reported the profile this job needs",
+	agentv1.WaitReason_WAIT_REASON_COMPONENT_NOT_ALLOWED: "waiting: the agent no longer allows a component of this job",
+}
+
+// progressStatus is the run's status as the progress line says it. A
+// reason that needs no one to act reads as waiting for an agent.
+func progressStatus(r *runv1.Run) string {
+	if r.GetStatus() != runv1.Run_STATUS_QUEUED {
+		return output.FormatEnumKebab(r.GetStatus())
+	}
+	if w, ok := waitWords[r.GetWaitReason()]; ok {
+		return w
+	}
+	return "waiting for an agent"
 }
 
 func describeStatus(r *runv1.Run) string {
@@ -112,4 +167,22 @@ func describeStatus(r *runv1.Run) string {
 		s += " (" + output.FormatEnumKebab(r.GetWaitReason()) + ")"
 	}
 	return s
+}
+
+// Refusal gives an approve or apply the platform refused a hint that says
+// what would unblock it: approvals, or a partial apply holding the
+// environment. verb and target address the plan, as "admiral changeset" and
+// a changeset, or "admiral run" and a run.
+func Refusal(err error, verb, target string) error {
+	msg := status.Convert(err).Message()
+	switch {
+	case status.Code(err) == codes.FailedPrecondition && strings.Contains(msg, "holds the environment"):
+		return cmderr.WithHint(err, HoldHint(changeSetIDPattern.FindString(msg), ""))
+	case status.Code(err) == codes.PermissionDenied && strings.Contains(msg, "author"):
+		return cmderr.WithHint(err, "The changeset's author never counts toward its approvals; someone else must run '"+
+			verb+" approve "+target+"'.")
+	case status.Code(err) == codes.FailedPrecondition && strings.Contains(msg, "approval"):
+		return cmderr.WithHint(err, "Someone other than the changeset's author must run '"+verb+" approve "+target+"' first.")
+	}
+	return err
 }

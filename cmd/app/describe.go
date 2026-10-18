@@ -1,6 +1,8 @@
 package app
 
 import (
+	"strings"
+
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -13,6 +15,7 @@ import (
 	"go.admiral.io/cli/internal/output"
 	"go.admiral.io/cli/internal/resolve"
 	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
+	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
 	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
 	runv1 "go.admiral.io/sdk/proto/admiral/api/run/v1"
 )
@@ -21,7 +24,7 @@ func newDescribeCmd(opts *client.Options) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "describe <name>",
 		Short:             "Show everything about an application",
-		Long:              "Show the application's identity, its environments, and its most recent runs.\n\ndescribe is a human view. Use 'app get -o json' for the raw record.",
+		Long:              "Show the application's identity, each environment with what runs there and its last apply, and its most recent runs.\n\ndescribe is a human view. Use 'app get -o json' for the raw record.",
 		Example:           "  # Show an application, its environments, and recent runs\n  admiral app describe billing-api",
 		Aliases:           []string{"desc"},
 		Args:              flags.ExactArgs(1),
@@ -63,6 +66,28 @@ func newDescribeCmd(opts *client.Options) *cobra.Command {
 				runs, runErr = c.Run().ListRuns(ctx, &runv1.ListRunsRequest{Filter: byEnv, PageSize: 5})
 			}
 
+			// What runs in each environment, for its row below.
+			var (
+				comps   []*environmentv1.EnvironmentComponent
+				compErr error
+			)
+			for _, e := range envs.GetEnvironments() {
+				envID := e.Id
+				resp, err := c.Environment().ListEnvironmentComponents(ctx, &environmentv1.ListEnvironmentComponentsRequest{
+					EnvironmentId: &envID, PageSize: 100,
+				})
+				if err != nil {
+					compErr = err
+					break
+				}
+				comps = append(comps, resp.GetComponents()...)
+			}
+			refs := make([]*changesetv1.VersionRef, 0, len(comps))
+			for _, comp := range comps {
+				refs = append(refs, comp.GetVersion())
+			}
+			tags := resolve.VersionTags(ctx, c.Registry(), refs)
+
 			d := output.NewDescribe()
 			d.Field("Name", a.Name)
 			d.Field("ID", a.Id)
@@ -74,11 +99,8 @@ func newDescribeCmd(opts *client.Options) *cobra.Command {
 			if envErr != nil {
 				d.Unavailable("Environments", cmderr.Format(envErr))
 			} else {
-				envRows := make([][]string, 0, len(envs.Environments))
-				for _, e := range envs.Environments {
-					envRows = append(envRows, []string{e.Name, e.Description, output.FormatLabels(e.Labels), output.FormatAge(e.CreatedAt)})
-				}
-				d.Table("Environments", []string{"Name", "Description", "Labels", "Age"}, envRows)
+				d.Table("Environments", []string{"Name", "Components", "Last Apply", "Status"},
+					environmentRows(envs.Environments, comps, compErr, tags, runs.GetRuns()))
 			}
 
 			if runErr != nil {
@@ -100,4 +122,44 @@ func newDescribeCmd(opts *client.Options) *cobra.Command {
 		},
 	}
 	return cmd
+}
+
+// environmentRows is one row per environment: what runs there, the apply
+// that last changed it, and whether it is applying or held. A component
+// list that could not be read leaves the Components cell unavailable.
+func environmentRows(envs []*environmentv1.Environment, comps []*environmentv1.EnvironmentComponent, compErr error,
+	tags map[string][]string, runs []*runv1.Run,
+) [][]string {
+	byEnv := map[string][]string{}
+	for _, c := range comps {
+		byEnv[c.GetEnvironmentId()] = append(byEnv[c.GetEnvironmentId()], c.GetName()+" "+resolve.VersionLabel(c.GetVersion(), tags))
+	}
+	applying := map[string]bool{}
+	for _, r := range runs {
+		if r.GetStatus() == runv1.Run_STATUS_APPLYING {
+			applying[r.GetEnvironmentId()] = true
+		}
+	}
+	rows := make([][]string, 0, len(envs))
+	for _, e := range envs {
+		components := strings.Join(byEnv[e.Id], ", ")
+		if compErr != nil {
+			components = "<unavailable>"
+		}
+		last := ""
+		if la := e.GetLastApply(); la != nil {
+			last = la.GetChangeSetId() + " " + output.FormatAge(la.GetAppliedAt()) + " ago"
+		}
+		state := "never applied"
+		switch {
+		case e.GetHold() != nil:
+			state = "held by " + e.GetHold().GetChangeSetId()
+		case applying[e.Id]:
+			state = "applying"
+		case e.GetLastApply() != nil:
+			state = "applied"
+		}
+		rows = append(rows, []string{e.Name, components, last, state})
+	}
+	return rows
 }

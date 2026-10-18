@@ -32,6 +32,7 @@ with --app for the scope. A path and --app are never combined.`,
 		newListCmd(opts),
 		newGetCmd(opts),
 		newDescribeCmd(opts),
+		newValuesCmd(opts),
 		newUpdateCmd(opts),
 		newDeleteCmd(opts),
 	)

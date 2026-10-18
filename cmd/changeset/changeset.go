@@ -24,7 +24,8 @@ func NewChangeSetCmd(opts *client.Options) *ChangeSetCmd {
 A changeset is a proposal against one environment: add a component from
 the registry, change its version, set or unset values, remove it. Each
 command cuts one immutable revision. 'plan' starts a run that plans the
-head and shows its diff; 'approve' and 'apply' act on that plan.
+head and shows its diff; 'approve' and 'apply' act on that plan. 'revert'
+opens a changeset that undoes an applied one.
 
 A changeset is named by its ID (cs-7f2a1c9d0e3b) or by its environment
 (shop/dev) while that environment has one open changeset. With several,
@@ -40,6 +41,7 @@ an environment names none of them and the command lists them instead.`,
 		newListCmd(opts),
 		newGetCmd(opts),
 		newDiscardCmd(opts),
+		newRevertCmd(opts),
 		newAddCmd(opts),
 		newSetCmd(opts),
 		newUnsetCmd(opts),

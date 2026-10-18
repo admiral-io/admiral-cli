@@ -9,6 +9,7 @@ import (
 	runcmd "go.admiral.io/cli/cmd/run"
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
+	"go.admiral.io/cli/internal/complete"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
 	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
@@ -25,8 +26,9 @@ func newPlanCmd(opts *client.Options) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "plan <changeset>",
-		Short: "Plan a changeset's head revision",
+		Use:               "plan <changeset>",
+		ValidArgsFunction: complete.First(complete.Envs(opts)),
+		Short:             "Plan a changeset's head revision",
 		Long: `Plan a changeset's head revision.
 
 This starts a run. The run prepares the revision first, rendering every
@@ -146,18 +148,23 @@ func planRevision(cmd *cobra.Command, opts *client.Options, runs runv1.RunAPICli
 		}
 		r = done
 	}
-	if err := runcmd.Print(p, r); err != nil {
-		return err
-	}
 	// Under -o json|yaml the run is the whole answer; 'run diff' has the rest.
-	if r.GetStatus() == runv1.Run_STATUS_PLANNED && opts.OutputFormat.IsTable() {
-		diff, err := runs.GetRunPlanDiff(cmd.Context(), &runv1.GetRunPlanDiffRequest{RunId: r.GetId()})
-		if err != nil {
+	withDiff := r.GetStatus() == runv1.Run_STATUS_PLANNED && opts.OutputFormat.IsTable()
+	if !withDiff {
+		if err := runcmd.Print(p, r); err != nil {
 			return err
 		}
-		output.Writef(p.Out(), "\n")
-		runcmd.WriteDiff(p.Out(), diff.GetDiff())
+		return runcmd.Outcome(r)
 	}
+	if err := runcmd.PrintBeforeDiff(p, r); err != nil {
+		return err
+	}
+	diff, err := runs.GetRunPlanDiff(cmd.Context(), &runv1.GetRunPlanDiffRequest{RunId: r.GetId()})
+	if err != nil {
+		return err
+	}
+	output.Writef(p.Out(), "\n")
+	runcmd.WriteDiff(p.Out(), diff.GetDiff(), r.GetPlan())
 	return runcmd.Outcome(r)
 }
 

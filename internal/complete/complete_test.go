@@ -22,6 +22,7 @@ type fakeClient struct {
 	apps *appClient
 	envs *envClient
 	regs *registryClient
+	css  *changeSetClient
 }
 
 func (f *fakeClient) Application() applicationv1.ApplicationAPIClient { return f.apps }

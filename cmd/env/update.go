@@ -1,7 +1,10 @@
 package env
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	"go.admiral.io/cli/internal/client"
@@ -96,6 +99,7 @@ one that is dropped stops serving the environment.`,
 				return err
 			}
 			e := current.Environment
+			before := proto.CloneOf(e)
 
 			if cmd.Flags().Changed("name") {
 				e.Name = newName
@@ -124,6 +128,9 @@ one that is dropped stops serving the environment.`,
 			}
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+			for _, line := range settingChanges(before, resp.Environment) {
+				output.Writef(p.Err(), "%s\n", line)
+			}
 			return p.PrintOne(resp.Environment, resp.Environment.Name, envTable.Render(p, resp.Environment))
 		},
 	}
@@ -136,4 +143,28 @@ one that is dropped stops serving the environment.`,
 		"the Kubernetes namespace components render into unless they name one (needs exactly one agent)")
 
 	return cmd
+}
+
+// settingChanges says what an update changed, one setting per line, so the
+// table after it is not the only evidence. Labels and description are in
+// the table already.
+func settingChanges(before, after *environmentv1.Environment) []string {
+	var out []string
+	change := func(what, from, to string) {
+		if from != to {
+			out = append(out, fmt.Sprintf("%s: %s -> %s", what, orNone(from), orNone(to)))
+		}
+	}
+	change("name", before.GetName(), after.GetName())
+	change("approvals", approvals(before), approvals(after))
+	change("agents", agentIDs(before), agentIDs(after))
+	change("namespace", namespaces(before), namespaces(after))
+	return out
+}
+
+func orNone(s string) string {
+	if s == "" {
+		return output.None
+	}
+	return s
 }

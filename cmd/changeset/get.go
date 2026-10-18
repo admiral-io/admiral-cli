@@ -11,6 +11,7 @@ import (
 
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
+	"go.admiral.io/cli/internal/complete"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
 	sdkclient "go.admiral.io/sdk/client"
@@ -31,8 +32,9 @@ func newGetCmd(opts *client.Options) *cobra.Command {
 	var ro renderedOptions
 
 	cmd := &cobra.Command{
-		Use:   "get <changeset>",
-		Short: "Get a changeset",
+		Use:               "get <changeset>",
+		ValidArgsFunction: complete.First(complete.Envs(opts)),
+		Short:             "Get a changeset",
 		Long: `Get a changeset.
 
 With --rendered, print a prepared revision's manifests and hooks instead: for

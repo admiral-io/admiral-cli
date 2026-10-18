@@ -1,14 +1,19 @@
 package component
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"go.admiral.io/cli/internal/cmderr"
+	"go.admiral.io/cli/internal/output"
+	registryv1 "go.admiral.io/sdk/proto/admiral/api/registry/v1"
 )
 
 func TestParseSourceReadsTheKindOffTheForm(t *testing.T) {
@@ -121,4 +126,32 @@ func TestReadBaselineIsJSON(t *testing.T) {
 	got, err := readBaseline(file)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"replicas": 3, "ingress": {"enabled": true}}`, got)
+}
+
+func TestReportPublishedListsEachFindingOnceAndInfoOnlyWhenVerbose(t *testing.T) {
+	ver := &registryv1.Version{Digest: "sha256:3902c9ddbe75", Findings: []*registryv1.Finding{
+		{Severity: registryv1.FindingSeverity_FINDING_SEVERITY_INFO, Source: "image-ref", Message: "alpine:3.11"},
+		{Severity: registryv1.FindingSeverity_FINDING_SEVERITY_INFO, Source: "image-ref", Message: "alpine:3.11"},
+		{Severity: registryv1.FindingSeverity_FINDING_SEVERITY_INFO, Source: "image-ref", Message: "curlimages/curl:7.69.0"},
+		{Severity: registryv1.FindingSeverity_FINDING_SEVERITY_HIGH, Source: "lint", Message: "runs as root"},
+		{Severity: registryv1.FindingSeverity_FINDING_SEVERITY_HIGH, Source: "lint", Message: "runs as root"},
+	}}
+	report := func(verbose bool) string {
+		cmd := &cobra.Command{}
+		cmd.Flags().Bool("verbose", verbose, "")
+		var errOut bytes.Buffer
+		cmd.SetErr(&errOut)
+		reportPublished(cmd, output.NewPrinter(cmd, output.FormatTable), &registryv1.Component{Name: "podinfo"}, ver, false)
+		return errOut.String()
+	}
+
+	quiet := report(false)
+	assert.Equal(t, 1, strings.Count(quiet, "runs as root"), "a finding is listed once")
+	assert.NotContains(t, quiet, "alpine")
+	assert.Contains(t, quiet, "2 info finding(s); --verbose lists them", "duplicates are not counted twice")
+
+	loud := report(true)
+	assert.Equal(t, 1, strings.Count(loud, "alpine:3.11"))
+	assert.Contains(t, loud, "curlimages/curl:7.69.0")
+	assert.NotContains(t, loud, "--verbose lists them")
 }

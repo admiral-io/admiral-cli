@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"go.admiral.io/cli/internal/client"
+	"go.admiral.io/cli/internal/complete"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/input"
 	"go.admiral.io/cli/internal/output"
@@ -14,8 +15,9 @@ func newDiscardCmd(opts *client.Options) *cobra.Command {
 	var yes bool
 
 	cmd := &cobra.Command{
-		Use:   "discard <changeset>",
-		Short: "Discard an open changeset",
+		Use:               "discard <changeset>",
+		ValidArgsFunction: complete.First(complete.Envs(opts)),
+		Short:             "Discard an open changeset",
 		Long: `Discard an open changeset.
 
 The component names it reserved are released and it is closed. A closed

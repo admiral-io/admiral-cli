@@ -8,6 +8,7 @@ import (
 
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
+	"go.admiral.io/cli/internal/complete"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
 	"go.admiral.io/cli/internal/valuesfile"
@@ -21,8 +22,9 @@ func newValuesCmd(opts *client.Options) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "values <changeset> <component>",
-		Short: "Download a component's values, or upload them with --values",
+		Use:               "values <changeset> <component>",
+		ValidArgsFunction: complete.Positions(complete.Envs(opts), complete.ComponentsOf(opts, false)),
+		Short:             "Download a component's values, or upload them with --values",
 		Long: `Download a component's values, or upload them with --values.
 
 A download writes YAML to stdout under a header naming the changeset, the

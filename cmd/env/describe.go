@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	runcmd "go.admiral.io/cli/cmd/run"
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/complete"
@@ -117,7 +117,26 @@ describe is a human view. Use 'env get -o json' for the raw record.`,
 				sec.agentNames = agentNames(gctx, c, e.Agents)
 				return nil
 			})
+			if e.LastApply != nil {
+				g.Go(func() error {
+					sec.lastApplyRun = latestRun(gctx, c, e.LastApply.ChangeSetId)
+					return nil
+				})
+			}
+			if e.Hold != nil {
+				g.Go(func() error {
+					sec.holdRun = latestRun(gctx, c, e.Hold.ChangeSetId)
+					return nil
+				})
+			}
 			_ = g.Wait() // nothing returns an error
+			// Live components whose reference the platform did not record are
+			// named by the registry's tags instead.
+			refs := make([]*changesetv1.VersionRef, 0, len(sec.comps))
+			for _, comp := range sec.comps {
+				refs = append(refs, comp.GetVersion())
+			}
+			sec.tags = resolve.VersionTags(ctx, c.Registry(), refs)
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
 			return p.PrintDescribe(describeEnv(e, app, sec),
@@ -140,6 +159,12 @@ type envSections struct {
 	openCS     []*changesetv1.ChangeSet
 	openCSErr  error
 	agentNames map[string]string
+	// The runs behind the last apply and the hold, nil when unreadable.
+	lastApplyRun *runv1.Run
+	holdRun      *runv1.Run
+	// tags is each version's tags by version ID, for components whose
+	// reference is not a tag.
+	tags map[string][]string
 }
 
 // permissionDenied reports whether any section read was refused for scope.
@@ -162,8 +187,11 @@ func describeEnv(e *environmentv1.Environment, app *applicationv1.Application, s
 	d.Field("Description", e.Description)
 	d.Fields("Labels", output.LabelLines(e.Labels))
 	d.Field("Generation", strconv.FormatInt(e.Generation, 10))
-	d.Field("Hold", holdLine(e.Hold))
-	d.Field("Last Apply", lastApplyLine(e.LastApply))
+	d.Field("Hold", holdLine(e.Hold, sec.holdRun))
+	d.Field("Last Apply", lastApplyLine(e.LastApply, sec.lastApplyRun))
+	if r := applying(runs); r != nil {
+		d.Field("Applying", fmt.Sprintf("%s (%s) since %s ago", r.Id, r.ChangeSetId, output.FormatAge(r.GetApply().GetStartedAt())))
+	}
 	switch {
 	case sec.runsErr != nil:
 		d.Field("Last Run", unavailable)
@@ -217,7 +245,7 @@ func describeEnv(e *environmentv1.Environment, app *applicationv1.Application, s
 				if c.LastApply != nil {
 					applied = output.FormatAge(c.LastApply.AppliedAt) + " ago"
 				}
-				rows = append(rows, []string{c.Name, output.FormatEnumKebab(c.Kind), versionDisplay(c.Version), applied})
+				rows = append(rows, []string{c.Name, output.FormatEnumKebab(c.Kind), resolve.VersionLabel(c.Version, sec.tags), applied})
 			}
 			b.Table([]string{"Name", "Kind", "Version", "Applied"}, rows)
 		})
@@ -250,6 +278,9 @@ func describeEnv(e *environmentv1.Environment, app *applicationv1.Application, s
 		d.Table("Recent Runs", []string{"ID", "Status", "Changeset", "Created By", "Age"}, rows)
 	}
 
+	if e.Hold != nil {
+		d.Hint(runcmd.HoldHint(e.Hold.ChangeSetId, sec.holdRun.GetId()))
+	}
 	if sec.permissionDenied() {
 		d.Hint(cmderr.ScopeHint)
 	}
@@ -259,29 +290,50 @@ func describeEnv(e *environmentv1.Environment, app *applicationv1.Application, s
 // unavailable marks a top-block field whose backing read failed.
 const unavailable = "<unavailable>"
 
-func holdLine(h *environmentv1.Hold) string {
+func holdLine(h *environmentv1.Hold, r *runv1.Run) string {
 	if h == nil {
 		return ""
 	}
-	return fmt.Sprintf("held by %s since %s ago", h.ChangeSetId, output.FormatAge(h.HeldAt))
+	by := h.ChangeSetId
+	if r != nil {
+		by += " (" + r.Id + ")"
+	}
+	return fmt.Sprintf("held by %s since %s ago", by, output.FormatAge(h.HeldAt))
 }
 
-func lastApplyLine(l *environmentv1.LastApply) string {
+func lastApplyLine(l *environmentv1.LastApply, r *runv1.Run) string {
 	if l == nil {
 		return ""
 	}
-	return fmt.Sprintf("%s %s %s ago", l.ChangeSetId, l.RevisionId, output.FormatAge(l.AppliedAt))
+	line := fmt.Sprintf("%s %s %s ago", l.ChangeSetId, l.RevisionId, output.FormatAge(l.AppliedAt))
+	if by := r.GetApply().GetAppliedBy(); by != nil {
+		line += " by " + output.FormatActor(by)
+	}
+	return line
 }
 
-// versionDisplay is the tag or digest the version was referenced by.
-func versionDisplay(v *changesetv1.VersionRef) string {
-	if v == nil {
-		return ""
+// applying is the run applying now, if any.
+func applying(runs []*runv1.Run) *runv1.Run {
+	for _, r := range runs {
+		if r.Status == runv1.Run_STATUS_APPLYING {
+			return r
+		}
 	}
-	if v.Reference != "" && !strings.HasPrefix(v.Reference, "sha256:") {
-		return v.Reference
+	return nil
+}
+
+// latestRun is a changeset's newest run, or nil when it has none or cannot
+// be read.
+func latestRun(ctx context.Context, c sdkclient.AdmiralClient, changeSetID string) *runv1.Run {
+	cs, err := c.ChangeSet().GetChangeSet(ctx, &changesetv1.GetChangeSetRequest{ChangeSetId: changeSetID})
+	if err != nil || cs.GetChangeSet().GetLatestRunId() == "" {
+		return nil
 	}
-	return output.Truncate(v.Digest, 19)
+	r, err := c.Run().GetRun(ctx, &runv1.GetRunRequest{RunId: cs.GetChangeSet().GetLatestRunId()})
+	if err != nil {
+		return nil
+	}
+	return r.GetRun()
 }
 
 func profile(p string) string {

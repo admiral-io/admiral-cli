@@ -7,6 +7,7 @@ import (
 
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
+	"go.admiral.io/cli/internal/complete"
 	"go.admiral.io/cli/internal/filter"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
@@ -16,24 +17,21 @@ import (
 
 func newListCmd(opts *client.Options) *cobra.Command {
 	var (
-		envTarget string
-		status    string
-		paging    flags.PagingOptions
+		status string
+		paging flags.PagingOptions
 	)
 
 	cmd := &cobra.Command{
-		Use:   "list --env <app>/<env>",
+		Use:   "list <app>/<env>",
 		Short: "List an environment's changesets",
-		Example: `  admiral changeset list --env shop/prod
+		Example: `  admiral changeset list shop/prod
 
   # Open ones only, IDs for scripting
-  admiral changeset list --env shop/prod --status open -o name`,
-		Args: flags.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			if envTarget == "" {
-				return cmderr.UsageHint("Pass --env as app/env: 'admiral changeset list --env shop/prod'.",
-					"no environment specified")
-			}
+  admiral changeset list shop/prod --status open -o name`,
+		Args:              flags.ExactArgs(1),
+		ValidArgsFunction: complete.First(complete.Envs(opts)),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			envTarget := args[0]
 			app, env, err := flags.EnvTarget(cmd, "", envTarget)
 			if err != nil {
 				return err
@@ -41,7 +39,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 			// Checked before the client is built: dialing first would report
 			// a missing credential for what is a missing argument.
 			if app == "" && !resolve.IsID("env", env) {
-				return cmderr.UsageHint("Pass --env as app/env: 'admiral changeset list --env shop/prod'.",
+				return cmderr.UsageHint("Give the environment as app/env: 'admiral changeset list shop/prod'.",
 					"no application specified")
 			}
 
@@ -88,7 +86,6 @@ func newListCmd(opts *client.Options) *cobra.Command {
 		},
 	}
 
-	flags.Env(cmd, &envTarget, opts)
 	flags.Enum(cmd, &status, "status", "", "only changesets in this status", "open", "applied", "closed")
 	flags.Paging(cmd, &paging)
 

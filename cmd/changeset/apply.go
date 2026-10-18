@@ -10,6 +10,7 @@ import (
 	runcmd "go.admiral.io/cli/cmd/run"
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
+	"go.admiral.io/cli/internal/complete"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/input"
 	"go.admiral.io/cli/internal/output"
@@ -24,8 +25,9 @@ func newApproveCmd(opts *client.Options) *cobra.Command {
 		yes    bool
 	)
 	cmd := &cobra.Command{
-		Use:   "approve <changeset>",
-		Short: "Approve a changeset's latest plan",
+		Use:               "approve <changeset>",
+		ValidArgsFunction: complete.First(complete.Envs(opts)),
+		Short:             "Approve a changeset's latest plan",
 		Long: `Approve the plan of a changeset's latest run. The plan is shown first and
 the command asks before approving; --yes skips the question, not the
 plan. The approval names the plan's digest, so a newer plan is not
@@ -62,7 +64,7 @@ approved by it. The changeset's author cannot approve it.`,
 			if _, err := c.Run().ApproveRun(cmd.Context(), &runv1.ApproveRunRequest{
 				RunId: r.GetId(), PlanDigest: r.GetPlan().GetPlanDigest(), Reason: reason,
 			}); err != nil {
-				return err
+				return runcmd.Refusal(err, "admiral changeset", csID)
 			}
 			output.Confirmed(cmd.ErrOrStderr(), "changeset", csID, "approved ("+r.GetId()+")")
 			return nil
@@ -79,8 +81,9 @@ func newApplyCmd(opts *client.Options) *cobra.Command {
 		po  planOptions
 	)
 	cmd := &cobra.Command{
-		Use:   "apply <changeset>",
-		Short: "Apply a changeset's latest plan",
+		Use:               "apply <changeset>",
+		ValidArgsFunction: complete.First(complete.Envs(opts)),
+		Short:             "Apply a changeset's latest plan",
 		Long: `Apply the plan of a changeset's latest run, once its required approvals
 are in. The plan is shown first and the command asks before applying;
 --yes skips the question and nothing else: approvals, a changeset that has
@@ -124,7 +127,7 @@ it failed or applied partway.`,
 				RunId: r.GetId(), PlanDigest: r.GetPlan().GetPlanDigest(),
 			})
 			if err != nil {
-				return err
+				return runcmd.Refusal(err, "admiral changeset", csID)
 			}
 			r = resp.GetRun()
 			p := output.NewPrinter(cmd, opts.OutputFormat)
@@ -189,6 +192,6 @@ func showPlan(ctx context.Context, w io.Writer, c sdkclient.AdmiralClient, cs *c
 		return err
 	}
 	output.Writef(w, "%s  %q  by %s  (%s)\n", cs.GetId(), cs.GetTitle(), output.FormatActor(cs.GetCreatedBy()), r.GetId())
-	runcmd.WriteDiff(w, diff.GetDiff())
+	runcmd.WriteDiff(w, diff.GetDiff(), r.GetPlan())
 	return nil
 }
