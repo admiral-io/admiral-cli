@@ -62,7 +62,7 @@ approved by it. The changeset's author cannot approve it.`,
 			if _, err := c.Run().ApproveRun(cmd.Context(), &runv1.ApproveRunRequest{
 				RunId: r.GetId(), PlanDigest: r.GetPlan().GetPlanDigest(), Reason: reason,
 			}); err != nil {
-				return err
+				return runcmd.Refusal(err, "admiral changeset", csID)
 			}
 			output.Confirmed(cmd.ErrOrStderr(), "changeset", csID, "approved ("+r.GetId()+")")
 			return nil
@@ -124,7 +124,7 @@ it failed or applied partway.`,
 				RunId: r.GetId(), PlanDigest: r.GetPlan().GetPlanDigest(),
 			})
 			if err != nil {
-				return err
+				return runcmd.Refusal(err, "admiral changeset", csID)
 			}
 			r = resp.GetRun()
 			p := output.NewPrinter(cmd, opts.OutputFormat)
@@ -189,6 +189,6 @@ func showPlan(ctx context.Context, w io.Writer, c sdkclient.AdmiralClient, cs *c
 		return err
 	}
 	output.Writef(w, "%s  %q  by %s  (%s)\n", cs.GetId(), cs.GetTitle(), output.FormatActor(cs.GetCreatedBy()), r.GetId())
-	runcmd.WriteDiff(w, diff.GetDiff())
+	runcmd.WriteDiff(w, diff.GetDiff(), r.GetPlan())
 	return nil
 }

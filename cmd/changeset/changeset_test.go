@@ -65,7 +65,8 @@ func TestPositionalUsageErrors(t *testing.T) {
 		{[]string{"create"}, "missing argument: create <app>/<env>"},
 		{[]string{"get"}, "missing argument: get <changeset>"},
 		{[]string{"discard"}, "missing argument: discard <changeset>"},
-		{[]string{"list", "shop/prod"}, `unknown argument "shop/prod"`},
+		{[]string{"list"}, "missing argument: list <app>/<env>"},
+		{[]string{"revert"}, "missing argument: revert <changeset>"},
 		{[]string{"bogus"}, `unknown command "bogus" for "changeset"`},
 	}
 	for _, tc := range cases {
@@ -143,18 +144,37 @@ func TestCreate_SetIsParsedBeforeTheNetwork(t *testing.T) {
 
 func TestList_RequiresAnEnvironmentPath(t *testing.T) {
 	_, err := run(t, "list")
-	requireUsage(t, err, "no environment specified")
-	require.Contains(t, cmderr.Hint(err), "--env shop/prod")
+	requireUsage(t, err, "missing argument: list <app>/<env>")
 
-	_, err = run(t, "list", "--env", "prod")
+	_, err = run(t, "list", "prod")
 	requireUsage(t, err, "no application specified")
+	require.Contains(t, cmderr.Hint(err), "changeset list shop/prod")
 
-	_, err = run(t, "list", "--env", "shop/prod", "--status", "merged")
+	_, err = run(t, "list", "shop/prod", "--status", "merged")
 	requireUsage(t, err, "must be one of open, applied, closed")
 
+	_, err = run(t, "list", "--env", "shop/prod")
+	require.ErrorContains(t, err, "unknown flag: --env")
+
 	for _, args := range [][]string{
-		{"list", "--env", "shop/prod"},
-		{"list", "--env", envID, "--status", "open"},
+		{"list", "shop/prod"},
+		{"list", envID, "--status", "open"},
+	} {
+		_, err = run(t, args...)
+		requireAccepted(t, err, args...)
+	}
+}
+
+func TestRevertNamesAChangesetByID(t *testing.T) {
+	_, err := run(t, "revert", "shop/prod")
+	requireUsage(t, err, `invalid changeset "shop/prod": expected cs-xxxxxxxxxxxx`)
+
+	_, err = run(t, "revert", csID, "--no-wait")
+	requireUsage(t, err, "--no-wait and --wait-timeout need --plan")
+
+	for _, args := range [][]string{
+		{"revert", csID},
+		{"revert", csID, "--title", "Back out the bump", "--plan"},
 	} {
 		_, err = run(t, args...)
 		requireAccepted(t, err, args...)
@@ -494,6 +514,44 @@ func TestWriteDiff(t *testing.T) {
 	assert.Contains(t, out, `resources: {"cpu":"1"} -> null`)
 	assert.Contains(t, out, "! replicas: must be <= 2")
 	assert.Contains(t, out, "- old-cache (destroy)")
+}
+
+func TestDiffShowsNestedValuesAtTheirOwnPath(t *testing.T) {
+	cases := []struct {
+		name    string
+		bp      bool
+		b       string
+		ap      bool
+		a       string
+		want    []string
+		wantNot string
+	}{
+		{"a value inside a new object", false, "", true, `{"message":"hello"}`,
+			[]string{`ui.message: <absent> -> "hello"`}, "{"},
+		{"one key of several changes", true, `{"a":1,"b":{"c":2}}`, true, `{"a":1,"b":{"c":3}}`,
+			[]string{"ui.b.c: 2 -> 3"}, "ui.a"},
+		{"a key that is not a plain word", false, "", true, `{"a.b":"x"}`,
+			[]string{`ui."a.b": <absent> -> "x"`}, ""},
+		{"an object cleared to null stays whole", true, `{"cpu":"1"}`, true, `null`,
+			[]string{`ui: {"cpu":"1"} -> null`}, ""},
+		{"an empty object", false, "", true, `{}`,
+			[]string{"ui: <absent> -> {}"}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var b bytes.Buffer
+			writeDiff(&b, csID, &changesetv1.DiffChangeSetResponse{Components: []*changesetv1.ComponentDiff{{
+				Component: "web", Action: changesetv1.EntryAction_ENTRY_ACTION_UPDATE,
+				Paths: []*changesetv1.PathDiff{{DisplayPath: "ui", BeforePresent: tc.bp, BeforeJson: tc.b, AfterPresent: tc.ap, AfterJson: tc.a}},
+			}}})
+			for _, w := range tc.want {
+				assert.Contains(t, b.String(), w)
+			}
+			if tc.wantNot != "" {
+				assert.NotContains(t, b.String(), tc.wantNot)
+			}
+		})
+	}
 }
 
 // A component name is at most 53 characters, Helm's limit on a release

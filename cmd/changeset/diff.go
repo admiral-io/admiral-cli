@@ -1,8 +1,12 @@
 package changeset
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
+	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 
@@ -67,14 +71,79 @@ func writeDiff(w io.Writer, csID string, d *changesetv1.DiffChangeSetResponse) {
 		output.Writef(w, "\n%s %s (%s)%s\n", actionMark[c.Action], c.Component,
 			output.FormatEnumKebab(c.Action), versionChange(c.OldVersion, c.NewVersion))
 		for _, pd := range c.Paths {
-			output.Writef(w, "    %s: %s -> %s\n", pd.DisplayPath,
-				side(pd.BeforePresent, pd.BeforeJson), side(pd.AfterPresent, pd.AfterJson))
+			for _, l := range leaves(pd.DisplayPath, pd.BeforePresent, pd.BeforeJson, pd.AfterPresent, pd.AfterJson) {
+				output.Writef(w, "    %s: %s -> %s\n", l.path, l.before, l.after)
+			}
 		}
 		for _, v := range c.Violations {
 			output.Writef(w, "    ! %s: %s\n", v.Path, v.Message)
 		}
 	}
 }
+
+// leaf is one changed value at a full path, each side as side prints it.
+type leaf struct{ path, before, after string }
+
+// leaves expands a change to an object into its changed leaves, so a value
+// set inside a new object reads at its own path rather than as the object.
+// Anything that is not an object on either side is one leaf as given.
+func leaves(path string, beforePresent bool, before string, afterPresent bool, after string) []leaf {
+	bo, bIsObj := object(beforePresent, before)
+	ao, aIsObj := object(afterPresent, after)
+	if !bIsObj && !aIsObj || (beforePresent && !bIsObj) || (afterPresent && !aIsObj) {
+		return []leaf{{path, side(beforePresent, before), side(afterPresent, after)}}
+	}
+	keys := make([]string, 0, len(bo)+len(ao))
+	for k := range bo {
+		keys = append(keys, k)
+	}
+	for k := range ao {
+		if _, ok := bo[k]; !ok {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	var out []leaf
+	for _, k := range keys {
+		bv, bok := bo[k]
+		av, aok := ao[k]
+		if bok && aok && string(bv) == string(av) {
+			continue
+		}
+		out = append(out, leaves(childPath(path, k), bok, string(bv), aok, string(av))...)
+	}
+	if len(out) == 0 {
+		// An empty object set or cleared has no leaves to show it by.
+		return []leaf{{path, side(beforePresent, before), side(afterPresent, after)}}
+	}
+	return out
+}
+
+// object decodes js when it is present and a JSON object.
+func object(present bool, js string) (map[string]json.RawMessage, bool) {
+	if !present {
+		return nil, false
+	}
+	var m map[string]json.RawMessage
+	if json.Unmarshal([]byte(js), &m) != nil || m == nil {
+		return nil, false
+	}
+	return m, true
+}
+
+// childPath appends a key the way a path is written on the command line:
+// a key that is not a plain word is quoted.
+func childPath(path, key string) string {
+	if !plainKey.MatchString(key) {
+		key = strconv.Quote(key)
+	}
+	if path == "" {
+		return key
+	}
+	return path + "." + key
+}
+
+var plainKey = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 // side shows absent apart from null: absent means the default applies,
 // null clears it.

@@ -190,14 +190,24 @@ func Render(tree map[string]any, h Header) ([]byte, error) {
 		fmt.Fprintf(&b, "# base: %s\n", h.BaseDigest)
 	}
 	b.WriteString("# Edit and upload with: admiral cs values " + h.ChangeSet + " " + h.Component + " --values <file>\n")
+	body, err := Encode(tree)
+	if err != nil {
+		return nil, err
+	}
+	b.Write(body)
+	return b.Bytes(), nil
+}
+
+// Encode writes the tree as YAML the way Render does, with no header.
+func Encode(tree map[string]any) ([]byte, error) {
 	if len(tree) == 0 {
-		b.WriteString("{}\n")
-		return b.Bytes(), nil
+		return []byte("{}\n"), nil
 	}
 	node, err := toNode(tree)
 	if err != nil {
 		return nil, err
 	}
+	var b bytes.Buffer
 	enc := yaml.NewEncoder(&b)
 	enc.SetIndent(2)
 	if err := enc.Encode(node); err != nil {

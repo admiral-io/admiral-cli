@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	commonv1 "buf.build/gen/go/admiral/common/protocolbuffers/go/admiral/common/v1"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -17,6 +18,7 @@ import (
 	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
 	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
 	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
+	runv1 "go.admiral.io/sdk/proto/admiral/api/run/v1"
 )
 
 // run executes the env command tree with no stored credential, so anything
@@ -230,22 +232,71 @@ func TestDescribeEnv(t *testing.T) {
 			AgentId: "agt-aaaaaaaaaaaa", Id: "asg-111111111111", ApplyProfile: "edit",
 			Settings: &environmentv1.AgentAssignment_Kubernetes{Kubernetes: &environmentv1.KubernetesSettings{DefaultNamespace: "shop-prod", Prune: &yes}},
 		}},
-		Approval: &environmentv1.ApprovalRule{RequiredApprovals: 2},
-		Hold:     &environmentv1.Hold{ChangeSetId: "cs-7q2k9m4x8p1c", HeldAt: timestamppb.New(time.Now().Add(-3 * time.Hour))},
+		Approval:  &environmentv1.ApprovalRule{RequiredApprovals: 2},
+		Hold:      &environmentv1.Hold{ChangeSetId: "cs-7q2k9m4x8p1c", HeldAt: timestamppb.New(time.Now().Add(-3 * time.Hour))},
+		LastApply: &environmentv1.LastApply{ChangeSetId: "cs-1111aaaa2222", RevisionId: "rev-333344445555", AppliedAt: timestamppb.New(time.Now().Add(-time.Hour))},
 	}
 	sec := envSections{
 		agentNames: map[string]string{"agt-aaaaaaaaaaaa": "prod-cluster"},
-		comps: []*environmentv1.EnvironmentComponent{{
-			Name: "api", Version: &changesetv1.VersionRef{Reference: "v1.2.0", Digest: "sha256:abc"},
-			LastApply: &environmentv1.LastApply{AppliedAt: timestamppb.New(time.Now().Add(-2 * time.Hour))},
-		}},
+		comps: []*environmentv1.EnvironmentComponent{
+			{
+				Name: "api", Version: &changesetv1.VersionRef{Reference: "v1.2.0", Digest: "sha256:abcdef0123456789"},
+				LastApply: &environmentv1.LastApply{AppliedAt: timestamppb.New(time.Now().Add(-2 * time.Hour))},
+			},
+			{Name: "web", Version: &changesetv1.VersionRef{VersionId: "ver-web", Digest: "sha256:3902c9ddbe75aaaa"}},
+			{Name: "db", Version: &changesetv1.VersionRef{VersionId: "ver-db", Digest: "sha256:ffffeeeeddddcccc"}},
+		},
+		tags:         map[string][]string{"ver-web": {"6.8.0"}},
+		runs:         []*runv1.Run{{Id: "run-applyingnow1", ChangeSetId: "cs-5555bbbb6666", Status: runv1.Run_STATUS_APPLYING}},
+		holdRun:      &runv1.Run{Id: "run-held00000001"},
+		lastApplyRun: &runv1.Run{Apply: &runv1.ApplyPhase{AppliedBy: &commonv1.ActorRef{Id: "usr-s0jg9fam3x0x"}}},
 	}
 	var b bytes.Buffer
-	require.NoError(t, describeEnv(e, &applicationv1.Application{Name: "shop"}, sec).Render(&b))
+	d := describeEnv(e, &applicationv1.Application{Name: "shop"}, sec)
+	require.NoError(t, d.Render(&b))
 	out := b.String()
 	require.Regexp(t, `Generation:\s+7`, out)
-	require.Regexp(t, `Hold:\s+held by cs-7q2k9m4x8p1c since 3h ago`, out)
+	require.Regexp(t, `Hold:\s+held by cs-7q2k9m4x8p1c \(run-held00000001\) since 3h ago`, out)
+	require.Regexp(t, `Last Apply:\s+cs-1111aaaa2222 rev-333344445555 60m ago by usr-s0jg9fam3x0x`, out)
+	require.Regexp(t, `Applying:\s+run-applyingnow1 \(cs-5555bbbb6666\)`, out)
 	require.Regexp(t, `prod-cluster\s+asg-111111111111\s+default\s+edit\s+shop-prod\s+<none>\s+true`, out)
 	require.Regexp(t, `Required Approvals:\s+2`, out)
-	require.Regexp(t, `api\s+<none>\s+v1.2.0\s+120m ago`, out)
+	require.Regexp(t, `api\s+<none>\s+v1.2.0 \(sha256:abcdef012345\)\s+120m ago`, out)
+	require.Regexp(t, `web\s+<none>\s+6.8.0 \(sha256:3902c9ddbe75\)`, out, "a version without a tag reference is named by its tag")
+	require.Regexp(t, `db\s+<none>\s+sha256:ffffeeeedddd`, out, "an untagged version keeps its digest")
+	require.Contains(t, out, "admiral changeset revert cs-7q2k9m4x8p1c")
+	require.Contains(t, out, "admiral run accept run-held00000001")
+}
+
+func TestValuesArguments(t *testing.T) {
+	_, err := run(t, "values", "shop/dev")
+	require.EqualError(t, err, "missing argument: values <name> <component>")
+	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
+
+	_, err = run(t, "values", "shop/dev", "api", "--app", "shop")
+	require.EqualError(t, err, "--app cannot be combined with a path")
+
+	for _, args := range [][]string{
+		{"values", "shop/dev", "api"},
+		{"values", "dev", "api", "--app", "shop", "--effective"},
+	} {
+		_, err = run(t, args...)
+		require.ErrorIs(t, err, credentials.ErrNotAuthenticated, "%v should be accepted", args)
+	}
+}
+
+func TestUpdateSaysWhatChanged(t *testing.T) {
+	before := &environmentv1.Environment{
+		Name: "prod",
+		Agents: []*environmentv1.AgentAssignment{{AgentId: "agt-aaaaaaaaaaaa",
+			Settings: &environmentv1.AgentAssignment_Kubernetes{Kubernetes: &environmentv1.KubernetesSettings{DefaultNamespace: "shop"}}}},
+	}
+	after := &environmentv1.Environment{
+		Name:     "prod",
+		Approval: &environmentv1.ApprovalRule{RequiredApprovals: 1},
+		Agents: []*environmentv1.AgentAssignment{{AgentId: "agt-aaaaaaaaaaaa",
+			Settings: &environmentv1.AgentAssignment_Kubernetes{Kubernetes: &environmentv1.KubernetesSettings{DefaultNamespace: "shop-prod"}}}},
+	}
+	require.Equal(t, []string{"approvals: 0 -> 1", "namespace: shop -> shop-prod"}, settingChanges(before, after))
+	require.Empty(t, settingChanges(before, before))
 }

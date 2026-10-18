@@ -6,6 +6,7 @@ import (
 
 	"go.admiral.io/cli/internal/output"
 	agentv1 "go.admiral.io/sdk/proto/admiral/api/agent/v1"
+	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
 	runv1 "go.admiral.io/sdk/proto/admiral/api/run/v1"
 )
 
@@ -52,6 +53,16 @@ func changeSummary(cs []*agentv1.ComponentPlan) string {
 
 // Print writes a run's detail view, or the run itself under -o json|yaml.
 func Print(p *output.Printer, r *runv1.Run) error {
+	return printRun(p, r, false)
+}
+
+// PrintBeforeDiff is Print for a caller that writes the plan's diff right
+// after, so the view does not point at 'run diff'.
+func PrintBeforeDiff(p *output.Printer, r *runv1.Run) error {
+	return printRun(p, r, true)
+}
+
+func printRun(p *output.Printer, r *runv1.Run, diffShown bool) error {
 	d := output.NewDescribe()
 	d.Field("ID", r.GetId())
 	d.Field("Environment", r.GetEnvironmentId())
@@ -106,23 +117,60 @@ func Print(p *output.Printer, r *runv1.Run) error {
 				b.Field("Accepted reason", apply.GetAcceptedReason())
 			}
 			if len(apply.GetComponents()) > 0 {
+				planned := map[string]*agentv1.ComponentPlan{}
+				for _, c := range r.GetPlan().GetComponents() {
+					planned[c.GetComponent()] = c
+				}
 				rows := make([][]string, 0, len(apply.GetComponents()))
 				for _, c := range apply.GetComponents() {
-					rows = append(rows, []string{c.GetComponent(), output.FormatEnumKebab(c.GetStatus()), c.GetMessage()})
+					changes := ""
+					if pc := planned[c.GetComponent()]; pc != nil && c.GetStatus() == runv1.ComponentApply_STATUS_SUCCEEDED {
+						changes = changeSummary([]*agentv1.ComponentPlan{pc})
+					}
+					rows = append(rows, []string{c.GetComponent(), output.FormatEnumKebab(c.GetStatus()), changes, c.GetMessage()})
 				}
-				b.Table([]string{"Component", "Status", "Message"}, rows)
+				b.Table([]string{"Component", "Status", "Changes", "Message"}, rows)
 			}
 			jobTable(b, apply.GetJobs())
 		})
 	}
 	switch r.GetStatus() {
 	case runv1.Run_STATUS_PLANNED:
-		d.Hint("To see the changes, run: admiral run diff " + r.GetId())
-		d.Hint("To apply them, run: admiral run approve " + r.GetId() + " && admiral run apply " + r.GetId())
+		if !diffShown {
+			d.Hint("To see the changes, run: admiral run diff " + r.GetId())
+		}
+		for _, h := range nextSteps(r) {
+			d.Hint(h)
+		}
 	case runv1.Run_STATUS_FAILED:
 		d.Hint("To see the agent's output, run: admiral run logs " + r.GetId())
 	}
 	return p.PrintStatus(r, d)
+}
+
+// nextSteps says how to act on a planned run: through its changeset when it
+// has one, approving first only when the environment asks for approvals.
+func nextSteps(r *runv1.Run) []string {
+	verb, target := "admiral run", r.GetId()
+	if r.GetChangeSetId() != "" {
+		verb, target = "admiral changeset", r.GetChangeSetId()
+	}
+	var steps []string
+	if n := requiredApprovals(r.GetRequiredApproval()); n > 0 {
+		steps = append(steps, fmt.Sprintf(
+			"It needs %d approval(s) from someone other than the changeset's author: %s approve %s", n, verb, target))
+	}
+	return append(steps, fmt.Sprintf("To apply it, run: %s apply %s", verb, target))
+}
+
+// requiredApprovals is the most approvals the rule asks of anyone: its own
+// count or a group's.
+func requiredApprovals(rule *environmentv1.ApprovalRule) int32 {
+	n := rule.GetRequiredApprovals()
+	for _, g := range rule.GetGroups() {
+		n = max(n, g.GetApprovals())
+	}
+	return n
 }
 
 func jobTable(b *output.Block, jobs []*runv1.RunJob) {

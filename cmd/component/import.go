@@ -137,10 +137,12 @@ of the version: importing with different baseline values is a new version.`,
 				return err
 			}
 			ver := resp.Version
+			// The source's own digest is in the version's provenance; the
+			// digest to pin is the version's, which the next line prints.
 			if prov := ver.Provenance; prov != nil {
-				output.Writef(p.Err(), "Imported %s%s -> %s\n", prov.Uri, atRef(prov.Ref), prov.Commit)
+				output.Writef(p.Err(), "Imported %s%s\n", prov.Uri, atRef(prov.Ref))
 			}
-			reportPublished(p, resp.Component, ver, resp.Unchanged)
+			reportPublished(cmd, p, resp.Component, ver, resp.Unchanged)
 			return p.PrintOne(ver, resp.Component.Name+"@"+ver.Digest, versionTable.Render(p, ver))
 		},
 	}

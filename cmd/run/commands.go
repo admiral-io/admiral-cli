@@ -12,6 +12,7 @@ import (
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/flags"
+	"go.admiral.io/cli/internal/input"
 	"go.admiral.io/cli/internal/output"
 	"go.admiral.io/cli/internal/resolve"
 	agentv1 "go.admiral.io/sdk/proto/admiral/api/agent/v1"
@@ -60,8 +61,8 @@ func getRun(ctx context.Context, c runv1.RunAPIClient, id string) (*runv1.Run, e
 
 func newListCmd(opts *client.Options) *cobra.Command {
 	var (
-		env, changeSet, status string
-		paging                 flags.PagingOptions
+		env, changeSet string
+		paging         flags.PagingOptions
 	)
 	cmd := &cobra.Command{
 		Use:   "list",
@@ -90,9 +91,6 @@ func newListCmd(opts *client.Options) *cobra.Command {
 			if changeSet != "" {
 				filters = append(filters, fmt.Sprintf("field['change_set_id'] = '%s'", changeSet))
 			}
-			if status != "" {
-				filters = append(filters, fmt.Sprintf("field['status'] = 'STATUS_%s'", strings.ToUpper(strings.ReplaceAll(status, "-", "_"))))
-			}
 			runs, next, err := flags.Pages(paging, func(token string) ([]*runv1.Run, string, error) {
 				resp, err := c.Run().ListRuns(cmd.Context(), &runv1.ListRunsRequest{
 					Filter: strings.Join(filters, " AND "), PageSize: paging.PageSize, PageToken: token,
@@ -114,7 +112,6 @@ func newListCmd(opts *client.Options) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&env, "env", "", "runs of one environment, as app/env")
 	cmd.Flags().StringVar(&changeSet, "changeset", "", "runs of one changeset")
-	cmd.Flags().StringVar(&status, "status", "", "runs in one status, e.g. planned or failed")
 	flags.Paging(cmd, &paging)
 	return cmd
 }
@@ -176,7 +173,7 @@ so a newer plan of the same run is not approved by it.`,
 			if _, err := c.Run().ApproveRun(cmd.Context(), &runv1.ApproveRunRequest{
 				RunId: id, PlanDigest: r.GetPlan().GetPlanDigest(), Reason: reason,
 			}); err != nil {
-				return err
+				return Refusal(err, "admiral run", id)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "run %s approved\n", id)
 			return nil
@@ -211,7 +208,7 @@ failed or applied partway.`,
 			}
 			resp, err := c.Run().ApplyRun(cmd.Context(), &runv1.ApplyRunRequest{RunId: id, PlanDigest: r.GetPlan().GetPlanDigest()})
 			if err != nil {
-				return err
+				return Refusal(err, "admiral run", id)
 			}
 			return w.finish(cmd, opts, c.Run(), resp.GetRun())
 		},
@@ -221,16 +218,24 @@ failed or applied partway.`,
 }
 
 func newAcceptCmd(opts *client.Options) *cobra.Command {
-	var reason string
+	var (
+		reason string
+		yes    bool
+	)
 	cmd := &cobra.Command{
 		Use:   "accept <run>",
 		Short: "Accept a partial apply as the environment's state",
 		Long: `Accept a run that applied partway. The environment is released, with the
-components that applied recorded as live and the rest as they were.`,
-		Args: flags.ExactArgs(1),
+components that applied recorded as live and the rest as they were. The
+command asks first; --yes skips the question.`,
+		Example: `  admiral run accept run-7f2a1c9d0e3b --reason "fixing forward"`,
+		Args:    flags.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := runID(args[0])
 			if err != nil {
+				return err
+			}
+			if err := input.RequireInteractiveOrYes(cmd, yes); err != nil {
 				return err
 			}
 			c, err := client.CreateClient(cmd.Context(), opts)
@@ -238,6 +243,9 @@ components that applied recorded as live and the rest as they were.`,
 				return err
 			}
 			defer c.Close() //nolint:errcheck // best-effort cleanup
+			if err := input.Confirm(cmd, yes, "Accept what "+id+" applied as the environment's state"); err != nil {
+				return err
+			}
 			resp, err := c.Run().AcceptRun(cmd.Context(), &runv1.AcceptRunRequest{RunId: id, Reason: reason})
 			if err != nil {
 				return err
@@ -247,6 +255,7 @@ components that applied recorded as live and the rest as they were.`,
 	}
 	cmd.Flags().StringVar(&reason, "reason", "", "why, recorded with the acceptance")
 	_ = cmd.MarkFlagRequired("reason")
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip the confirmation prompt")
 	return cmd
 }
 
@@ -297,18 +306,59 @@ func newDiffCmd(opts *client.Options) *cobra.Command {
 			if !opts.OutputFormat.IsTable() {
 				return p.PrintResource(resp, nil)
 			}
-			WriteDiff(p.Out(), resp.GetDiff())
+			r, err := getRun(cmd.Context(), c.Run(), id)
+			if err != nil {
+				return err
+			}
+			WriteDiff(p.Out(), resp.GetDiff(), r.GetPlan())
 			return nil
 		},
 	}
 }
 
 // WriteDiff writes a plan's diffs resource by resource, as 'run diff'
-// and the changeset verbs that show a plan before acting print them.
-func WriteDiff(w io.Writer, d *agentv1.PlanDiff) {
-	for _, rd := range d.GetResources() {
-		output.Writef(w, "# %s: %s\n%s\n", rd.GetComponent(), resourceName(rd.GetResource()), rd.GetDiff())
+// and the changeset verbs that show a plan before acting print them. A
+// delete is one line: the whole object, minus, says nothing more. plan
+// supplies each resource's action; without it every diff is printed whole.
+func WriteDiff(w io.Writer, d *agentv1.PlanDiff, plan *runv1.PlanPhase) {
+	actions := map[string]agentv1.ResourceChange_Action{}
+	removed := map[string]bool{}
+	for _, c := range plan.GetComponents() {
+		all := len(c.GetChanges()) > 0
+		for _, rc := range c.GetChanges() {
+			actions[resourceKey(c.GetComponent(), rc.GetResource())] = rc.GetAction()
+			all = all && rc.GetAction() == agentv1.ResourceChange_ACTION_DESTROY
+		}
+		removed[c.GetComponent()] = all
 	}
+	kept := map[string]bool{}
+	var namespaces []string
+	for _, rd := range d.GetResources() {
+		r := rd.GetResource()
+		if actions[resourceKey(rd.GetComponent(), r)] == agentv1.ResourceChange_ACTION_DESTROY {
+			output.Writef(w, "- %s: %s %s\n", rd.GetComponent(), r.GetApiVersion(), deletedName(r))
+			if ns := r.GetNamespace(); ns != "" && removed[rd.GetComponent()] && !kept[ns] {
+				kept[ns] = true
+				namespaces = append(namespaces, ns)
+			}
+			continue
+		}
+		output.Writef(w, "# %s: %s\n%s\n", rd.GetComponent(), resourceName(r), rd.GetDiff())
+	}
+	for _, ns := range namespaces {
+		output.Writef(w, "The namespace %s stays; Admiral never deletes a namespace.\n", ns)
+	}
+}
+
+func resourceKey(component string, r *agentv1.ResourceRef) string {
+	return component + "\x00" + r.GetApiVersion() + "\x00" + resourceName(r)
+}
+
+func deletedName(r *agentv1.ResourceRef) string {
+	if r.GetNamespace() == "" {
+		return r.GetKind() + " " + r.GetName()
+	}
+	return r.GetKind() + " " + r.GetNamespace() + "/" + r.GetName()
 }
 
 func resourceName(r *agentv1.ResourceRef) string {

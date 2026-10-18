@@ -89,7 +89,7 @@ func (r changeSetRef) resolve(ctx context.Context, c sdkclient.AdmiralClient) (s
 			}
 		}
 		return "", cmderr.WithHint(fmt.Errorf("%s", b.String()),
-			"'admiral changeset list --env "+r.String()+" --status open' lists them all.")
+			"'admiral changeset list "+r.String()+" --status open' lists them all.")
 	}
 }
 

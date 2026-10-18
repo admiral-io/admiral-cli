@@ -222,20 +222,36 @@ func publishOne(cmd *cobra.Command, p *output.Printer, c sdkclient.AdmiralClient
 	if err != nil {
 		return nil, err
 	}
-	reportPublished(p, resp.Component, resp.Version, resp.Unchanged)
+	reportPublished(cmd, p, resp.Component, resp.Version, resp.Unchanged)
 	return resp, nil
 }
 
 // reportPublished says on stderr what the registry did with a version,
-// and lists its findings.
-func reportPublished(p *output.Printer, comp *registryv1.Component, ver *registryv1.Version, unchanged bool) {
+// and lists its findings once each. Info findings are counted, and listed
+// only with --verbose.
+func reportPublished(cmd *cobra.Command, p *output.Printer, comp *registryv1.Component, ver *registryv1.Version, unchanged bool) {
 	if unchanged {
 		output.Writef(p.Err(), "%s already published as %s; nothing written\n", comp.Name, shortDigest(ver.Digest))
 	} else {
 		output.Writef(p.Err(), "Published %s@%s\n", comp.Name, ver.Digest)
 	}
+	verbose, _ := cmd.Flags().GetBool("verbose")
+	seen := map[string]bool{}
+	hidden := 0
 	for _, f := range ver.Findings {
-		output.Writef(p.Err(), "  %s %s: %s\n", output.FormatEnumKebab(f.Severity), f.Source, f.Message)
+		line := fmt.Sprintf("  %s %s: %s\n", output.FormatEnumKebab(f.Severity), f.Source, f.Message)
+		if seen[line] {
+			continue
+		}
+		seen[line] = true
+		if f.Severity == registryv1.FindingSeverity_FINDING_SEVERITY_INFO && !verbose {
+			hidden++
+			continue
+		}
+		output.Writef(p.Err(), "%s", line)
+	}
+	if hidden > 0 {
+		output.Writef(p.Err(), "  %d info finding(s); --verbose lists them\n", hidden)
 	}
 }
 
