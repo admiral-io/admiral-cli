@@ -11,6 +11,7 @@ import (
 
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
+	"go.admiral.io/cli/internal/complete"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/input"
 	"go.admiral.io/cli/internal/output"
@@ -111,6 +112,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&env, "env", "", "runs of one environment, as app/env")
+	complete.Flag(cmd, "env", complete.Envs(opts))
 	cmd.Flags().StringVar(&changeSet, "changeset", "", "runs of one changeset")
 	flags.Paging(cmd, &paging)
 	return cmd

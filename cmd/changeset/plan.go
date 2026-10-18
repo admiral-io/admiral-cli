@@ -9,6 +9,7 @@ import (
 	runcmd "go.admiral.io/cli/cmd/run"
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
+	"go.admiral.io/cli/internal/complete"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
 	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
@@ -25,8 +26,9 @@ func newPlanCmd(opts *client.Options) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "plan <changeset>",
-		Short: "Plan a changeset's head revision",
+		Use:               "plan <changeset>",
+		ValidArgsFunction: complete.First(complete.Envs(opts)),
+		Short:             "Plan a changeset's head revision",
 		Long: `Plan a changeset's head revision.
 
 This starts a run. The run prepares the revision first, rendering every

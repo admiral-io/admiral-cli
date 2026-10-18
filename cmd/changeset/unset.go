@@ -5,6 +5,7 @@ import (
 
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
+	"go.admiral.io/cli/internal/complete"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/valuesfile"
 	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
@@ -17,8 +18,9 @@ func newUnsetCmd(opts *client.Options) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "unset <changeset> <component>.<path>...",
-		Short: "Remove values, so the defaults apply",
+		Use:               "unset <changeset> <component>.<path>...",
+		ValidArgsFunction: complete.ThenEach(complete.Envs(opts), complete.ComponentsOf(opts, true)),
+		Short:             "Remove values, so the defaults apply",
 		Long: `Remove values, so the defaults apply. One command cuts one revision.
 
 To clear a default instead, set the path to null.`,

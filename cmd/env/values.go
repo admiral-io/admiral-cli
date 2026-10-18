@@ -39,7 +39,7 @@ component's values can be carried to another environment.`,
   # Everything the component receives
   admiral env values shop/prod api --effective`,
 		Args:              flags.ExactArgs(2),
-		ValidArgsFunction: complete.First(complete.Envs(opts)),
+		ValidArgsFunction: complete.Positions(complete.Envs(opts), complete.ComponentsOf(opts, false)),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			appScope, name, err := flags.EnvTarget(cmd, appName, args[0])
 			if err != nil {

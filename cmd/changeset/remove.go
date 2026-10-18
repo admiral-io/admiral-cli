@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"go.admiral.io/cli/internal/client"
+	"go.admiral.io/cli/internal/complete"
 	"go.admiral.io/cli/internal/flags"
 	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
 )
@@ -16,8 +17,9 @@ func newRemoveCmd(opts *client.Options) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "remove <changeset> <component>",
-		Short: "Remove a component",
+		Use:               "remove <changeset> <component>",
+		ValidArgsFunction: complete.Positions(complete.Envs(opts), complete.ComponentsOf(opts, false)),
+		Short:             "Remove a component",
 		Long: `Remove a component. A component this changeset adds is dropped and its
 name released; a live one is proposed for destruction. Nothing is destroyed
 by this command.

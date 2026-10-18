@@ -7,6 +7,7 @@ import (
 
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
+	"go.admiral.io/cli/internal/complete"
 	"go.admiral.io/cli/internal/flags"
 	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
 )
@@ -22,8 +23,9 @@ func newSetCmd(opts *client.Options) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "set <changeset> <component>.<path>=<value>...",
-		Short: "Set values, change a component's version, or place it",
+		Use:               "set <changeset> <component>.<path>=<value>...",
+		ValidArgsFunction: complete.ThenEach(complete.Envs(opts), complete.ComponentsOf(opts, true)),
+		Short:             "Set values, change a component's version, or place it",
 		Long: `Set values, change a component's version, or place it. One command cuts
 one revision.
 

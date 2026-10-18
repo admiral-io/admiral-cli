@@ -12,6 +12,7 @@ import (
 
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
+	"go.admiral.io/cli/internal/complete"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
 	"go.admiral.io/cli/internal/resolve"
@@ -159,6 +160,7 @@ The tenant's first agent is granted to the whole organization unless
 	}
 	flags.Enum(cmd, &kind, "kind", "", "what the agent deploys", "kubernetes", "infra")
 	cmd.Flags().StringArrayVar(&grants, "grant", nil, "grant use to org, app:<name>, env:<app/env> or group:<id> (repeatable)")
+	complete.Flag(cmd, "grant", complete.Scopes(opts))
 	cmd.Flags().StringArrayVar(&profiles, "profile", nil, "profiles the grants cover (repeatable; none covers all)")
 	_ = cmd.MarkFlagRequired("kind")
 	return cmd
@@ -271,8 +273,9 @@ account, say). It replaces any key issued before.`,
 func newGrantCmd(opts *client.Options) *cobra.Command {
 	var profiles []string
 	cmd := &cobra.Command{
-		Use:   "grant <agent> <org|app:NAME|env:APP/ENV|group:ID>",
-		Short: "Let the organization, an application, an environment or a team use an agent",
+		Use:               "grant <agent> <org|app:NAME|env:APP/ENV|group:ID>",
+		ValidArgsFunction: complete.Positions(nil, complete.Scopes(opts)),
+		Short:             "Let the organization, an application, an environment or a team use an agent",
 		Long: `Grant use of an agent. Granting the same target again replaces its
 profiles. Without --profile the grant covers every profile the agent has.`,
 		Example: `  admiral agent grant kind org
@@ -344,8 +347,9 @@ var grantTable = output.Table[*agentv1.AgentGrant]{
 
 func newRevokeCmd(opts *client.Options) *cobra.Command {
 	return &cobra.Command{
-		Use:   "revoke <agent> <org|app:NAME|env:APP/ENV|group:ID>",
-		Short: "Withdraw a grant",
+		Use:               "revoke <agent> <org|app:NAME|env:APP/ENV|group:ID>",
+		ValidArgsFunction: complete.Positions(nil, complete.Scopes(opts)),
+		Short:             "Withdraw a grant",
 		Long: `Withdraw the grant to a target, whatever its profiles. Environments that
 were assigned the agent under it keep the assignment, and their new jobs
 wait until it is granted again or they change it.`,

@@ -95,7 +95,7 @@ component and its values are one revision.`,
 	cmd.Flags().StringArrayVar(&setStrings, "set-string", nil, "set <path>=<value> as a string, whatever it looks like (repeatable)")
 	revisionFlag(cmd, &ifRev)
 	planFlags(cmd, &po)
-	cmd.ValidArgsFunction = complete.Second(complete.Refs(opts))
+	cmd.ValidArgsFunction = complete.Positions(complete.Envs(opts), complete.Refs(opts))
 
 	return cmd
 }

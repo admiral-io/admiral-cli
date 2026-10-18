@@ -10,6 +10,7 @@ import (
 	runcmd "go.admiral.io/cli/cmd/run"
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
+	"go.admiral.io/cli/internal/complete"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/input"
 	"go.admiral.io/cli/internal/output"
@@ -24,8 +25,9 @@ func newApproveCmd(opts *client.Options) *cobra.Command {
 		yes    bool
 	)
 	cmd := &cobra.Command{
-		Use:   "approve <changeset>",
-		Short: "Approve a changeset's latest plan",
+		Use:               "approve <changeset>",
+		ValidArgsFunction: complete.First(complete.Envs(opts)),
+		Short:             "Approve a changeset's latest plan",
 		Long: `Approve the plan of a changeset's latest run. The plan is shown first and
 the command asks before approving; --yes skips the question, not the
 plan. The approval names the plan's digest, so a newer plan is not
@@ -79,8 +81,9 @@ func newApplyCmd(opts *client.Options) *cobra.Command {
 		po  planOptions
 	)
 	cmd := &cobra.Command{
-		Use:   "apply <changeset>",
-		Short: "Apply a changeset's latest plan",
+		Use:               "apply <changeset>",
+		ValidArgsFunction: complete.First(complete.Envs(opts)),
+		Short:             "Apply a changeset's latest plan",
 		Long: `Apply the plan of a changeset's latest run, once its required approvals
 are in. The plan is shown first and the command asks before applying;
 --yes skips the question and nothing else: approvals, a changeset that has

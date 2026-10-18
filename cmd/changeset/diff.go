@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"go.admiral.io/cli/internal/client"
+	"go.admiral.io/cli/internal/complete"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
 	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
@@ -20,8 +21,9 @@ import (
 
 func newDiffCmd(opts *client.Options) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "diff <changeset>",
-		Short: "Show what a changeset changes",
+		Use:               "diff <changeset>",
+		ValidArgsFunction: complete.First(complete.Envs(opts)),
+		Short:             "Show what a changeset changes",
 		Long: `Show what a changeset's head revision changes: per component, the action,
 the version before and after, each changed value before and after, and the
 component's contract violations.`,
