@@ -142,7 +142,7 @@ func planRevision(cmd *cobra.Command, opts *client.Options, runs runv1.RunAPICli
 	output.Writef(p.Err(), "Planning %s revision %d in %s\n", cs.Id, rev.Number, r.Id)
 
 	if !po.noWait {
-		done, err := runcmd.Wait(cmd.Context(), runs, r, po.waitTimeout, p.Err())
+		done, err := runcmd.Wait(cmd.Context(), runs, r, po.waitTimeout, true, p.Err())
 		if err != nil {
 			return runcmd.WaitError(err, r)
 		}

@@ -34,6 +34,9 @@ func runID(s string) (string, error) {
 type waitOptions struct {
 	wait    bool
 	timeout time.Duration
+	// follow keeps waiting while the agent enrolls: the user asked to follow
+	// this run, often right after installing its agent.
+	follow bool
 }
 
 func (w *waitOptions) register(cmd *cobra.Command, def bool, what string) {
@@ -47,7 +50,7 @@ func (w waitOptions) finish(cmd *cobra.Command, opts *client.Options, c sdkclien
 	p := output.NewPrinter(cmd, opts.OutputFormat)
 	if w.wait {
 		var err error
-		if r, err = Wait(cmd.Context(), c.Run(), r, w.timeout, p.Err()); err != nil {
+		if r, err = Wait(cmd.Context(), c.Run(), r, w.timeout, !w.follow, p.Err()); err != nil {
 			return WaitError(err, r)
 		}
 	}
@@ -143,7 +146,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 }
 
 func newGetCmd(opts *client.Options) *cobra.Command {
-	var w waitOptions
+	w := waitOptions{follow: true}
 	cmd := &cobra.Command{
 		Use:   "get <run>",
 		Short: "Get a run: its plan, approvals and apply",

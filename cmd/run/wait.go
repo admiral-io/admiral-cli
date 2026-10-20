@@ -50,23 +50,24 @@ type errWaitElapsed struct{ last *runv1.Run }
 
 func (errWaitElapsed) Error() string { return "wait elapsed" }
 
-// errNotEnrolled ends a wait on an agent that has never enrolled: it will
-// not come up by itself, so waiting longer cannot help.
+// errNotEnrolled ends a wait on an agent that has never enrolled: nothing
+// enrolls it unless someone installs it, so waiting longer rarely helps.
 type errNotEnrolled struct{ last *runv1.Run }
 
 func (errNotEnrolled) Error() string { return "agent not enrolled" }
 
 // Wait polls until the run settles or timeout elapses, writing a line to
-// progress whenever its status moves. A canceled context ends the wait, not
-// the run.
-func Wait(ctx context.Context, c runv1.RunAPIClient, cur *runv1.Run, timeout time.Duration, progress io.Writer) (*runv1.Run, error) {
+// progress whenever its status moves. With stopUnenrolled it ends early on an
+// agent that has never enrolled; without it, it waits through an install. A
+// canceled context ends the wait, not the run.
+func Wait(ctx context.Context, c runv1.RunAPIClient, cur *runv1.Run, timeout time.Duration, stopUnenrolled bool, progress io.Writer) (*runv1.Run, error) {
 	if !Settled(cur.GetStatus()) {
 		output.Writef(progress, "Run %s is %s\n", cur.GetId(), progressStatus(cur))
 	}
 	deadline := time.Now().Add(timeout)
 	delay := pollFirst
 	for !settled(cur) {
-		if notEnrolled(cur) {
+		if stopUnenrolled && notEnrolled(cur) {
 			return cur, errNotEnrolled{last: cur}
 		}
 		remaining := time.Until(deadline)

@@ -132,7 +132,7 @@ it failed or applied partway.`,
 			r = resp.GetRun()
 			p := output.NewPrinter(cmd, opts.OutputFormat)
 			if !po.noWait {
-				done, err := runcmd.Wait(cmd.Context(), c.Run(), r, po.waitTimeout, p.Err())
+				done, err := runcmd.Wait(cmd.Context(), c.Run(), r, po.waitTimeout, true, p.Err())
 				if err != nil {
 					return runcmd.WaitError(err, r)
 				}

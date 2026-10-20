@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -41,7 +42,7 @@ func TestWaitStopsOnAnUnenrolledAgent(t *testing.T) {
 
 	stub := &stubRuns{next: queuedOnUnenrolled()}
 	start := &runv1.Run{Id: testRunID, Status: runv1.Run_STATUS_PREPARING}
-	last, err := Wait(context.Background(), stub, start, DefaultWaitTimeout, io.Discard)
+	last, err := Wait(context.Background(), stub, start, DefaultWaitTimeout, true, io.Discard)
 	require.Error(t, err)
 	assert.Equal(t, 1, stub.polls, "stops on the first poll that shows the agent unenrolled")
 	assert.Equal(t, runv1.Run_STATUS_QUEUED, last.GetStatus())
@@ -53,13 +54,24 @@ func TestWaitStopsOnAnUnenrolledAgent(t *testing.T) {
 	assert.Contains(t, cmderr.Hint(err), "admiral run get "+testRunID+" --wait")
 }
 
+// Following a run waits through its agent's install.
+func TestWaitFollowsThroughEnrollment(t *testing.T) {
+	noPollDelay(t)
+
+	stub := &stubRuns{next: queuedOnUnenrolled()}
+	start := &runv1.Run{Id: testRunID, Status: runv1.Run_STATUS_PREPARING}
+	_, err := Wait(context.Background(), stub, start, 50*time.Millisecond, false, io.Discard)
+	assert.IsType(t, errWaitElapsed{}, err, "only the timeout ends it")
+	assert.Greater(t, stub.polls, 1)
+}
+
 // Any other reason keeps waiting.
 func TestWaitKeepsWaitingOnAnOfflineAgent(t *testing.T) {
 	noPollDelay(t)
 
 	offline := &runv1.Run{Id: testRunID, Status: runv1.Run_STATUS_QUEUED, WaitReason: agentv1.WaitReason_WAIT_REASON_AGENT_OFFLINE}
 	stub := &stubRuns{next: &runv1.Run{Id: testRunID, Status: runv1.Run_STATUS_NO_CHANGES}}
-	last, err := Wait(context.Background(), stub, offline, DefaultWaitTimeout, io.Discard)
+	last, err := Wait(context.Background(), stub, offline, DefaultWaitTimeout, true, io.Discard)
 	require.NoError(t, err)
 	assert.Equal(t, runv1.Run_STATUS_NO_CHANGES, last.GetStatus())
 }
