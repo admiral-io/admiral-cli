@@ -62,6 +62,9 @@ func (w waitOptions) finish(cmd *cobra.Command, opts *client.Options, c sdkclien
 
 // printTitled is Print with the title of the run's changeset read first.
 func printTitled(cmd *cobra.Command, p *output.Printer, c sdkclient.AdmiralClient, r *runv1.Run) error {
+	if p.Format != output.FormatTable && p.Format != output.FormatWide {
+		return Print(p, r, "")
+	}
 	return Print(p, r, ChangeSetTitles(cmd.Context(), c.ChangeSet(), r.GetChangeSetId())[r.GetChangeSetId()])
 }
 
