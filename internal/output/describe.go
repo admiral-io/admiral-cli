@@ -127,7 +127,8 @@ func (b *Block) Table(headers []string, rows [][]string) {
 
 // render writes the block at the given indent. Consecutive fields share one
 // tabwriter so their values align; a nested block or table starts a new
-// alignment group, and top-level sections are separated by a blank line.
+// alignment group, and top-level sections and back-to-back tables are
+// separated by a blank line.
 func (b *Block) render(w io.Writer, indent int) error {
 	pad := strings.Repeat(" ", indent)
 	var tw *tabwriter.Writer
@@ -160,6 +161,11 @@ func (b *Block) render(w io.Writer, indent int) error {
 		case it.table != nil:
 			if err := flush(); err != nil {
 				return err
+			}
+			if i > 0 && b.items[i-1].table != nil {
+				if _, err := fmt.Fprintln(w); err != nil {
+					return err
+				}
 			}
 			if err := it.table.render(w, indent); err != nil {
 				return err
