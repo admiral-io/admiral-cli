@@ -249,6 +249,7 @@ func TestDescribeEnv(t *testing.T) {
 		tags:         map[string][]string{"ver-web": {"6.8.0"}},
 		runs:         []*runv1.Run{{Id: "run-applyingnow1", ChangeSetId: "cs-5555bbbb6666", Status: runv1.Run_STATUS_APPLYING}},
 		runTitles:    map[string]string{"cs-5555bbbb6666": "admiral-site 9d114fd"},
+		moreRuns:     true,
 		holdRun:      &runv1.Run{Id: "run-held00000001"},
 		lastApplyRun: &runv1.Run{Apply: &runv1.ApplyPhase{AppliedBy: &commonv1.ActorRef{Id: "usr-s0jg9fam3x0x", DisplayName: "Ada Lovelace"}}},
 	}
@@ -268,6 +269,12 @@ func TestDescribeEnv(t *testing.T) {
 	require.Regexp(t, `db\s+<none>\s+sha256:ffffeeeedddd`, out, "an untagged version keeps its digest")
 	require.Contains(t, out, "admiral changeset revert cs-7q2k9m4x8p1c")
 	require.Contains(t, out, "admiral run accept run-held00000001")
+	require.Contains(t, out, "Showing the 5 most recent runs. To list them all, run: admiral run list --env shop/prod")
+
+	sec.moreRuns = false
+	b.Reset()
+	require.NoError(t, describeEnv(e, &applicationv1.Application{Name: "shop"}, sec).Render(&b))
+	require.NotContains(t, b.String(), "most recent runs")
 }
 
 func TestValuesArguments(t *testing.T) {

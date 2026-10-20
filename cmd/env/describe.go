@@ -106,7 +106,7 @@ describe is a human view. Use 'env get -o json' for the raw record.`,
 				return nil
 			})
 			g.Go(func() error {
-				sec.runs, sec.runsErr = listRecentRuns(gctx, c, envID)
+				sec.runs, sec.moreRuns, sec.runsErr = listRecentRuns(gctx, c, envID)
 				ids := make([]string, 0, len(sec.runs))
 				for _, r := range sec.runs {
 					ids = append(ids, r.ChangeSetId)
@@ -157,11 +157,13 @@ describe is a human view. Use 'env get -o json' for the raw record.`,
 // record. Each read carries its own error so a failed section renders as
 // unavailable without hiding the others.
 type envSections struct {
-	comps      []*environmentv1.EnvironmentComponent
-	compsErr   error
-	runs       []*runv1.Run
-	runsErr    error
-	runTitles  map[string]string
+	comps     []*environmentv1.EnvironmentComponent
+	compsErr  error
+	runs      []*runv1.Run
+	runsErr   error
+	runTitles map[string]string
+	// moreRuns is whether runs beyond recentRunsLimit exist.
+	moreRuns   bool
 	openCS     []*changesetv1.ChangeSet
 	openCSErr  error
 	agentNames map[string]string
@@ -283,6 +285,10 @@ func describeEnv(e *environmentv1.Environment, app *applicationv1.Application, s
 				output.FormatActor(r.CreatedBy), output.FormatAge(r.CreatedAt)})
 		}
 		d.Table("Recent Runs", []string{"ID", "Status", "Changeset", "Title", "Created By", "Age"}, rows)
+		if sec.moreRuns {
+			d.Hint(fmt.Sprintf("Showing the %d most recent runs. To list them all, run: admiral run list --env %s/%s",
+				recentRunsLimit, app.Name, e.Name))
+		}
 	}
 
 	if e.Hold != nil {
@@ -370,19 +376,21 @@ func agentNames(ctx context.Context, c sdkclient.AdmiralClient, assigned []*envi
 	return names
 }
 
-func listRecentRuns(ctx context.Context, c sdkclient.AdmiralClient, envID string) ([]*runv1.Run, error) {
+// listRecentRuns is the environment's newest runs, and whether older ones
+// exist.
+func listRecentRuns(ctx context.Context, c sdkclient.AdmiralClient, envID string) ([]*runv1.Run, bool, error) {
 	f, err := filter.Eq("environment_id", envID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	resp, err := c.Run().ListRuns(ctx, &runv1.ListRunsRequest{
 		Filter:   f,
 		PageSize: recentRunsLimit,
 	})
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return resp.Runs, nil
+	return resp.Runs, resp.NextPageToken != "", nil
 }
 
 func listOpenChangeSets(ctx context.Context, c sdkclient.AdmiralClient, envID string) ([]*changesetv1.ChangeSet, error) {
