@@ -50,6 +50,12 @@ type errWaitElapsed struct{ last *runv1.Run }
 
 func (errWaitElapsed) Error() string { return "wait elapsed" }
 
+// errNotEnrolled ends a wait on an agent that has never enrolled: it will
+// not come up by itself, so waiting longer cannot help.
+type errNotEnrolled struct{ last *runv1.Run }
+
+func (errNotEnrolled) Error() string { return "agent not enrolled" }
+
 // Wait polls until the run settles or timeout elapses, writing a line to
 // progress whenever its status moves. A canceled context ends the wait, not
 // the run.
@@ -60,6 +66,9 @@ func Wait(ctx context.Context, c runv1.RunAPIClient, cur *runv1.Run, timeout tim
 	deadline := time.Now().Add(timeout)
 	delay := pollFirst
 	for !settled(cur) {
+		if notEnrolled(cur) {
+			return cur, errNotEnrolled{last: cur}
+		}
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
 			return cur, errWaitElapsed{last: cur}
@@ -85,18 +94,44 @@ func Wait(ctx context.Context, c runv1.RunAPIClient, cur *runv1.Run, timeout tim
 	return cur, nil
 }
 
-// WaitTimeout turns an elapsed wait into exit 124 naming where the run is;
-// any other error passes through.
-func WaitTimeout(err error, r *runv1.Run) error {
-	e, ok := err.(errWaitElapsed)
-	if !ok {
-		return err
+// WaitError says why a wait ended before the run settled: exit 124 when it
+// elapsed, exit 1 when the agent has never enrolled. The run stays where it
+// is; any other error passes through.
+func WaitError(err error, r *runv1.Run) error {
+	switch e := err.(type) {
+	case errWaitElapsed:
+		return &cmderr.Error{
+			Err:  fmt.Errorf("run %s is still %s; it continues on the server", e.last.GetId(), describeStatus(e.last)),
+			Code: cmderr.ExitTimeout,
+			Hint: fmt.Sprintf("Run 'admiral run get %s --wait' to wait again.", r.GetId()),
+		}
+	case errNotEnrolled:
+		agent, key := "its agent", "admiral agent enrollment-key <agent>"
+		if id := notEnrolledAgent(e.last); id != "" {
+			agent, key = "agent "+id, "admiral agent enrollment-key "+id
+		}
+		return &cmderr.Error{
+			Err:  fmt.Errorf("run %s is queued: %s has never enrolled", r.GetId(), agent),
+			Code: cmderr.ExitError,
+			Hint: fmt.Sprintf("Install the agent with its enrollment key ('%s' issues a new one); the run starts once it enrolls. "+
+				"Run 'admiral run get %s --wait' to follow it.", key, r.GetId()),
+		}
 	}
-	return &cmderr.Error{
-		Err:  fmt.Errorf("run %s is still %s; it continues on the server", e.last.GetId(), describeStatus(e.last)),
-		Code: cmderr.ExitTimeout,
-		Hint: fmt.Sprintf("Run 'admiral run get %s --wait' to wait again.", r.GetId()),
+	return err
+}
+
+func notEnrolled(r *runv1.Run) bool {
+	return r.GetStatus() == runv1.Run_STATUS_QUEUED && r.GetWaitReason() == agentv1.WaitReason_WAIT_REASON_AGENT_NOT_ENROLLED
+}
+
+// notEnrolledAgent is the agent a not-enrolled run waits on, from its jobs.
+func notEnrolledAgent(r *runv1.Run) string {
+	for _, j := range append(r.GetPlan().GetJobs(), r.GetApply().GetJobs()...) {
+		if j.GetWaitReason() == agentv1.WaitReason_WAIT_REASON_AGENT_NOT_ENROLLED {
+			return j.GetAgentId()
+		}
 	}
+	return ""
 }
 
 // Outcome is the exit status of a settled run. A run still moving

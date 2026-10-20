@@ -46,7 +46,7 @@ func (w waitOptions) finish(cmd *cobra.Command, opts *client.Options, c runv1.Ru
 	if w.wait {
 		var err error
 		if r, err = Wait(cmd.Context(), c, r, w.timeout, p.Err()); err != nil {
-			return WaitTimeout(err, r)
+			return WaitError(err, r)
 		}
 	}
 	if err := Print(p, r); err != nil {

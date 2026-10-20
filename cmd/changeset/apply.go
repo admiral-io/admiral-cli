@@ -134,7 +134,7 @@ it failed or applied partway.`,
 			if !po.noWait {
 				done, err := runcmd.Wait(cmd.Context(), c.Run(), r, po.waitTimeout, p.Err())
 				if err != nil {
-					return runcmd.WaitTimeout(err, r)
+					return runcmd.WaitError(err, r)
 				}
 				r = done
 			}
