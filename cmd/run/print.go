@@ -143,11 +143,12 @@ func printRun(p *output.Printer, r *runv1.Run, title string, diffShown bool) err
 			jobTable(b, apply.GetJobs())
 		})
 	}
+	// The counts say how much changes; the diff says what.
+	if !diffShown && changeSummary(r.GetPlan().GetComponents()) != "" {
+		d.Hint("To see the changes, run: admiral run diff " + r.GetId())
+	}
 	switch r.GetStatus() {
 	case runv1.Run_STATUS_PLANNED:
-		if !diffShown {
-			d.Hint("To see the changes, run: admiral run diff " + r.GetId())
-		}
 		for _, h := range nextSteps(r) {
 			d.Hint(h)
 		}

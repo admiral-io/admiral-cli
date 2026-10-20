@@ -83,6 +83,7 @@ func TestApplyShowsWhatEachComponentChanged(t *testing.T) {
 	}}
 	out := render(t, Print, r)
 	assert.Regexp(t, `podinfo\s+succeeded\s+\+1 ~0 ±0 -0`, out)
+	assert.Contains(t, out, "To see the changes, run: admiral run diff "+testRunID, "an applied run points at what changed")
 }
 
 func TestWriteDiffPrintsADeleteAsOneLine(t *testing.T) {
@@ -190,4 +191,10 @@ func TestListHasNoStatusFilter(t *testing.T) {
 func TestRunShowsItsChangesetTitle(t *testing.T) {
 	assert.Contains(t, renderTitled(t, Print, planned(nil), "admiral-site 9d114fd"), `Changeset:    `+csID+` "admiral-site 9d114fd"`)
 	assert.Regexp(t, `Changeset:\s+`+csID+`\n`, render(t, Print, planned(nil)))
+}
+
+// A plan that found nothing has no diff to point at.
+func TestNoChangesRunHasNoDiffHint(t *testing.T) {
+	r := &runv1.Run{Id: testRunID, Status: runv1.Run_STATUS_NO_CHANGES, Plan: &runv1.PlanPhase{PlanDigest: "sha256:1"}}
+	assert.NotContains(t, render(t, Print, r), "run diff")
 }
