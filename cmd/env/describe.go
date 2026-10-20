@@ -202,7 +202,7 @@ func describeEnv(e *environmentv1.Environment, app *applicationv1.Application, s
 		d.Field("Last Run", "")
 	}
 	d.Field("Created", output.FormatDescribeTime(e.CreatedAt))
-	d.Field("Created By", output.FormatActor(e.CreatedBy))
+	d.Field("Created By", output.FormatActorWithID(e.CreatedBy))
 
 	d.Section("Agents", func(b *output.Block) {
 		if len(e.Agents) == 0 {
@@ -307,7 +307,7 @@ func lastApplyLine(l *environmentv1.LastApply, r *runv1.Run) string {
 	}
 	line := fmt.Sprintf("%s %s %s ago", l.ChangeSetId, l.RevisionId, output.FormatAge(l.AppliedAt))
 	if by := r.GetApply().GetAppliedBy(); by != nil {
-		line += " by " + output.FormatActor(by)
+		line += " by " + output.FormatActorWithID(by)
 	}
 	return line
 }

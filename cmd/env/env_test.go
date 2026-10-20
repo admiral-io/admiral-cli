@@ -249,7 +249,7 @@ func TestDescribeEnv(t *testing.T) {
 		tags:         map[string][]string{"ver-web": {"6.8.0"}},
 		runs:         []*runv1.Run{{Id: "run-applyingnow1", ChangeSetId: "cs-5555bbbb6666", Status: runv1.Run_STATUS_APPLYING}},
 		holdRun:      &runv1.Run{Id: "run-held00000001"},
-		lastApplyRun: &runv1.Run{Apply: &runv1.ApplyPhase{AppliedBy: &commonv1.ActorRef{Id: "usr-s0jg9fam3x0x"}}},
+		lastApplyRun: &runv1.Run{Apply: &runv1.ApplyPhase{AppliedBy: &commonv1.ActorRef{Id: "usr-s0jg9fam3x0x", DisplayName: "Ada Lovelace"}}},
 	}
 	var b bytes.Buffer
 	d := describeEnv(e, &applicationv1.Application{Name: "shop"}, sec)
@@ -257,7 +257,7 @@ func TestDescribeEnv(t *testing.T) {
 	out := b.String()
 	require.Regexp(t, `Generation:\s+7`, out)
 	require.Regexp(t, `Hold:\s+held by cs-7q2k9m4x8p1c \(run-held00000001\) since 3h ago`, out)
-	require.Regexp(t, `Last Apply:\s+cs-1111aaaa2222 rev-333344445555 60m ago by usr-s0jg9fam3x0x`, out)
+	require.Regexp(t, `Last Apply:\s+cs-1111aaaa2222 rev-333344445555 60m ago by Ada Lovelace \(usr-s0jg9fam3x0x\)`, out)
 	require.Regexp(t, `Applying:\s+run-applyingnow1 \(cs-5555bbbb6666\)`, out)
 	require.Regexp(t, `prod-cluster\s+asg-111111111111\s+default\s+edit\s+shop-prod\s+<none>\s+true`, out)
 	require.Regexp(t, `Required Approvals:\s+2`, out)

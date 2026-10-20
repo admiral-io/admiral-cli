@@ -74,7 +74,7 @@ func printRun(p *output.Printer, r *runv1.Run, diffShown bool) error {
 	}
 	d.Field("Status", describeStatus(r))
 	d.Field("Trigger", output.FormatEnumKebab(r.GetTrigger()))
-	d.Field("Created by", output.FormatActor(r.GetCreatedBy()))
+	d.Field("Created by", output.FormatActorWithID(r.GetCreatedBy()))
 	d.Field("Created", output.FormatDescribeTime(r.GetCreatedAt()))
 	if r.GetFinishedAt() != nil {
 		d.Field("Finished", output.FormatDescribeTime(r.GetFinishedAt()))
@@ -105,7 +105,7 @@ func printRun(p *output.Printer, r *runv1.Run, diffShown bool) error {
 	}
 	if apply := r.GetApply(); apply != nil {
 		d.Section("Apply", func(b *output.Block) {
-			b.Field("Applied by", output.FormatActor(apply.GetAppliedBy()))
+			b.Field("Applied by", output.FormatActorWithID(apply.GetAppliedBy()))
 			if apply.Generation != nil {
 				b.Field("Generation", strconv.FormatInt(apply.GetGeneration(), 10))
 			}
@@ -113,7 +113,7 @@ func printRun(p *output.Printer, r *runv1.Run, diffShown bool) error {
 				b.Field("Message", apply.GetMessage())
 			}
 			if apply.GetAcceptedBy() != nil {
-				b.Field("Accepted by", output.FormatActor(apply.GetAcceptedBy()))
+				b.Field("Accepted by", output.FormatActorWithID(apply.GetAcceptedBy()))
 				b.Field("Accepted reason", apply.GetAcceptedReason())
 			}
 			if len(apply.GetComponents()) > 0 {

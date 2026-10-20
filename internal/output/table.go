@@ -155,8 +155,8 @@ func LabelLines(labels map[string]string) []string {
 	return out
 }
 
-// FormatActor renders an ActorRef for table/detail output, preferring
-// display name, then email, then ID.
+// FormatActor renders an ActorRef for a table cell, preferring display
+// name, then email, then ID.
 func FormatActor(a *commonv1.ActorRef) string {
 	if a == nil {
 		return None
@@ -171,6 +171,16 @@ func FormatActor(a *commonv1.ActorRef) string {
 		return a.Id
 	}
 	return None
+}
+
+// FormatActorWithID renders an ActorRef for a detail view: the name or
+// email with the ID after it, so the actor can be looked up.
+func FormatActorWithID(a *commonv1.ActorRef) string {
+	name := FormatActor(a)
+	if a.GetId() == "" || name == a.GetId() {
+		return name
+	}
+	return name + " (" + a.GetId() + ")"
 }
 
 // Truncate shortens s to width runes, ending in a single "…" when cut.
