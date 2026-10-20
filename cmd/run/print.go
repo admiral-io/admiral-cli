@@ -52,22 +52,31 @@ func changeSummary(cs []*agentv1.ComponentPlan) string {
 }
 
 // Print writes a run's detail view, or the run itself under -o json|yaml.
-func Print(p *output.Printer, r *runv1.Run) error {
-	return printRun(p, r, false)
+// title is its changeset's, "" when unknown.
+func Print(p *output.Printer, r *runv1.Run, title string) error {
+	return printRun(p, r, title, false)
 }
 
 // PrintBeforeDiff is Print for a caller that writes the plan's diff right
 // after, so the view does not point at 'run diff'.
-func PrintBeforeDiff(p *output.Printer, r *runv1.Run) error {
-	return printRun(p, r, true)
+func PrintBeforeDiff(p *output.Printer, r *runv1.Run, title string) error {
+	return printRun(p, r, title, true)
 }
 
-func printRun(p *output.Printer, r *runv1.Run, diffShown bool) error {
+// ChangeSetLabel is a changeset's id with its title, when known.
+func ChangeSetLabel(id, title string) string {
+	if title == "" {
+		return id
+	}
+	return fmt.Sprintf("%s %q", id, title)
+}
+
+func printRun(p *output.Printer, r *runv1.Run, title string, diffShown bool) error {
 	d := output.NewDescribe()
 	d.Field("ID", r.GetId())
 	d.Field("Environment", r.GetEnvironmentId())
 	if r.GetRevisionId() != "" {
-		d.Field("Changeset", r.GetChangeSetId())
+		d.Field("Changeset", ChangeSetLabel(r.GetChangeSetId(), title))
 		d.Field("Revision", r.GetRevisionId())
 	} else {
 		d.Field("Desired", output.FormatEnumKebab(r.GetDesired().GetMode()))

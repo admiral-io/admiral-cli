@@ -107,6 +107,11 @@ describe is a human view. Use 'env get -o json' for the raw record.`,
 			})
 			g.Go(func() error {
 				sec.runs, sec.runsErr = listRecentRuns(gctx, c, envID)
+				ids := make([]string, 0, len(sec.runs))
+				for _, r := range sec.runs {
+					ids = append(ids, r.ChangeSetId)
+				}
+				sec.runTitles = runcmd.ChangeSetTitles(gctx, c.ChangeSet(), ids...)
 				return nil
 			})
 			g.Go(func() error {
@@ -156,6 +161,7 @@ type envSections struct {
 	compsErr   error
 	runs       []*runv1.Run
 	runsErr    error
+	runTitles  map[string]string
 	openCS     []*changesetv1.ChangeSet
 	openCSErr  error
 	agentNames map[string]string
@@ -273,9 +279,10 @@ func describeEnv(e *environmentv1.Environment, app *applicationv1.Application, s
 	} else {
 		rows := make([][]string, 0, len(runs))
 		for _, r := range runs {
-			rows = append(rows, []string{r.Id, output.FormatEnum(r.Status), r.ChangeSetId, output.FormatActor(r.CreatedBy), output.FormatAge(r.CreatedAt)})
+			rows = append(rows, []string{r.Id, output.FormatEnum(r.Status), r.ChangeSetId, sec.runTitles[r.ChangeSetId],
+				output.FormatActor(r.CreatedBy), output.FormatAge(r.CreatedAt)})
 		}
-		d.Table("Recent Runs", []string{"ID", "Status", "Changeset", "Created By", "Age"}, rows)
+		d.Table("Recent Runs", []string{"ID", "Status", "Changeset", "Title", "Created By", "Age"}, rows)
 	}
 
 	if e.Hold != nil {

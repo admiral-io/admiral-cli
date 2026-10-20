@@ -25,13 +25,18 @@ const (
 	testRunID = "run-1nnsyzr305q7"
 )
 
-func render(t *testing.T, printer func(*output.Printer, *runv1.Run) error, r *runv1.Run) string {
+func render(t *testing.T, printer func(*output.Printer, *runv1.Run, string) error, r *runv1.Run) string {
+	t.Helper()
+	return renderTitled(t, printer, r, "")
+}
+
+func renderTitled(t *testing.T, printer func(*output.Printer, *runv1.Run, string) error, r *runv1.Run, title string) string {
 	t.Helper()
 	cmd := &cobra.Command{}
 	var out, errOut bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&errOut)
-	require.NoError(t, printer(output.NewPrinter(cmd, output.FormatTable), r))
+	require.NoError(t, printer(output.NewPrinter(cmd, output.FormatTable), r, title))
 	return out.String() + errOut.String()
 }
 
@@ -178,4 +183,11 @@ func TestAcceptAsksFirst(t *testing.T) {
 
 func TestListHasNoStatusFilter(t *testing.T) {
 	require.ErrorContains(t, execRun(t, "list", "--status", "failed"), "unknown flag: --status")
+}
+
+// A run names what it shipped by its changeset's title, and by id alone when
+// the title could not be read.
+func TestRunShowsItsChangesetTitle(t *testing.T) {
+	assert.Contains(t, renderTitled(t, Print, planned(nil), "admiral-site 9d114fd"), `Changeset:    `+csID+` "admiral-site 9d114fd"`)
+	assert.Regexp(t, `Changeset:\s+`+csID+`\n`, render(t, Print, planned(nil)))
 }

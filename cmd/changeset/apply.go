@@ -138,7 +138,7 @@ it failed or applied partway.`,
 				}
 				r = done
 			}
-			if err := runcmd.Print(p, r); err != nil {
+			if err := runcmd.Print(p, r, cs.GetTitle()); err != nil {
 				return err
 			}
 			return runcmd.Outcome(r)
