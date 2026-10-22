@@ -16,7 +16,9 @@ import (
 	"go.admiral.io/cli/internal/input"
 	"go.admiral.io/cli/internal/output"
 	"go.admiral.io/cli/internal/resolve"
+	sdkclient "go.admiral.io/sdk/client"
 	agentv1 "go.admiral.io/sdk/proto/admiral/api/agent/v1"
+	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
 	runv1 "go.admiral.io/sdk/proto/admiral/api/run/v1"
 )
 
@@ -32,6 +34,9 @@ func runID(s string) (string, error) {
 type waitOptions struct {
 	wait    bool
 	timeout time.Duration
+	// follow keeps waiting while the agent enrolls: the user asked to follow
+	// this run, often right after installing its agent.
+	follow bool
 }
 
 func (w *waitOptions) register(cmd *cobra.Command, def bool, what string) {
@@ -41,18 +46,43 @@ func (w *waitOptions) register(cmd *cobra.Command, def bool, what string) {
 
 // finish prints r, after waiting for it to settle when asked. The exit
 // code is the run's outcome.
-func (w waitOptions) finish(cmd *cobra.Command, opts *client.Options, c runv1.RunAPIClient, r *runv1.Run) error {
+func (w waitOptions) finish(cmd *cobra.Command, opts *client.Options, c sdkclient.AdmiralClient, r *runv1.Run) error {
 	p := output.NewPrinter(cmd, opts.OutputFormat)
 	if w.wait {
 		var err error
-		if r, err = Wait(cmd.Context(), c, r, w.timeout, p.Err()); err != nil {
-			return WaitTimeout(err, r)
+		if r, err = Wait(cmd.Context(), c.Run(), r, w.timeout, !w.follow, p.Err()); err != nil {
+			return WaitError(err, r)
 		}
 	}
-	if err := Print(p, r); err != nil {
+	if err := printTitled(cmd, p, c, r); err != nil {
 		return err
 	}
 	return Outcome(r)
+}
+
+// printTitled is Print with the title of the run's changeset read first.
+func printTitled(cmd *cobra.Command, p *output.Printer, c sdkclient.AdmiralClient, r *runv1.Run) error {
+	if p.Format != output.FormatTable && p.Format != output.FormatWide {
+		return Print(p, r, "")
+	}
+	return Print(p, r, ChangeSetTitles(cmd.Context(), c.ChangeSet(), r.GetChangeSetId())[r.GetChangeSetId()])
+}
+
+// ChangeSetTitles reads each distinct changeset for its title. One that
+// cannot be read is left out, so the caller shows its id alone.
+func ChangeSetTitles(ctx context.Context, c changesetv1.ChangeSetAPIClient, ids ...string) map[string]string {
+	titles := make(map[string]string, len(ids))
+	for _, id := range ids {
+		if _, seen := titles[id]; seen || id == "" {
+			continue
+		}
+		resp, err := c.GetChangeSet(ctx, &changesetv1.GetChangeSetRequest{ChangeSetId: id})
+		if err != nil {
+			continue
+		}
+		titles[id] = resp.GetChangeSet().GetTitle()
+	}
+	return titles
 }
 
 func getRun(ctx context.Context, c runv1.RunAPIClient, id string) (*runv1.Run, error) {
@@ -119,7 +149,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 }
 
 func newGetCmd(opts *client.Options) *cobra.Command {
-	var w waitOptions
+	w := waitOptions{follow: true}
 	cmd := &cobra.Command{
 		Use:   "get <run>",
 		Short: "Get a run: its plan, approvals and apply",
@@ -141,9 +171,9 @@ people, or ended. Exits 1 when it failed, applied partway or was superseded.`,
 				return err
 			}
 			if !w.wait {
-				return Print(output.NewPrinter(cmd, opts.OutputFormat), r)
+				return printTitled(cmd, output.NewPrinter(cmd, opts.OutputFormat), c, r)
 			}
-			return w.finish(cmd, opts, c.Run(), r)
+			return w.finish(cmd, opts, c, r)
 		},
 	}
 	w.register(cmd, false, "the run settles")
@@ -212,7 +242,7 @@ failed or applied partway.`,
 			if err != nil {
 				return Refusal(err, "admiral run", id)
 			}
-			return w.finish(cmd, opts, c.Run(), resp.GetRun())
+			return w.finish(cmd, opts, c, resp.GetRun())
 		},
 	}
 	w.register(cmd, true, "the apply ends")
@@ -252,7 +282,7 @@ command asks first; --yes skips the question.`,
 			if err != nil {
 				return err
 			}
-			return Print(output.NewPrinter(cmd, opts.OutputFormat), resp.GetRun())
+			return printTitled(cmd, output.NewPrinter(cmd, opts.OutputFormat), c, resp.GetRun())
 		},
 	}
 	cmd.Flags().StringVar(&reason, "reason", "", "why, recorded with the acceptance")

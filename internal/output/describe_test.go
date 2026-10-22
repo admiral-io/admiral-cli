@@ -92,3 +92,26 @@ func TestPrintDescribe_RejectsMachineFormats(t *testing.T) {
 	require.NoError(t, testPrinter(FormatWide, &out).PrintDescribe(d, ""))
 	require.Equal(t, "Name:  x\n", out.String())
 }
+
+func TestDescribe_BackToBackTablesAreSeparated(t *testing.T) {
+	d := NewDescribe()
+	d.Section("Plan", func(b *Block) {
+		b.Field("Digest", "sha256:1")
+		b.Table([]string{"Component", "Changes"}, [][]string{{"api", "+1 ~0 ±0 -0"}})
+		b.Table([]string{"Job", "Status"}, [][]string{{"job-1", "succeeded"}})
+	})
+
+	var buf bytes.Buffer
+	require.NoError(t, d.Render(&buf))
+	want := `Plan:
+  Digest:  sha256:1
+  Component  Changes
+  ---------  -------
+  api        +1 ~0 ±0 -0
+
+  Job    Status
+  ---    ------
+  job-1  succeeded
+`
+	require.Equal(t, want, buf.String())
+}

@@ -94,7 +94,7 @@ func newDescribeCmd(opts *client.Options) *cobra.Command {
 			d.Field("Description", a.Description)
 			d.Fields("Labels", output.LabelLines(a.Labels))
 			d.Field("Created", output.FormatDescribeTime(a.CreatedAt))
-			d.Field("Created By", output.FormatActor(a.CreatedBy))
+			d.Field("Created By", output.FormatActorWithID(a.CreatedBy))
 
 			if envErr != nil {
 				d.Unavailable("Environments", cmderr.Format(envErr))

@@ -106,7 +106,12 @@ describe is a human view. Use 'env get -o json' for the raw record.`,
 				return nil
 			})
 			g.Go(func() error {
-				sec.runs, sec.runsErr = listRecentRuns(gctx, c, envID)
+				sec.runs, sec.moreRuns, sec.runsErr = listRecentRuns(gctx, c, envID)
+				ids := make([]string, 0, len(sec.runs))
+				for _, r := range sec.runs {
+					ids = append(ids, r.ChangeSetId)
+				}
+				sec.runTitles = runcmd.ChangeSetTitles(gctx, c.ChangeSet(), ids...)
 				return nil
 			})
 			g.Go(func() error {
@@ -152,10 +157,13 @@ describe is a human view. Use 'env get -o json' for the raw record.`,
 // record. Each read carries its own error so a failed section renders as
 // unavailable without hiding the others.
 type envSections struct {
-	comps      []*environmentv1.EnvironmentComponent
-	compsErr   error
-	runs       []*runv1.Run
-	runsErr    error
+	comps     []*environmentv1.EnvironmentComponent
+	compsErr  error
+	runs      []*runv1.Run
+	runsErr   error
+	runTitles map[string]string
+	// moreRuns is whether runs beyond recentRunsLimit exist.
+	moreRuns   bool
 	openCS     []*changesetv1.ChangeSet
 	openCSErr  error
 	agentNames map[string]string
@@ -202,7 +210,7 @@ func describeEnv(e *environmentv1.Environment, app *applicationv1.Application, s
 		d.Field("Last Run", "")
 	}
 	d.Field("Created", output.FormatDescribeTime(e.CreatedAt))
-	d.Field("Created By", output.FormatActor(e.CreatedBy))
+	d.Field("Created By", output.FormatActorWithID(e.CreatedBy))
 
 	d.Section("Agents", func(b *output.Block) {
 		if len(e.Agents) == 0 {
@@ -273,9 +281,14 @@ func describeEnv(e *environmentv1.Environment, app *applicationv1.Application, s
 	} else {
 		rows := make([][]string, 0, len(runs))
 		for _, r := range runs {
-			rows = append(rows, []string{r.Id, output.FormatEnum(r.Status), r.ChangeSetId, output.FormatActor(r.CreatedBy), output.FormatAge(r.CreatedAt)})
+			rows = append(rows, []string{r.Id, output.FormatEnum(r.Status), r.ChangeSetId, sec.runTitles[r.ChangeSetId],
+				output.FormatActor(r.CreatedBy), output.FormatAge(r.CreatedAt)})
 		}
-		d.Table("Recent Runs", []string{"ID", "Status", "Changeset", "Created By", "Age"}, rows)
+		d.Table("Recent Runs", []string{"ID", "Status", "Changeset", "Title", "Created By", "Age"}, rows)
+		if sec.moreRuns {
+			d.Hint(fmt.Sprintf("Showing the %d most recent runs. To list them all, run: admiral run list --env %s/%s",
+				recentRunsLimit, app.Name, e.Name))
+		}
 	}
 
 	if e.Hold != nil {
@@ -307,7 +320,7 @@ func lastApplyLine(l *environmentv1.LastApply, r *runv1.Run) string {
 	}
 	line := fmt.Sprintf("%s %s %s ago", l.ChangeSetId, l.RevisionId, output.FormatAge(l.AppliedAt))
 	if by := r.GetApply().GetAppliedBy(); by != nil {
-		line += " by " + output.FormatActor(by)
+		line += " by " + output.FormatActorWithID(by)
 	}
 	return line
 }
@@ -363,19 +376,21 @@ func agentNames(ctx context.Context, c sdkclient.AdmiralClient, assigned []*envi
 	return names
 }
 
-func listRecentRuns(ctx context.Context, c sdkclient.AdmiralClient, envID string) ([]*runv1.Run, error) {
+// listRecentRuns is the environment's newest runs, and whether older ones
+// exist.
+func listRecentRuns(ctx context.Context, c sdkclient.AdmiralClient, envID string) ([]*runv1.Run, bool, error) {
 	f, err := filter.Eq("environment_id", envID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	resp, err := c.Run().ListRuns(ctx, &runv1.ListRunsRequest{
 		Filter:   f,
 		PageSize: recentRunsLimit,
 	})
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return resp.Runs, nil
+	return resp.Runs, resp.NextPageToken != "", nil
 }
 
 func listOpenChangeSets(ctx context.Context, c sdkclient.AdmiralClient, envID string) ([]*changesetv1.ChangeSet, error) {

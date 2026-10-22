@@ -142,21 +142,21 @@ func planRevision(cmd *cobra.Command, opts *client.Options, runs runv1.RunAPICli
 	output.Writef(p.Err(), "Planning %s revision %d in %s\n", cs.Id, rev.Number, r.Id)
 
 	if !po.noWait {
-		done, err := runcmd.Wait(cmd.Context(), runs, r, po.waitTimeout, p.Err())
+		done, err := runcmd.Wait(cmd.Context(), runs, r, po.waitTimeout, true, p.Err())
 		if err != nil {
-			return runcmd.WaitTimeout(err, r)
+			return runcmd.WaitError(err, r)
 		}
 		r = done
 	}
 	// Under -o json|yaml the run is the whole answer; 'run diff' has the rest.
 	withDiff := r.GetStatus() == runv1.Run_STATUS_PLANNED && opts.OutputFormat.IsTable()
 	if !withDiff {
-		if err := runcmd.Print(p, r); err != nil {
+		if err := runcmd.Print(p, r, cs.GetTitle()); err != nil {
 			return err
 		}
 		return runcmd.Outcome(r)
 	}
-	if err := runcmd.PrintBeforeDiff(p, r); err != nil {
+	if err := runcmd.PrintBeforeDiff(p, r, cs.GetTitle()); err != nil {
 		return err
 	}
 	diff, err := runs.GetRunPlanDiff(cmd.Context(), &runv1.GetRunPlanDiffRequest{RunId: r.GetId()})

@@ -132,13 +132,13 @@ it failed or applied partway.`,
 			r = resp.GetRun()
 			p := output.NewPrinter(cmd, opts.OutputFormat)
 			if !po.noWait {
-				done, err := runcmd.Wait(cmd.Context(), c.Run(), r, po.waitTimeout, p.Err())
+				done, err := runcmd.Wait(cmd.Context(), c.Run(), r, po.waitTimeout, true, p.Err())
 				if err != nil {
-					return runcmd.WaitTimeout(err, r)
+					return runcmd.WaitError(err, r)
 				}
 				r = done
 			}
-			if err := runcmd.Print(p, r); err != nil {
+			if err := runcmd.Print(p, r, cs.GetTitle()); err != nil {
 				return err
 			}
 			return runcmd.Outcome(r)
