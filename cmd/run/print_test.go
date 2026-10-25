@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
@@ -41,7 +43,13 @@ func renderTitled(t *testing.T, printer func(*output.Printer, *runv1.Run, string
 }
 
 func change(kind, name string, a agentv1.ResourceChange_Action) *agentv1.ResourceChange {
-	return &agentv1.ResourceChange{Action: a, Resource: &agentv1.ResourceRef{ApiVersion: "v1", Kind: kind, Namespace: "podinfo-dev", Name: name}}
+	return &agentv1.ResourceChange{Action: a, Resource: k8sRef(kind, name)}
+}
+
+func k8sRef(kind, name string) *agentv1.ResourceRef {
+	return &agentv1.ResourceRef{Ref: &agentv1.ResourceRef_Kubernetes{Kubernetes: &agentv1.KubernetesResourceRef{
+		ApiVersion: "v1", Kind: kind, Namespace: "podinfo-dev", Name: name,
+	}}}
 }
 
 func planned(rule *environmentv1.ApprovalRule) *runv1.Run {
@@ -97,28 +105,122 @@ func TestWriteDiffPrintsADeleteAsOneLine(t *testing.T) {
 			change("Secret", "old", agentv1.ResourceChange_ACTION_DESTROY),
 		}},
 	}}
-	ref := func(kind, name string) *agentv1.ResourceRef {
-		return &agentv1.ResourceRef{ApiVersion: "v1", Kind: kind, Namespace: "podinfo-dev", Name: name}
-	}
 	d := &agentv1.PlanDiff{Resources: []*agentv1.ResourceDiff{
-		{Component: "podinfo", Resource: ref("Deployment", "podinfo"), Diff: "--- live\n+++ desired\n-apiVersion: apps/v1\n-kind: Deployment\n"},
-		{Component: "podinfo", Resource: ref("Service", "podinfo"), Diff: "--- live\n-kind: Service\n"},
-		{Component: "web", Resource: ref("ConfigMap", "web"), Diff: "-a: 1\n+a: 2\n"},
-		{Component: "web", Resource: ref("Secret", "old"), Diff: "-kind: Secret\n"},
+		{Component: "podinfo", Resource: k8sRef("Deployment", "podinfo"), Action: agentv1.ResourceChange_ACTION_DESTROY,
+			Before: obj(t, `{"kind":"Deployment","spec":{"replicas":1}}`)},
+		{Component: "podinfo", Resource: k8sRef("Service", "podinfo"), Action: agentv1.ResourceChange_ACTION_DESTROY},
+		{Component: "web", Resource: k8sRef("ConfigMap", "web"), Action: agentv1.ResourceChange_ACTION_UPDATE,
+			Before: obj(t, `{"data":{"a":"1"}}`), After: obj(t, `{"data":{"a":"2"}}`)},
+		{Component: "web", Resource: k8sRef("Secret", "old"), Action: agentv1.ResourceChange_ACTION_DESTROY},
 	}}
-	var b bytes.Buffer
-	WriteDiff(&b, d, plan)
-	out := b.String()
-	assert.Contains(t, out, "- podinfo: v1 Deployment podinfo-dev/podinfo\n")
-	assert.Contains(t, out, "- podinfo: v1 Service podinfo-dev/podinfo\n")
-	assert.NotContains(t, out, "kind: Deployment", "a delete is not printed whole")
-	assert.Contains(t, out, "# web: podinfo-dev/ConfigMap/web\n-a: 1\n+a: 2")
+	out := writeDiff(d, plan)
+	assert.Contains(t, out, "- podinfo: v1 Deployment podinfo-dev/podinfo (destroy)\n")
+	assert.Contains(t, out, "- podinfo: v1 Service podinfo-dev/podinfo (destroy)\n")
+	assert.NotContains(t, out, "replicas", "a delete is not printed whole")
+	assert.Contains(t, out, "~ web: v1 ConfigMap podinfo-dev/web (update)\n    data.a: \"1\" -> \"2\"\n")
 	assert.Equal(t, 1, strings.Count(out, "The namespace podinfo-dev stays"),
 		"said once, and only for a component removed outright")
+}
 
-	b.Reset()
-	WriteDiff(&b, d, nil)
-	assert.Contains(t, b.String(), "kind: Deployment", "without the plan every diff is printed whole")
+// An update shows only what changes, inside lists too, and never a
+// sensitive value: only that it changed.
+func TestWriteDiffShowsEachChangedValueAtItsPath(t *testing.T) {
+	d := &agentv1.PlanDiff{Resources: []*agentv1.ResourceDiff{{
+		Component: "api", Resource: k8sRef("Deployment", "api"), Action: agentv1.ResourceChange_ACTION_UPDATE,
+		Before: obj(t, `{"metadata":{"labels":{"app.kubernetes.io/version":"1"}},"spec":{"replicas":2,"template":{"spec":{"containers":[{"name":"api","image":"api:1","env":[{"name":"TOKEN","value":null}]}]}}}}`),
+		After:  obj(t, `{"metadata":{"labels":{"app.kubernetes.io/version":"2"}},"spec":{"replicas":2,"template":{"spec":{"containers":[{"name":"api","image":"api:2","env":[{"name":"TOKEN","value":null}]}]}}}}`),
+		SensitivePaths: []*agentv1.SensitivePath{{
+			Path: path("spec", "template", "spec", "containers", 0, "env", 0, "value"), Changed: true,
+		}},
+	}}}
+	out := writeDiff(d, nil)
+	assert.Contains(t, out, `    spec.template.spec.containers[0].image: "api:1" -> "api:2"`)
+	assert.Contains(t, out, `    metadata.labels."app.kubernetes.io/version": "1" -> "2"`)
+	assert.Contains(t, out, "    spec.template.spec.containers[0].env[0].value: <sensitive, changed>\n")
+	assert.NotContains(t, out, "replicas", "an unchanged value is not shown")
+	assert.NotContains(t, out, "null -> null")
+}
+
+// A takeover names every field it takes from another manager, so the
+// approver sees what Helm or kubectl stops owning.
+func TestWriteDiffNamesWhatATakeoverTakes(t *testing.T) {
+	d := &agentv1.PlanDiff{Resources: []*agentv1.ResourceDiff{{
+		Component: "web", Resource: k8sRef("Deployment", "web"), Action: agentv1.ResourceChange_ACTION_TAKE_OVER,
+		Before: obj(t, `{"metadata":{"labels":{}},"spec":{"replicas":3}}`),
+		After:  obj(t, `{"metadata":{"labels":{"admiral.io/environment":"env-1"}},"spec":{"replicas":3}}`),
+		Change: &agentv1.ResourceDiff_Kubernetes{Kubernetes: &agentv1.KubernetesChange{Taken: []*agentv1.TakenField{
+			{Manager: "helm", Path: path("spec", "replicas")},
+		}}},
+	}}}
+	out := writeDiff(d, nil)
+	assert.Contains(t, out, "~ web: v1 Deployment podinfo-dev/web (take over)\n")
+	assert.Contains(t, out, `    metadata.labels."admiral.io/environment": <absent> -> "env-1"`)
+	assert.Contains(t, out, "    takes spec.replicas from helm\n")
+}
+
+// A create lists what it sets; a value known only after the apply, and one
+// forcing a replace, say so.
+func TestWriteDiffCreateAndTerraform(t *testing.T) {
+	tf := func(addr string) *agentv1.ResourceRef {
+		return &agentv1.ResourceRef{Ref: &agentv1.ResourceRef_Terraform{Terraform: &agentv1.TerraformResourceRef{Address: addr}}}
+	}
+	d := &agentv1.PlanDiff{
+		Resources: []*agentv1.ResourceDiff{
+			{Component: "net", Resource: tf(`aws_subnet.private["a"]`), Action: agentv1.ResourceChange_ACTION_CREATE,
+				After: obj(t, `{"cidr_block":"10.0.1.0/24","id":null}`), UnknownPaths: []*agentv1.DiffPath{path("id")}},
+			{Component: "net", Resource: tf("aws_vpc.main"), Action: agentv1.ResourceChange_ACTION_REPLACE,
+				Before: obj(t, `{"cidr_block":"10.0.0.0/16"}`), After: obj(t, `{"cidr_block":"10.1.0.0/16"}`),
+				ReplacePaths: []*agentv1.DiffPath{path("cidr_block")},
+				Change:       &agentv1.ResourceDiff_Terraform{Terraform: &agentv1.TerraformChange{PreviousAddress: "aws_vpc.this"}}},
+		},
+		Outputs: []*agentv1.OutputChange{
+			{Component: "net", Name: "vpc_id", Action: agentv1.ResourceChange_ACTION_CREATE, Unknown: true},
+			{Component: "net", Name: "token", Action: agentv1.ResourceChange_ACTION_UPDATE, Sensitive: true},
+		},
+	}
+	out := writeDiff(d, nil)
+	assert.Contains(t, out, "+ net: aws_subnet.private[\"a\"] (create)\n    cidr_block: \"10.0.1.0/24\"\n    id: <known after apply>\n")
+	assert.Contains(t, out, "± net: aws_vpc.main (replace)  moved from aws_vpc.this\n")
+	assert.Contains(t, out, `    cidr_block: "10.0.0.0/16" -> "10.1.0.0/16"  (forces replacement)`)
+	assert.Contains(t, out, "  + net.vpc_id: <absent> -> <known after apply>\n")
+	assert.Contains(t, out, "  ~ net.token: <sensitive> -> <sensitive>\n")
+}
+
+// A failed plan's diff says why, every reason, where the engine points.
+func TestWriteDiffListsAFailedPlansErrors(t *testing.T) {
+	d := &agentv1.PlanDiff{Errors: []*agentv1.PlanError{
+		{Component: "web", Resource: k8sRef("Deployment", "web"), Summary: "the agent may not patch deployments"},
+		{Component: "net", Summary: "Unsupported argument", Location: "main.tf:12", Detail: "An argument named \"cidr\" is not expected here."},
+	}}
+	out := writeDiff(d, nil)
+	assert.Contains(t, out, "Errors:\n  ! web: v1 Deployment podinfo-dev/web: the agent may not patch deployments\n")
+	assert.Contains(t, out, "  ! net: Unsupported argument\n      at main.tf:12\n      An argument named \"cidr\" is not expected here.\n")
+}
+
+func writeDiff(d *agentv1.PlanDiff, plan *runv1.PlanPhase) string {
+	var b bytes.Buffer
+	WriteDiff(&b, d, plan)
+	return b.String()
+}
+
+func obj(t *testing.T, js string) *structpb.Value {
+	t.Helper()
+	var v structpb.Value
+	require.NoError(t, protojson.Unmarshal([]byte(js), &v))
+	return &v
+}
+
+func path(segs ...any) *agentv1.DiffPath {
+	p := &agentv1.DiffPath{}
+	for _, s := range segs {
+		switch s := s.(type) {
+		case string:
+			p.Segments = append(p.Segments, &agentv1.DiffPathSegment{Segment: &agentv1.DiffPathSegment_Key{Key: s}})
+		case int:
+			p.Segments = append(p.Segments, &agentv1.DiffPathSegment{Segment: &agentv1.DiffPathSegment_Index{Index: int32(s)}})
+		}
+	}
+	return p
 }
 
 func TestProgressStatusSaysWhyARunWaits(t *testing.T) {

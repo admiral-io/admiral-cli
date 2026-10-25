@@ -36,8 +36,8 @@ Commands accept an agent name or ID as the positional argument.`,
 		newGetCmd(opts),
 		newDeleteCmd(opts),
 		newEnrollmentKeyCmd(opts),
+		newUpdateCmd(opts),
 		newGrantCmd(opts),
-		newGrantsCmd(opts),
 		newRevokeCmd(opts),
 	)
 	return &AgentCmd{Cmd: cmd}

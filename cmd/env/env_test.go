@@ -229,7 +229,7 @@ func TestDescribeEnv(t *testing.T) {
 	e := &environmentv1.Environment{
 		Name: "prod", Id: envID, Generation: 7,
 		Agents: []*environmentv1.AgentAssignment{{
-			AgentId: "agt-aaaaaaaaaaaa", Id: "asg-111111111111", ApplyProfile: "edit",
+			AgentId: "agt-aaaaaaaaaaaa", Id: "asg-111111111111",
 			Settings: &environmentv1.AgentAssignment_Kubernetes{Kubernetes: &environmentv1.KubernetesSettings{DefaultNamespace: "shop-prod", Prune: &yes}},
 		}},
 		Approval:  &environmentv1.ApprovalRule{RequiredApprovals: 2},
@@ -262,14 +262,14 @@ func TestDescribeEnv(t *testing.T) {
 	require.Regexp(t, `Last Apply:\s+cs-1111aaaa2222 rev-333344445555 60m ago by Ada Lovelace \(usr-s0jg9fam3x0x\)`, out)
 	require.Regexp(t, `Applying:\s+run-applyingnow1 \(cs-5555bbbb6666\)`, out)
 	require.Regexp(t, `run-applyingnow1\s+Applying\s+cs-5555bbbb6666\s+admiral-site 9d114fd`, out, "a recent run names its changeset's title")
-	require.Regexp(t, `prod-cluster\s+asg-111111111111\s+default\s+edit\s+shop-prod\s+<none>\s+true`, out)
+	require.Regexp(t, `prod-cluster\s+asg-111111111111\s+shop-prod\s+<none>\s+true`, out)
 	require.Regexp(t, `Required Approvals:\s+2`, out)
 	require.Regexp(t, `api\s+<none>\s+v1.2.0 \(sha256:abcdef012345\)\s+120m ago`, out)
 	require.Regexp(t, `web\s+<none>\s+6.8.0 \(sha256:3902c9ddbe75\)`, out, "a version without a tag reference is named by its tag")
 	require.Regexp(t, `db\s+<none>\s+sha256:ffffeeeedddd`, out, "an untagged version keeps its digest")
 	require.Contains(t, out, "admiral changeset revert cs-7q2k9m4x8p1c")
 	require.Contains(t, out, "admiral run accept run-held00000001")
-	require.Contains(t, out, "Showing the 5 most recent runs. To list them all, run: admiral run list --env shop/prod")
+	require.Contains(t, out, "Showing the 5 most recent runs. To list them all, run: admiral run list shop/prod")
 
 	sec.moreRuns = false
 	b.Reset()
