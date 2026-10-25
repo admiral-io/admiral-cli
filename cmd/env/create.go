@@ -17,6 +17,7 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 		description string
 		labelStrs   []string
 		target      targetFlags
+		infra       infraFlags
 	)
 
 	cmd := &cobra.Command{
@@ -35,7 +36,11 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
   admiral env create billing/prod --agent prod --namespace billing
 
   # Applies need two approvals
-  admiral env create billing/prod --agent prod --approvals 2`,
+  admiral env create billing/prod --agent prod --approvals 2
+
+  # Terraform components on an infra agent, with state in a GCS bucket
+  admiral env create network/prod --agent infra-prod \
+    --engine opentofu@1.10.6 --backend gcs --backend-config bucket=acme-tfstate`,
 		Args:              flags.ExactArgs(1),
 		ValidArgsFunction: complete.First(complete.NewEnv(opts)),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -66,6 +71,9 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 			if _, err := target.apply(cmd.Context(), cmd, c.Agent(), e); err != nil {
 				return err
 			}
+			if _, err := infra.apply(cmd, e); err != nil {
+				return err
+			}
 			req := &environmentv1.CreateEnvironmentRequest{ApplicationId: resolvedAppID, Environment: e}
 
 			resp, err := c.Environment().CreateEnvironment(cmd.Context(), req)
@@ -83,6 +91,7 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 	flags.Label(cmd, &labelStrs, "label to attach (key=value, repeatable)")
 	target.register(cmd, "agent to deploy through, by name or agt- id (repeatable)",
 		"the Kubernetes namespace components render into unless they name one (needs one --agent; default <app>-<env>)")
+	infra.register(cmd)
 
 	return cmd
 }

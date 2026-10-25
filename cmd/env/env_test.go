@@ -18,6 +18,7 @@ import (
 	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
 	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
 	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
+	registryv1 "go.admiral.io/sdk/proto/admiral/api/registry/v1"
 	runv1 "go.admiral.io/sdk/proto/admiral/api/run/v1"
 )
 
@@ -130,7 +131,7 @@ func TestWellFormedTargetsAreAccepted(t *testing.T) {
 
 func TestUpdate_RequiresAtLeastOneField(t *testing.T) {
 	_, err := run(t, "update", "shop/prod")
-	require.ErrorContains(t, err, "at least one of --name, --description, --label, --agent, --namespace or --approvals")
+	require.ErrorContains(t, err, "at least one of --name, --description, --label, --agent, --namespace, --approvals, --engine or --backend")
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 }
 
@@ -308,4 +309,61 @@ func TestUpdateSaysWhatChanged(t *testing.T) {
 	}
 	require.Equal(t, []string{"approvals: 0 -> 1", "namespace: shop -> shop-prod"}, settingChanges(before, after))
 	require.Empty(t, settingChanges(before, before))
+}
+
+// The engine and backend reach the environment with their own mask paths,
+// and a malformed one is refused before any request.
+func TestInfraFlagsApply(t *testing.T) {
+	parse := func(e *environmentv1.Environment, args ...string) ([]string, error) {
+		cmd := &cobra.Command{Use: "x"}
+		var f infraFlags
+		f.register(cmd)
+		require.NoError(t, cmd.ParseFlags(args))
+		return f.apply(cmd, e)
+	}
+
+	e := &environmentv1.Environment{}
+	paths, err := parse(e, "--engine", "opentofu@1.10.6", "--backend", "gcs", "--backend-config", "bucket=acme-tfstate")
+	require.NoError(t, err)
+	require.Equal(t, []string{"infra_engine", "infra_backend"}, paths)
+	require.Equal(t, registryv1.InfraEngine_INFRA_ENGINE_OPENTOFU, e.GetInfraEngine().GetEngine())
+	require.Equal(t, "1.10.6", e.GetInfraEngine().GetVersion())
+	require.Equal(t, "gcs", e.GetInfraBackend().GetType())
+	require.Equal(t, "acme-tfstate", e.GetInfraBackend().GetConfig().GetFields()["bucket"].GetStringValue())
+	require.Equal(t, "opentofu@1.10.6", engineName(e.GetInfraEngine()))
+
+	paths, err = parse(&environmentv1.Environment{})
+	require.NoError(t, err)
+	require.Empty(t, paths, "an update without the flags leaves both alone")
+
+	for _, bad := range [][]string{
+		{"--engine", "1.10.6"},
+		{"--engine", "pulumi@3.0.0"},
+		{"--engine", "opentofu@"},
+		{"--backend", "gcs", "--backend-config", "bucket"},
+		{"--backend-config", "bucket=x"},
+	} {
+		_, err := parse(&environmentv1.Environment{}, bad...)
+		require.Error(t, err, "%v", bad)
+		require.Equal(t, cmderr.ExitUsage, cmderr.Code(err), "%v", bad)
+	}
+}
+
+func TestDescribeShowsTerraformSettings(t *testing.T) {
+	render := func(e *environmentv1.Environment) string {
+		var b bytes.Buffer
+		require.NoError(t, describeEnv(e, &applicationv1.Application{Name: "net"}, envSections{}).Render(&b))
+		return b.String()
+	}
+	require.Regexp(t, `Backend:\s+hosted`, render(&environmentv1.Environment{Name: "prod"}), "no backend means hosted state")
+
+	e := &environmentv1.Environment{Name: "prod",
+		InfraEngine: &registryv1.InfraEngineVersion{Engine: registryv1.InfraEngine_INFRA_ENGINE_TERRAFORM, Version: "1.9.8"},
+	}
+	var err error
+	e.InfraBackend, err = parseBackend("s3", []string{"region=us-east-1", "bucket=acme"})
+	require.NoError(t, err)
+	out := render(e)
+	require.Regexp(t, `Engine:\s+terraform@1.9.8`, out)
+	require.Regexp(t, `Backend:\s+s3 bucket=acme region=us-east-1`, out)
 }

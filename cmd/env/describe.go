@@ -230,6 +230,11 @@ func describeEnv(e *environmentv1.Environment, app *applicationv1.Application, s
 		b.Table([]string{"Agent", "Assignment", "Namespace", "Create Namespaces", "Prune"}, rows)
 	})
 
+	d.Section("Terraform", func(b *output.Block) {
+		b.Field("Engine", engineName(e.GetInfraEngine()))
+		b.Field("Backend", backendName(e.GetInfraBackend()))
+	})
+
 	d.Section("Approval", func(b *output.Block) {
 		b.Field("Required Approvals", approvals(e))
 		groups := make([]string, 0, len(e.GetApproval().GetGroups()))
