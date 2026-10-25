@@ -9,6 +9,9 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -21,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"go.admiral.io/cli/internal/admiraltest"
+	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/credentials"
 	"go.admiral.io/cli/internal/version"
@@ -98,6 +102,8 @@ func sweepArgs(files map[string]string) map[string][]string {
 		"apikey create":                  {"apikey", "create", "x", "--scope", "state:write"},
 		"apikey list":                    {"apikey", "list"},
 		"apikey revoke":                  {"apikey", "revoke", "x", "--yes"},
+		"state download":                 {"state", "download", "x/x", "x", "stv-1"},
+		"state versions":                 {"state", "versions", "x/x", "x"},
 		"credential create basic-auth":   {"credential", "create", "basic-auth", "x", "--username", "u", "--password-stdin"},
 		"credential create bearer-token": {"credential", "create", "bearer-token", "x", "--token-stdin", "--allowed-host", "example.com"},
 		"credential create github-app":   {"credential", "create", "github-app", "x", "--app-id", "1", "--installation-id", "2", "--private-key-file", files["key"]},
@@ -213,6 +219,22 @@ func sweepRun(t *testing.T, addr string, args []string) (r sweepResult) {
 	return r
 }
 
+// stateServer stands in for admiral-state's history routes, which are plain
+// HTTP and not in the Admiral API admiraltest serves.
+func stateServer(t *testing.T) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/download") {
+			_, _ = io.WriteString(w, `{"version":4,"serial":3}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"versions":[{"id":"stv-1","serial":3,"writer":{"person":{"kind":"user","subject":"usr-1"}},"size_bytes":2048,"created_at":"2026-10-25T12:00:00Z"},`+
+			`{"id":"stv-0","serial":2,"writer":{"job":{"job_id":"job-1","attempt":1}},"size_bytes":10,"force":true,"created_at":"2026-10-24T12:00:00Z"}],"next_page_token":""}`)
+	}))
+	t.Cleanup(srv.Close)
+	return strings.TrimPrefix(srv.URL, "http://")
+}
+
 func TestShapeSweep(t *testing.T) {
 	if testing.Short() {
 		t.Skip("the shape sweep runs every command against every response shape")
@@ -220,6 +242,7 @@ func TestShapeSweep(t *testing.T) {
 	t.Setenv(credentials.EnvAPIKey, "admp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopq1ZqpkG")
 	t.Setenv("ADMIRAL_NO_INPUT", "1")
 	srv := admiraltest.Start(t)
+	t.Setenv(client.EnvStateHost, stateServer(t))
 	invocations := sweepArgs(sweepFiles(t))
 	names := make([]string, 0, len(invocations))
 	for n := range invocations {
