@@ -413,37 +413,6 @@ func TestLogout_StoredReference(t *testing.T) {
 	require.Contains(t, stdout, "reference removed")
 }
 
-func TestValidateScopes(t *testing.T) {
-	got, err := validateScopes([]string{"app:read,env:read", "app:read", "run:read"})
-	require.NoError(t, err)
-	require.Equal(t, []string{"app:read", "env:read", "run:read"}, got, "comma-split, deduplicated, order kept")
-
-	_, err = validateScopes([]string{"app:*"})
-	require.Error(t, err, "scopes attenuate; there are no family wildcards")
-
-	got, err = validateScopes(nil)
-	require.NoError(t, err)
-	require.Empty(t, got)
-
-	_, err = validateScopes([]string{"app-read"})
-	require.ErrorContains(t, err, `unknown scope "app-read"`)
-	require.ErrorContains(t, err, "app:read")
-
-	_, err = validateScopes([]string{"openid"})
-	require.Error(t, err, "identity scopes are not user-selectable")
-
-	_, err = validateScopes([]string{"agent:exec"})
-	require.Error(t, err, "agent-only scope is not assignable to a person")
-}
-
-func TestUserScopes(t *testing.T) {
-	all := userScopes()
-	require.Contains(t, all, "app:read")
-	require.NotContains(t, all, "app:*", "no wildcards; scopes are concrete attenuations")
-	require.NotContains(t, all, "agent:exec", "agent-only scope is not assignable to a person")
-	require.IsIncreasing(t, all)
-}
-
 func TestLogin_ScopeFlagValidation(t *testing.T) {
 	os.Unsetenv(credentials.EnvAPIKey)
 	opts := &client.Options{ConfigDir: t.TempDir()}

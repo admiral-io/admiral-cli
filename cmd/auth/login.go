@@ -15,6 +15,7 @@ import (
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/input"
 	"go.admiral.io/cli/internal/output"
+	"go.admiral.io/cli/internal/scopes"
 	sdkclient "go.admiral.io/sdk/client"
 )
 
@@ -76,7 +77,7 @@ If ADMIRAL_API_KEY is set, it takes precedence over whatever is stored.`,
 			if withToken && len(scopeFlag) > 0 {
 				return cmderr.Usage("--scope applies to browser sign-in; an API key's scopes are fixed when the key is created")
 			}
-			scopeList, err := validateScopes(scopeFlag)
+			scopeList, err := scopes.Validate(scopeFlag)
 			if err != nil {
 				return err
 			}
@@ -120,7 +121,7 @@ If ADMIRAL_API_KEY is set, it takes precedence over whatever is stored.`,
 	cmd.Flags().BoolVar(&noBrowser, "no-browser", false, "do not launch a browser; the sign-in URL is always printed")
 	cmd.Flags().StringArrayVar(&scopeFlag, "scope", nil, "limit the session to these resource scopes (repeatable or comma-separated); default is full access")
 	_ = cmd.RegisterFlagCompletionFunc("scope", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
-		return userScopes(), cobra.ShellCompDirectiveNoFileComp
+		return scopes.User(), cobra.ShellCompDirectiveNoFileComp
 	})
 	cmd.Flags().BoolVar(&withToken, "with-token", false, "read an API key from stdin and store it, instead of signing in via browser")
 	return cmd
