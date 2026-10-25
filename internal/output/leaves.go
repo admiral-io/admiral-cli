@@ -2,7 +2,9 @@ package output
 
 import (
 	"encoding/json"
+	"maps"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 )
@@ -33,10 +35,7 @@ func Leaves(path string, beforePresent bool, before string, afterPresent bool, a
 }
 
 func objectLeaves(path string, bp bool, b string, bo map[string]json.RawMessage, ap bool, a string, ao map[string]json.RawMessage) []Leaf {
-	keys := make([]string, 0, len(bo)+len(ao))
-	for k := range bo {
-		keys = append(keys, k)
-	}
+	keys := slices.Collect(maps.Keys(bo))
 	for k := range ao {
 		if _, ok := bo[k]; !ok {
 			keys = append(keys, k)
