@@ -28,9 +28,10 @@ func source(r *runv1.Run) string {
 }
 
 // changeSummary counts resource changes the way a plan reads:
-// +create ~update ±replace -destroy.
+// +create ~update ±replace -destroy, then the takeovers and the objects left
+// in place when there are any.
 func changeSummary(cs []*agentv1.ComponentPlan) string {
-	var add, change, replace, destroy int
+	var add, change, replace, destroy, takeOver, orphan int
 	for _, c := range cs {
 		for _, rc := range c.GetChanges() {
 			switch rc.GetAction() {
@@ -40,15 +41,26 @@ func changeSummary(cs []*agentv1.ComponentPlan) string {
 				change++
 			case agentv1.ResourceChange_ACTION_REPLACE:
 				replace++
-			case agentv1.ResourceChange_ACTION_DESTROY, agentv1.ResourceChange_ACTION_ORPHAN:
+			case agentv1.ResourceChange_ACTION_DESTROY:
 				destroy++
+			case agentv1.ResourceChange_ACTION_TAKE_OVER:
+				takeOver++
+			case agentv1.ResourceChange_ACTION_ORPHAN:
+				orphan++
 			}
 		}
 	}
-	if add+change+replace+destroy == 0 {
+	if add+change+replace+destroy+takeOver+orphan == 0 {
 		return ""
 	}
-	return fmt.Sprintf("+%d ~%d ±%d -%d", add, change, replace, destroy)
+	s := fmt.Sprintf("+%d ~%d ±%d -%d", add, change, replace, destroy)
+	if takeOver > 0 {
+		s += fmt.Sprintf(", %d to take over", takeOver)
+	}
+	if orphan > 0 {
+		s += fmt.Sprintf(", %d left in place", orphan)
+	}
+	return s
 }
 
 // Print writes a run's detail view, or the run itself under -o json|yaml.
@@ -153,6 +165,9 @@ func printRun(p *output.Printer, r *runv1.Run, title string, diffShown bool) err
 			d.Hint(h)
 		}
 	case runv1.Run_STATUS_FAILED:
+		if r.GetApply() == nil {
+			d.Hint("To see why the plan failed, run: admiral run diff " + r.GetId())
+		}
 		d.Hint("To see the agent's output, run: admiral run logs " + r.GetId())
 	}
 	return p.PrintStatus(r, d)

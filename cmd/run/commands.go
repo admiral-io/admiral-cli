@@ -92,16 +92,23 @@ func getRun(ctx context.Context, c runv1.RunAPIClient, id string) (*runv1.Run, e
 
 func newListCmd(opts *client.Options) *cobra.Command {
 	var (
-		env, changeSet string
-		paging         flags.PagingOptions
+		changeSet string
+		paging    flags.PagingOptions
 	)
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List runs, newest first",
-		Example: `  admiral run list --env shop/prod
+		Use:               "list [app/env]",
+		ValidArgsFunction: complete.First(complete.Envs(opts)),
+		Short:             "List runs, newest first",
+		Long: `List runs, newest first: an environment's when one is named, as app/env,
+or every run you can see.`,
+		Example: `  admiral run list checkout/prod
   admiral run list --changeset cs-7f2a1c9d0e3b`,
-		Args: flags.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
+		Args: flags.RangeArgs(0, 1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			env := ""
+			if len(args) == 1 {
+				env = args[0]
+			}
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
 				return err
@@ -141,8 +148,6 @@ func newListCmd(opts *client.Options) *cobra.Command {
 			}, runTable.Render(p, runs...))
 		},
 	}
-	cmd.Flags().StringVar(&env, "env", "", "runs of one environment, as app/env")
-	complete.Flag(cmd, "env", complete.Envs(opts))
 	cmd.Flags().StringVar(&changeSet, "changeset", "", "runs of one changeset")
 	flags.Paging(cmd, &paging)
 	return cmd
@@ -346,59 +351,6 @@ func newDiffCmd(opts *client.Options) *cobra.Command {
 			return nil
 		},
 	}
-}
-
-// WriteDiff writes a plan's diffs resource by resource, as 'run diff'
-// and the changeset verbs that show a plan before acting print them. A
-// delete is one line: the whole object, minus, says nothing more. plan
-// supplies each resource's action; without it every diff is printed whole.
-func WriteDiff(w io.Writer, d *agentv1.PlanDiff, plan *runv1.PlanPhase) {
-	actions := map[string]agentv1.ResourceChange_Action{}
-	removed := map[string]bool{}
-	for _, c := range plan.GetComponents() {
-		all := len(c.GetChanges()) > 0
-		for _, rc := range c.GetChanges() {
-			actions[resourceKey(c.GetComponent(), rc.GetResource())] = rc.GetAction()
-			all = all && rc.GetAction() == agentv1.ResourceChange_ACTION_DESTROY
-		}
-		removed[c.GetComponent()] = all
-	}
-	kept := map[string]bool{}
-	var namespaces []string
-	for _, rd := range d.GetResources() {
-		r := rd.GetResource()
-		if actions[resourceKey(rd.GetComponent(), r)] == agentv1.ResourceChange_ACTION_DESTROY {
-			output.Writef(w, "- %s: %s %s\n", rd.GetComponent(), r.GetApiVersion(), deletedName(r))
-			if ns := r.GetNamespace(); ns != "" && removed[rd.GetComponent()] && !kept[ns] {
-				kept[ns] = true
-				namespaces = append(namespaces, ns)
-			}
-			continue
-		}
-		output.Writef(w, "# %s: %s\n%s\n", rd.GetComponent(), resourceName(r), rd.GetDiff())
-	}
-	for _, ns := range namespaces {
-		output.Writef(w, "The namespace %s stays; Admiral never deletes a namespace.\n", ns)
-	}
-}
-
-func resourceKey(component string, r *agentv1.ResourceRef) string {
-	return component + "\x00" + r.GetApiVersion() + "\x00" + resourceName(r)
-}
-
-func deletedName(r *agentv1.ResourceRef) string {
-	if r.GetNamespace() == "" {
-		return r.GetKind() + " " + r.GetName()
-	}
-	return r.GetKind() + " " + r.GetNamespace() + "/" + r.GetName()
-}
-
-func resourceName(r *agentv1.ResourceRef) string {
-	name := r.GetKind() + "/" + r.GetName()
-	if r.GetNamespace() != "" {
-		name = r.GetNamespace() + "/" + name
-	}
-	return name
 }
 
 func newLogsCmd(opts *client.Options) *cobra.Command {

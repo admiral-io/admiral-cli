@@ -181,7 +181,7 @@ var waitWords = map[agentv1.WaitReason]string{
 	agentv1.WaitReason_WAIT_REASON_AGENT_TOO_OLD:         "waiting: the agent is too old for this job",
 	agentv1.WaitReason_WAIT_REASON_ENVIRONMENT_BUSY:      "waiting: another apply holds the environment",
 	agentv1.WaitReason_WAIT_REASON_AGENT_NOT_ENROLLED:    "waiting: the agent has not enrolled",
-	agentv1.WaitReason_WAIT_REASON_PROFILE_MISSING:       "waiting: the agent has not reported the profile this job needs",
+	agentv1.WaitReason_WAIT_REASON_ENGINE_MISSING:        "waiting: the agent does not have the Terraform or OpenTofu version this job needs",
 	agentv1.WaitReason_WAIT_REASON_COMPONENT_NOT_ALLOWED: "waiting: the agent no longer allows a component of this job",
 }
 

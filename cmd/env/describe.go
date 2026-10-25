@@ -224,10 +224,10 @@ func describeEnv(e *environmentv1.Environment, app *applicationv1.Application, s
 				name = a.AgentId
 			}
 			k := a.GetKubernetes()
-			rows = append(rows, []string{name, a.Id, profile(a.PlanProfile), profile(a.ApplyProfile),
+			rows = append(rows, []string{name, a.Id,
 				k.GetDefaultNamespace(), optionalBool(k.CreateNamespaces), optionalBool(k.Prune)})
 		}
-		b.Table([]string{"Agent", "Assignment", "Plan Profile", "Apply Profile", "Namespace", "Create Namespaces", "Prune"}, rows)
+		b.Table([]string{"Agent", "Assignment", "Namespace", "Create Namespaces", "Prune"}, rows)
 	})
 
 	d.Section("Approval", func(b *output.Block) {
@@ -286,7 +286,7 @@ func describeEnv(e *environmentv1.Environment, app *applicationv1.Application, s
 		}
 		d.Table("Recent Runs", []string{"ID", "Status", "Changeset", "Title", "Created By", "Age"}, rows)
 		if sec.moreRuns {
-			d.Hint(fmt.Sprintf("Showing the %d most recent runs. To list them all, run: admiral run list --env %s/%s",
+			d.Hint(fmt.Sprintf("Showing the %d most recent runs. To list them all, run: admiral run list %s/%s",
 				recentRunsLimit, app.Name, e.Name))
 		}
 	}
@@ -347,13 +347,6 @@ func latestRun(ctx context.Context, c sdkclient.AdmiralClient, changeSetID strin
 		return nil
 	}
 	return r.GetRun()
-}
-
-func profile(p string) string {
-	if p == "" {
-		return "default"
-	}
-	return p
 }
 
 func optionalBool(b *bool) string {

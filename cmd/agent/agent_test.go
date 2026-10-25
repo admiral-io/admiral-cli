@@ -129,7 +129,7 @@ func TestCreatePrintsTheKeyAndTheInstall(t *testing.T) {
 	assert.Equal(t, agentv1.Agent_KIND_KUBERNETES, agents.req.GetAgent().GetKind())
 	assert.Contains(t, out, "Agent "+agentID+" created.")
 	assert.Contains(t, out, "expires "+output.FormatDescribeTime(timestamppb.New(expires))+"):\n"+keyText+"\n")
-	assert.Contains(t, out, "helm install admiral-k8s-agent-dev "+agentChart+" \\\n")
+	assert.Contains(t, out, "helm install admiral-k8s-agent-dev oci://ghcr.io/admiral-io/admiral-helm/admiral-k8s-agent \\\n")
 	assert.Contains(t, out, "kubectl create namespace admiral-system\n")
 	assert.Contains(t, out, "kubectl -n admiral-system create secret generic admiral-k8s-agent-dev-enrollment \\\n    --from-literal=key="+keyText+"\n")
 	assert.Contains(t, out, "--namespace admiral-system \\\n")
@@ -145,12 +145,14 @@ func TestCreatePrintsTheKeyAndTheInstall(t *testing.T) {
 	assert.Contains(t, out, "expires "+output.FormatDescribeTime(timestamppb.New(later)))
 }
 
-func TestCreateInfraHasNoHelmInstall(t *testing.T) {
+// An infra agent installs from its own chart, under a release whose name
+// makes the subject it enrolls with.
+func TestCreateInfraPrintsItsOwnChart(t *testing.T) {
 	out, _ := create(t, agentv1.Agent_KIND_INFRA, time.Now().Add(time.Hour))
 	assert.Contains(t, out, "Agent "+agentID+" created.")
-	assert.Contains(t, out, keyText)
-	assert.Contains(t, out, "infra agent is not covered here yet")
-	assert.NotContains(t, out, "helm")
+	assert.Contains(t, out, "helm install admiral-infra-agent-dev oci://ghcr.io/admiral-io/admiral-helm/admiral-infra-agent \\\n")
+	assert.Contains(t, out, "create secret generic admiral-infra-agent-dev-enrollment \\\n    --from-literal=key="+keyText+"\n")
+	assert.NotContains(t, out, "admiral-k8s-agent")
 }
 
 func describeErr(sas *saClient) (string, error) {

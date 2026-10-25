@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	"go.admiral.io/cli/internal/cmderr"
 	agentv1 "go.admiral.io/sdk/proto/admiral/api/agent/v1"
@@ -59,9 +60,12 @@ func TestLatestPlanRefusesWhatIsNotWaitingOnAPlan(t *testing.T) {
 // the run, then the diff resource by resource.
 func TestShowPlan(t *testing.T) {
 	c := &fakeClient{runs: &runClient{diff: &agentv1.PlanDiff{Resources: []*agentv1.ResourceDiff{{
-		Component: "hello",
-		Resource:  &agentv1.ResourceRef{Kind: "Deployment", Name: "hello", Namespace: "shop-dev"},
-		Diff:      "+ replicas: 1",
+		Component: "hello", Action: agentv1.ResourceChange_ACTION_UPDATE,
+		Resource: &agentv1.ResourceRef{Ref: &agentv1.ResourceRef_Kubernetes{Kubernetes: &agentv1.KubernetesResourceRef{
+			ApiVersion: "apps/v1", Kind: "Deployment", Name: "hello", Namespace: "shop-dev",
+		}}},
+		Before: structpb.NewStructValue(&structpb.Struct{Fields: map[string]*structpb.Value{"replicas": structpb.NewNumberValue(1)}}),
+		After:  structpb.NewStructValue(&structpb.Struct{Fields: map[string]*structpb.Value{"replicas": structpb.NewNumberValue(2)}}),
 	}}}}}
 	var w bytes.Buffer
 	err := showPlan(context.Background(), &w, c,
@@ -69,7 +73,7 @@ func TestShowPlan(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, w.String(), csID+`  "First deploy"`)
 	require.Contains(t, w.String(), "("+runID+")")
-	require.Contains(t, w.String(), "# hello: shop-dev/Deployment/hello\n+ replicas: 1")
+	require.Contains(t, w.String(), "~ hello: apps/v1 Deployment shop-dev/hello (update)\n    replicas: 1 -> 2\n")
 }
 
 // Both verbs check their argument and whether they can ask before any

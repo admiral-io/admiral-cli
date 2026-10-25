@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
@@ -18,6 +19,8 @@ import (
 	"go.admiral.io/cli/internal/resolve"
 	sdkclient "go.admiral.io/sdk/client"
 	agentv1 "go.admiral.io/sdk/proto/admiral/api/agent/v1"
+	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
+	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
 	serviceaccountv1 "go.admiral.io/sdk/proto/admiral/api/serviceaccount/v1"
 )
 
@@ -81,9 +84,90 @@ func newGetCmd(opts *client.Options) *cobra.Command {
 			if !opts.OutputFormat.IsTable() {
 				return nil
 			}
-			return writeServiceAccount(cmd.Context(), p.Out(), c, a)
+			if err := writeServiceAccount(cmd.Context(), p.Out(), c, a); err != nil {
+				return err
+			}
+			return writeGrants(cmd.Context(), p.Out(), c, a)
 		},
 	}
+}
+
+// writeGrants lists who may use the agent, applications and environments by
+// name.
+func writeGrants(ctx context.Context, w io.Writer, c sdkclient.AdmiralClient, a *agentv1.Agent) error {
+	d := output.NewDescribe()
+	resp, err := c.Agent().ListAgentGrants(ctx, &agentv1.ListAgentGrantsRequest{AgentId: a.GetId()})
+	switch {
+	case status.Code(err) == codes.PermissionDenied:
+		d.Unavailable("Granted to", "needs agent:read on its grants")
+	case err != nil:
+		return err
+	default:
+		targets := make([]string, 0, len(resp.GetGrants()))
+		for _, g := range resp.GetGrants() {
+			targets = append(targets, grantName(ctx, c, g))
+		}
+		d.Fields("Granted to", targets)
+	}
+	fmt.Fprintln(w)
+	return d.Render(w)
+}
+
+// grantName is a grant's target as 'agent grant' takes it, with names in
+// place of ids where they can be read.
+func grantName(ctx context.Context, c sdkclient.AdmiralClient, g *agentv1.AgentGrant) string {
+	switch {
+	case g.GetApplicationId() != "":
+		if resp, err := c.Application().GetApplication(ctx, &applicationv1.GetApplicationRequest{ApplicationId: g.GetApplicationId()}); err == nil {
+			return "app:" + resp.GetApplication().GetName()
+		}
+	case g.GetEnvironmentId() != "":
+		env, err := c.Environment().GetEnvironment(ctx, &environmentv1.GetEnvironmentRequest{EnvironmentId: g.GetEnvironmentId()})
+		if err != nil {
+			break
+		}
+		app, err := c.Application().GetApplication(ctx, &applicationv1.GetApplicationRequest{ApplicationId: env.GetEnvironment().GetApplicationId()})
+		if err == nil {
+			return "env:" + app.GetApplication().GetName() + "/" + env.GetEnvironment().GetName()
+		}
+	}
+	return grantTarget(g)
+}
+
+func newUpdateCmd(opts *client.Options) *cobra.Command {
+	var name string
+	cmd := &cobra.Command{
+		Use:   "update <agent>",
+		Short: "Rename an agent",
+		Long: `Rename an agent. Its id, service account, grants and the environments
+assigned it stay as they are, and the installed agent keeps running: it
+signs in by its service account, not its name.`,
+		Example: `  admiral agent update dev --name dev-east`,
+		Args:    flags.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := client.CreateClient(cmd.Context(), opts)
+			if err != nil {
+				return err
+			}
+			defer c.Close() //nolint:errcheck // best-effort cleanup
+			id, err := resolve.Agent(cmd.Context(), c.Agent(), args[0])
+			if err != nil {
+				return err
+			}
+			resp, err := c.Agent().UpdateAgent(cmd.Context(), &agentv1.UpdateAgentRequest{
+				Agent:      &agentv1.Agent{Id: id, Name: name},
+				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"name"}},
+			})
+			if err != nil {
+				return err
+			}
+			p := output.NewPrinter(cmd, opts.OutputFormat)
+			return p.PrintResource(resp, agentTable.Render(p, resp.GetAgent()))
+		},
+	}
+	cmd.Flags().StringVar(&name, "name", "", "the agent's new name")
+	_ = cmd.MarkFlagRequired("name")
+	return cmd
 }
 
 // writeServiceAccount follows the agent to its service account, which is
@@ -119,9 +203,8 @@ var agentKinds = map[string]agentv1.Agent_Kind{
 
 func newCreateCmd(opts *client.Options) *cobra.Command {
 	var (
-		kind     string
-		grants   []string
-		profiles []string
+		kind   string
+		grants []string
 	)
 	cmd := &cobra.Command{
 		Use:   "create <name>",
@@ -131,15 +214,15 @@ returns a single-use enrollment key. Install the agent with the key where it
 runs; on its first start it enrolls, and Admiral records the issuer and
 subject it signs in with from then on.
 
-A kubernetes agent is installed with Helm into its own namespace,
-admiral-system, never one it deploys into. The command prints the install.
+The agent is installed with Helm into its own namespace, admiral-system,
+never one it deploys into. The command prints the install.
 
 The tenant's first agent is granted to the whole organization unless
 --grant says otherwise; later ones serve nobody until granted.`,
 		Example: `  admiral agent create dev --kind kubernetes
 
-  # Granted to one application only
-  admiral agent create prod --kind kubernetes --grant app:shop`,
+  # Granted to one application only, the checkout application
+  admiral agent create prod --kind kubernetes --grant app:checkout`,
 		Args: flags.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := client.CreateClient(cmd.Context(), opts)
@@ -149,7 +232,7 @@ The tenant's first agent is granted to the whole organization unless
 			defer c.Close() //nolint:errcheck // best-effort cleanup
 			req := &agentv1.CreateAgentRequest{Agent: &agentv1.Agent{Name: args[0], Kind: agentKinds[kind]}}
 			for _, g := range grants {
-				grant, err := parseGrant(cmd, c, g, profiles)
+				grant, err := parseGrant(cmd, c, g)
 				if err != nil {
 					return err
 				}
@@ -161,7 +244,6 @@ The tenant's first agent is granted to the whole organization unless
 	flags.Enum(cmd, &kind, "kind", "", "what the agent deploys", "kubernetes", "infra")
 	cmd.Flags().StringArrayVar(&grants, "grant", nil, "grant use to org, app:<name>, env:<app/env> or group:<id> (repeatable)")
 	complete.Flag(cmd, "grant", complete.Scopes(opts))
-	cmd.Flags().StringArrayVar(&profiles, "profile", nil, "profiles the grants cover (repeatable; none covers all)")
 	_ = cmd.MarkFlagRequired("kind")
 	return cmd
 }
@@ -182,26 +264,29 @@ func createAgent(cmd *cobra.Command, c sdkclient.AdmiralClient, format output.Fo
 	return nil
 }
 
-// agentChart is the chart a kubernetes agent installs from. The OCI
-// reference needs no helm repo add.
-const agentChart = "oci://ghcr.io/admiral-io/admiral-helm/admiral-k8s-agent"
+// agentCharts are the charts each kind of agent installs from, named for
+// the agent's image. The OCI reference needs no helm repo add.
+var agentCharts = map[agentv1.Agent_Kind]string{
+	agentv1.Agent_KIND_KUBERNETES: "admiral-k8s-agent",
+	agentv1.Agent_KIND_INFRA:      "admiral-infra-agent",
+}
 
 // writeEnrollment prints the agent's id, its key with the expiry the server
-// set, and for a kubernetes agent the Helm install that enrolls it.
+// set, and the Helm install that enrolls it.
 func writeEnrollment(w io.Writer, a *agentv1.Agent, key *agentv1.EnrollmentKey) {
 	fmt.Fprintf(w, "\nAgent %s created.\n", a.GetId())
 	fmt.Fprintf(w, "\nEnrollment key (single use, expires %s):\n%s\n",
 		output.FormatDescribeTime(key.GetExpiresAt()), key.GetSecret())
-	if a.GetKind() != agentv1.Agent_KIND_KUBERNETES {
-		fmt.Fprintln(w, "\nInstalling an infra agent is not covered here yet. Give it this key on its first start.")
+	chart, ok := agentCharts[a.GetKind()]
+	if !ok {
 		return
 	}
 	// The key goes in a Secret, not a --set, so it never lands in the
 	// release's stored values.
 	// The release name holds the chart's name, so the chart uses it as is
 	// rather than appending its own: the Kubernetes service account, and so
-	// the subject the agent enrolls with, is admiral-k8s-agent-<name>.
-	release := "admiral-k8s-agent-" + a.GetName()
+	// the subject the agent enrolls with, is <chart>-<name>.
+	release := chart + "-" + a.GetName()
 	secret := release + "-enrollment"
 	fmt.Fprintf(w, `
 Install it where it runs, before the key expires:
@@ -213,7 +298,7 @@ Install it where it runs, before the key expires:
     --namespace admiral-system \
     --set admiral.serviceAccountId=%s \
     --set enrollment.existingSecret=%s
-`, secret, key.GetSecret(), release, agentChart, a.GetServiceAccountId(), secret)
+`, secret, key.GetSecret(), release, "oci://ghcr.io/admiral-io/admiral-helm/"+chart, a.GetServiceAccountId(), secret)
 }
 
 func newDeleteCmd(opts *client.Options) *cobra.Command {
@@ -271,15 +356,21 @@ account, say). It replaces any key issued before.`,
 }
 
 func newGrantCmd(opts *client.Options) *cobra.Command {
-	var profiles []string
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:               "grant <agent> <org|app:NAME|env:APP/ENV|group:ID>",
 		ValidArgsFunction: complete.Positions(nil, complete.Scopes(opts)),
 		Short:             "Let the organization, an application, an environment or a team use an agent",
-		Long: `Grant use of an agent. Granting the same target again replaces its
-profiles. Without --profile the grant covers every profile the agent has.`,
-		Example: `  admiral agent grant kind org
-  admiral agent grant prod app:shop --profile read --profile edit`,
+		Long: `Grant use of an agent: every environment of the target may be assigned
+it. The target is org, an application (app:NAME), one environment
+(env:APP/ENV) or a group (group:ID). 'admiral agent get' lists the grants.`,
+		Example: `  # Every environment in the organization may use the agent named dev
+  admiral agent grant dev org
+
+  # Only the checkout application's environments may use the agent named prod
+  admiral agent grant prod app:checkout
+
+  # Only checkout's staging environment
+  admiral agent grant prod env:checkout/staging`,
 		Args: flags.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := client.CreateClient(cmd.Context(), opts)
@@ -291,7 +382,7 @@ profiles. Without --profile the grant covers every profile the agent has.`,
 			if err != nil {
 				return err
 			}
-			g, err := parseGrant(cmd, c, args[1], profiles)
+			g, err := parseGrant(cmd, c, args[1])
 			if err != nil {
 				return err
 			}
@@ -302,47 +393,6 @@ profiles. Without --profile the grant covers every profile the agent has.`,
 			return nil
 		},
 	}
-	cmd.Flags().StringArrayVar(&profiles, "profile", nil, "profiles the grant covers (repeatable; none covers all)")
-	return cmd
-}
-
-func newGrantsCmd(opts *client.Options) *cobra.Command {
-	return &cobra.Command{
-		Use:   "grants <agent>",
-		Short: "List who may use an agent",
-		Args:  flags.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := client.CreateClient(cmd.Context(), opts)
-			if err != nil {
-				return err
-			}
-			defer c.Close() //nolint:errcheck // best-effort cleanup
-			id, err := resolve.Agent(cmd.Context(), c.Agent(), args[0])
-			if err != nil {
-				return err
-			}
-			resp, err := c.Agent().ListAgentGrants(cmd.Context(), &agentv1.ListAgentGrantsRequest{AgentId: id})
-			if err != nil {
-				return err
-			}
-			p := output.NewPrinter(cmd, opts.OutputFormat)
-			grants := resp.GetGrants()
-			return p.PrintList(output.List{
-				Kind: "grants", Items: output.Messages(grants),
-				Name: func(i int) string { return grantTarget(grants[i]) },
-			}, grantTable.Render(p, grants...))
-		},
-	}
-}
-
-var grantTable = output.Table[*agentv1.AgentGrant]{
-	{Header: "TARGET", Cell: grantTarget},
-	{Header: "PROFILES", Cell: func(g *agentv1.AgentGrant) string {
-		if len(g.GetProfiles()) == 0 {
-			return "all"
-		}
-		return strings.Join(g.GetProfiles(), ",")
-	}},
 }
 
 func newRevokeCmd(opts *client.Options) *cobra.Command {
@@ -350,9 +400,9 @@ func newRevokeCmd(opts *client.Options) *cobra.Command {
 		Use:               "revoke <agent> <org|app:NAME|env:APP/ENV|group:ID>",
 		ValidArgsFunction: complete.Positions(nil, complete.Scopes(opts)),
 		Short:             "Withdraw a grant",
-		Long: `Withdraw the grant to a target, whatever its profiles. Environments that
-were assigned the agent under it keep the assignment, and their new jobs
-wait until it is granted again or they change it.`,
+		Long: `Withdraw the grant to a target. Environments that were assigned the agent
+under it keep the assignment, and their new jobs wait until it is granted
+again or they change it.`,
 		Args: flags.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := client.CreateClient(cmd.Context(), opts)
@@ -364,7 +414,7 @@ wait until it is granted again or they change it.`,
 			if err != nil {
 				return err
 			}
-			g, err := parseGrant(cmd, c, args[1], nil)
+			g, err := parseGrant(cmd, c, args[1])
 			if err != nil {
 				return err
 			}
@@ -379,8 +429,8 @@ wait until it is granted again or they change it.`,
 
 // parseGrant reads org, app:<name or id>, env:<app/env or id> or
 // group:<grp- id>.
-func parseGrant(cmd *cobra.Command, c sdkclient.AdmiralClient, target string, profiles []string) (*agentv1.AgentGrant, error) {
-	g := &agentv1.AgentGrant{Profiles: profiles}
+func parseGrant(cmd *cobra.Command, c sdkclient.AdmiralClient, target string) (*agentv1.AgentGrant, error) {
+	g := &agentv1.AgentGrant{}
 	kind, ref, _ := strings.Cut(target, ":")
 	ctx := cmd.Context()
 	switch kind {
