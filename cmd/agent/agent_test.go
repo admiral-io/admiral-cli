@@ -197,3 +197,12 @@ func TestGetShowsEnrollment(t *testing.T) {
 	assert.Regexp(t, `Subject:\s+`+subject, out)
 	assert.Regexp(t, `Issuer:\s+iss-9c2k4m7x1q0p`, out)
 }
+
+// An offline agent says how long it has been gone; one that never reported
+// says so rather than showing nothing.
+func TestLastSeen(t *testing.T) {
+	assert.Equal(t, "never", lastSeen(&agentv1.Agent{}))
+	assert.Equal(t, "never", lastSeen(&agentv1.Agent{Report: &agentv1.AgentReport{AgentVersion: "0.4.2"}}))
+	a := &agentv1.Agent{Report: &agentv1.AgentReport{ReportedAt: timestamppb.New(time.Now().Add(-3 * time.Hour))}}
+	assert.Equal(t, "3h ago", lastSeen(a))
+}
