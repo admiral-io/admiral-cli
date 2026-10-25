@@ -357,6 +357,9 @@ func TestDescribeShowsTerraformSettings(t *testing.T) {
 	}
 	require.Regexp(t, `Backend:\s+hosted`, render(&environmentv1.Environment{Name: "prod"}), "no backend means hosted state")
 
+	infra := &environmentv1.Environment{Name: "prod", Agents: []*environmentv1.AgentAssignment{{AgentId: "agt-cccccccccccc", Id: "asg-222222222222"}}}
+	require.Regexp(t, `agt-cccccccccccc\s+asg-222222222222\s+<none>`, render(infra), "an infra agent has no Kubernetes settings")
+
 	e := &environmentv1.Environment{Name: "prod",
 		InfraEngine: &registryv1.InfraEngineVersion{Engine: registryv1.InfraEngine_INFRA_ENGINE_TERRAFORM, Version: "1.9.8"},
 	}

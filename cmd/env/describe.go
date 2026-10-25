@@ -223,7 +223,12 @@ func describeEnv(e *environmentv1.Environment, app *applicationv1.Application, s
 			if name == "" {
 				name = a.AgentId
 			}
+			// An infra agent's assignment has no Kubernetes settings.
 			k := a.GetKubernetes()
+			if k == nil {
+				rows = append(rows, []string{name, a.Id, "", "", ""})
+				continue
+			}
 			rows = append(rows, []string{name, a.Id,
 				k.GetDefaultNamespace(), optionalBool(k.CreateNamespaces), optionalBool(k.Prune)})
 		}
