@@ -23,13 +23,15 @@ func newUpdateCmd(opts *client.Options) *cobra.Command {
 		description string
 		labelStrs   []string
 		target      targetFlags
+		infra       infraFlags
 	)
 
 	cmd := &cobra.Command{
 		Use:   "update <name>",
 		Short: "Update an environment",
 		Long: `Update an environment's mutable fields: name, description, labels, the
-agents it deploys through, its namespace and the approvals an apply needs.
+agents it deploys through, its namespace, the approvals an apply needs, and
+for Terraform components the engine version and where state is kept.
 
 --agent replaces the list of agents. An agent that stays keeps its settings;
 one that is dropped stops serving the environment.`,
@@ -53,6 +55,10 @@ one that is dropped stops serving the environment.`,
 
   # Applies need one approval
   admiral env update billing/prod --approvals 1
+
+  # Run Terraform components on OpenTofu 1.10.6, with state in S3
+  admiral env update network/prod --engine opentofu@1.10.6 \
+    --backend s3 --backend-config bucket=acme-tfstate --backend-config region=us-east-1
 
   # Update by ID
   admiral env update env-3k9x2m7qpl0a --description "..."`,
@@ -78,8 +84,8 @@ one that is dropped stops serving the environment.`,
 				return err
 			}
 			targetChanged := cmd.Flags().Changed("agent") || cmd.Flags().Changed("namespace") || cmd.Flags().Changed("approvals")
-			if len(paths) == 0 && !targetChanged {
-				return cmderr.Usage("at least one of --name, --description, --label, --agent, --namespace or --approvals must be specified")
+			if len(paths) == 0 && !targetChanged && !infra.changed(cmd) {
+				return cmderr.Usage("at least one of --name, --description, --label, --agent, --namespace, --approvals, --engine or --backend must be specified")
 			}
 
 			c, err := client.CreateClient(cmd.Context(), opts)
@@ -119,6 +125,11 @@ one that is dropped stops serving the environment.`,
 				return err
 			}
 			paths = append(paths, targetPaths...)
+			infraPaths, err := infra.apply(cmd, e)
+			if err != nil {
+				return err
+			}
+			paths = append(paths, infraPaths...)
 			resp, err := c.Environment().UpdateEnvironment(cmd.Context(), &environmentv1.UpdateEnvironmentRequest{
 				Environment: e,
 				UpdateMask:  &fieldmaskpb.FieldMask{Paths: paths},
@@ -141,6 +152,7 @@ one that is dropped stops serving the environment.`,
 	flags.Label(cmd, &labelStrs, "patch labels: key=value to set, key- to remove (repeatable)")
 	target.register(cmd, "agent to deploy through, by name or agt- id (repeatable; replaces the list)",
 		"the Kubernetes namespace components render into unless they name one (needs exactly one agent)")
+	infra.register(cmd)
 
 	return cmd
 }
@@ -159,6 +171,8 @@ func settingChanges(before, after *environmentv1.Environment) []string {
 	change("approvals", approvals(before), approvals(after))
 	change("agents", agentIDs(before), agentIDs(after))
 	change("namespace", namespaces(before), namespaces(after))
+	change("engine", engineName(before.GetInfraEngine()), engineName(after.GetInfraEngine()))
+	change("backend", backendName(before.GetInfraBackend()), backendName(after.GetInfraBackend()))
 	return out
 }
 
