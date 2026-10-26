@@ -34,7 +34,8 @@ no backend set. Terraform reads and writes the current one; these commands
 list the versions and download one, for a rollback with
 'terraform state push -force' or to see what changed.
 
-A component is named by its environment (app/env) and its name.`,
+'versions' names a component by its environment (app/env) and its name;
+'download' takes a version id from it.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}

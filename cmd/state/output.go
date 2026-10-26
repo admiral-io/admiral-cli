@@ -14,7 +14,7 @@ var versionTable = output.Table[*client.StateVersion]{
 	{Header: "WRITER", Cell: writer},
 	{Header: "SIZE", Cell: func(v *client.StateVersion) string { return size(v.SizeBytes) }},
 	{Header: "FORCED", Cell: func(v *client.StateVersion) string {
-		if v.Force {
+		if v.Forced {
 			return "yes"
 		}
 		return ""
@@ -23,16 +23,16 @@ var versionTable = output.Table[*client.StateVersion]{
 	{Header: "ID", Wide: true, Cell: func(v *client.StateVersion) string { return v.ID }},
 }
 
-// writer names who wrote a version: a person's subject, or a job and its
-// attempt.
+// writer names who wrote a version: a person's or service account's id, or
+// a job and its attempt.
 func writer(v *client.StateVersion) string {
 	switch {
-	case v.Writer.Person != nil:
-		return v.Writer.Person.Subject
-	case v.Writer.Job != nil:
-		return v.Writer.Job.JobID + " (attempt " + strconv.Itoa(int(v.Writer.Job.Attempt)) + ")"
+	case v.CreatedBy.ID == "":
+		return output.None
+	case v.CreatedBy.Type == "jobs":
+		return v.CreatedBy.ID + " (attempt " + strconv.Itoa(int(v.CreatedBy.Attempt)) + ")"
 	}
-	return output.None
+	return v.CreatedBy.ID
 }
 
 // size is a state's size in the largest unit that keeps it at least 1.
