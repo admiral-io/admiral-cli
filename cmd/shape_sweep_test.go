@@ -102,7 +102,7 @@ func sweepArgs(files map[string]string) map[string][]string {
 		"apikey create":                  {"apikey", "create", "x", "--scope", "state:write"},
 		"apikey list":                    {"apikey", "list"},
 		"apikey revoke":                  {"apikey", "revoke", "x", "--yes"},
-		"state download":                 {"state", "download", "x/x", "x", "stv-1"},
+		"state download":                 {"state", "download", "stv-1"},
 		"state versions":                 {"state", "versions", "x/x", "x"},
 		"credential create basic-auth":   {"credential", "create", "basic-auth", "x", "--username", "u", "--password-stdin"},
 		"credential create bearer-token": {"credential", "create", "bearer-token", "x", "--token-stdin", "--allowed-host", "example.com"},
@@ -228,8 +228,8 @@ func stateServer(t *testing.T) string {
 			_, _ = io.WriteString(w, `{"version":4,"serial":3}`)
 			return
 		}
-		_, _ = io.WriteString(w, `{"versions":[{"id":"stv-1","serial":3,"writer":{"person":{"kind":"user","subject":"usr-1"}},"size_bytes":2048,"created_at":"2026-10-25T12:00:00Z"},`+
-			`{"id":"stv-0","serial":2,"writer":{"job":{"job_id":"job-1","attempt":1}},"size_bytes":10,"force":true,"created_at":"2026-10-24T12:00:00Z"}],"next_page_token":""}`)
+		_, _ = io.WriteString(w, `{"data":[{"id":"stv-1","type":"state-versions","attributes":{"serial":3,"size":2048,"created-at":"2026-10-25T12:00:00Z","status":"finalized"},"relationships":{"created-by":{"data":{"type":"users","id":"usr-1"}}}},`+
+			`{"id":"stv-0","type":"state-versions","attributes":{"serial":2,"size":10,"forced":true,"created-at":"2026-10-24T12:00:00Z","status":"finalized"},"relationships":{"created-by":{"data":{"type":"jobs","id":"job-1"},"meta":{"attempt":1}}}}],"meta":{"pagination":{"current-page":1,"next-page":null}}}`)
 	}))
 	t.Cleanup(srv.Close)
 	return strings.TrimPrefix(srv.URL, "http://")

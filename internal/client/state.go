@@ -32,31 +32,55 @@ type StateClient struct {
 	session   bool
 }
 
-// StateVersion is one stored version of a state.
+// StateVersion is one stored version of a state, from the HCP Terraform
+// API's state-versions object.
 type StateVersion struct {
-	ID        string      `json:"id"`
-	Serial    int64       `json:"serial"`
-	Writer    StateWriter `json:"writer"`
-	SizeBytes int64       `json:"size_bytes"`
-	Force     bool        `json:"force"`
-	CreatedAt time.Time   `json:"created_at"`
+	ID        string
+	Serial    int64
+	SizeBytes int64
+	Forced    bool
+	CreatedAt time.Time
+	// CreatedBy is who wrote it: a user, a service account, or a job's
+	// attempt.
+	CreatedBy StateWriter
 }
 
-// StateWriter is a person or a job's attempt.
+// StateWriter is the created-by relationship: its type ("users",
+// "service-accounts" or "jobs"), its id, and a job's attempt.
 type StateWriter struct {
-	Person *struct {
-		Kind    string `json:"kind"`
-		Subject string `json:"subject"`
-	} `json:"person,omitempty"`
-	Job *struct {
-		JobID   string `json:"job_id"`
-		Attempt int32  `json:"attempt"`
-	} `json:"job,omitempty"`
+	Type    string
+	ID      string
+	Attempt int32
 }
 
-type stateVersionPage struct {
-	Versions      []*StateVersion `json:"versions"`
-	NextPageToken string          `json:"next_page_token"`
+type stateVersionDoc struct {
+	ID         string `json:"id"`
+	Attributes struct {
+		Serial    int64     `json:"serial"`
+		Size      int64     `json:"size"`
+		Forced    bool      `json:"forced"`
+		CreatedAt time.Time `json:"created-at"`
+	} `json:"attributes"`
+	Relationships struct {
+		CreatedBy struct {
+			Data struct {
+				Type string `json:"type"`
+				ID   string `json:"id"`
+			} `json:"data"`
+			Meta struct {
+				Attempt int32 `json:"attempt"`
+			} `json:"meta"`
+		} `json:"created-by"`
+	} `json:"relationships"`
+}
+
+type stateVersionList struct {
+	Data []stateVersionDoc `json:"data"`
+	Meta struct {
+		Pagination struct {
+			NextPage *int `json:"next-page"`
+		} `json:"pagination"`
+	} `json:"meta"`
 }
 
 // NewStateClient resolves the credential the way CreateClient does.
@@ -74,8 +98,10 @@ func NewStateClient(ctx context.Context, opts *Options) (*StateClient, error) {
 		timeout = DefaultTimeout
 	}
 	return &StateClient{
-		base:      base,
-		http:      &http.Client{Timeout: timeout, Transport: &http.Transport{TLSClientConfig: modeFor(opts).tlsConfig()}},
+		base: base,
+		http: &http.Client{Timeout: timeout, Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment, TLSClientConfig: modeFor(opts).tlsConfig(),
+		}},
 		configDir: opts.ConfigDir,
 		token:     cred.Token,
 		session:   cred.Source == credentials.SourceSession,
@@ -103,34 +129,49 @@ func StateBaseURL(opts *Options) (string, error) {
 	return scheme + "://state." + rest, nil
 }
 
-func workspacePath(org, workspace string) string {
-	return "/v1/organizations/" + url.PathEscape(org) + "/workspaces/" + url.PathEscape(workspace)
-}
-
-// ListStateVersions is one page of a workspace's versions, newest first.
+// ListStateVersions is one page of a workspace's finalized versions, newest
+// first, through the documented state-versions list. pageToken is the page
+// number the previous call returned; next is "" on the last page.
 func (c *StateClient) ListStateVersions(ctx context.Context, org, workspace string, pageSize int32, pageToken string) ([]*StateVersion, string, error) {
 	q := url.Values{}
+	q.Set("filter[organization][name]", org)
+	q.Set("filter[workspace][name]", workspace)
 	if pageSize > 0 {
-		q.Set("page_size", strconv.Itoa(int(pageSize)))
+		q.Set("page[size]", strconv.Itoa(int(pageSize)))
 	}
 	if pageToken != "" {
-		q.Set("page_token", pageToken)
+		q.Set("page[number]", pageToken)
 	}
-	resp, err := c.get(ctx, workspacePath(org, workspace)+"/state-versions?"+q.Encode())
+	resp, err := c.get(ctx, "/api/v2/state-versions?"+q.Encode())
 	if err != nil {
 		return nil, "", err
 	}
 	defer resp.Body.Close() //nolint:errcheck
-	var page stateVersionPage
-	if err := json.NewDecoder(resp.Body).Decode(&page); err != nil {
+	var list stateVersionList
+	if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
 		return nil, "", fmt.Errorf("reading state versions: %w", err)
 	}
-	return page.Versions, page.NextPageToken, nil
+	out := make([]*StateVersion, len(list.Data))
+	for i, d := range list.Data {
+		out[i] = &StateVersion{
+			ID: d.ID, Serial: d.Attributes.Serial, SizeBytes: d.Attributes.Size,
+			Forced: d.Attributes.Forced, CreatedAt: d.Attributes.CreatedAt,
+			CreatedBy: StateWriter{
+				Type: d.Relationships.CreatedBy.Data.Type, ID: d.Relationships.CreatedBy.Data.ID,
+				Attempt: d.Relationships.CreatedBy.Meta.Attempt,
+			},
+		}
+	}
+	next := ""
+	if n := list.Meta.Pagination.NextPage; n != nil {
+		next = strconv.Itoa(*n)
+	}
+	return out, next, nil
 }
 
-// DownloadStateVersion is the version's raw state. The caller closes it.
-func (c *StateClient) DownloadStateVersion(ctx context.Context, org, workspace, versionID string) (io.ReadCloser, error) {
-	resp, err := c.get(ctx, workspacePath(org, workspace)+"/state-versions/"+url.PathEscape(versionID)+"/download")
+// DownloadStateVersion is a version's raw state. The caller closes it.
+func (c *StateClient) DownloadStateVersion(ctx context.Context, versionID string) (io.ReadCloser, error) {
+	resp, err := c.get(ctx, "/api/v2/state-versions/"+url.PathEscape(versionID)+"/download")
 	if err != nil {
 		return nil, err
 	}

@@ -10,7 +10,6 @@ import (
 
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
-	"go.admiral.io/cli/internal/complete"
 	"go.admiral.io/cli/internal/flags"
 )
 
@@ -20,33 +19,23 @@ func newDownloadCmd(opts *client.Options) *cobra.Command {
 		force bool
 	)
 	cmd := &cobra.Command{
-		Use:   "download <app/env> <component> <version-id>",
+		Use:   "download <version-id>",
 		Short: "Download one state version",
 		Long: `Download one version of a component's state, to stdout or to a file.
 
 State can hold secrets: a file is written readable by you alone, and an
 existing file is kept unless --force.`,
-		Example: `  admiral state download shop/prod network stv-3k9x2m1qa8z0 -o network.tfstate
+		Example: `  admiral state download stv-3k9x2m1qa8z0 -f network.tfstate
 
   # Roll back: push the earlier version over the current one
   terraform state push -force network.tfstate`,
-		Args:              flags.ExactArgs(3),
-		ValidArgsFunction: complete.Positions(complete.Envs(opts), complete.ComponentsOf(opts, false)),
+		Args: flags.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			c, err := client.CreateClient(cmd.Context(), opts)
-			if err != nil {
-				return err
-			}
-			defer c.Close() //nolint:errcheck
-			org, ws, err := workspace(cmd.Context(), c, cmd, args[0], args[1])
-			if err != nil {
-				return err
-			}
 			sc, err := client.NewStateClient(cmd.Context(), opts)
 			if err != nil {
 				return err
 			}
-			body, err := sc.DownloadStateVersion(cmd.Context(), org, ws, args[2])
+			body, err := sc.DownloadStateVersion(cmd.Context(), args[0])
 			if err != nil {
 				return err
 			}

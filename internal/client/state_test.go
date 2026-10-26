@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -50,23 +51,29 @@ func stateClientFor(t *testing.T, h http.HandlerFunc) *StateClient {
 }
 
 // admiral-state takes every credential as Bearer, an API key included, and
-// the workspace is addressed the way a cloud block names it.
-func TestListStateVersionsSendsTheKeyAsBearer(t *testing.T) {
-	var gotAuth, gotPath, gotQuery string
+// the history is the documented state-versions list.
+func TestListStateVersionsReadsTheDocumentedList(t *testing.T) {
+	var gotAuth, gotPath string
+	var gotQuery url.Values
 	c := stateClientFor(t, func(w http.ResponseWriter, r *http.Request) {
-		gotAuth, gotPath, gotQuery = r.Header.Get("Authorization"), r.URL.EscapedPath(), r.URL.RawQuery
-		_, _ = io.WriteString(w, `{"versions":[{"id":"stv-1","serial":7,"writer":{"job":{"job_id":"job-1","attempt":2}},"size_bytes":10}],"next_page_token":"n"}`)
+		gotAuth, gotPath, gotQuery = r.Header.Get("Authorization"), r.URL.Path, r.URL.Query()
+		_, _ = io.WriteString(w, `{"data":[{"id":"stv-1","type":"state-versions","attributes":{"serial":7,"size":10,"forced":true},`+
+			`"relationships":{"created-by":{"data":{"type":"jobs","id":"job-1"},"meta":{"attempt":2}}}}],"meta":{"pagination":{"next-page":3}}}`)
 	})
 
-	versions, next, err := c.ListStateVersions(context.Background(), "acme", "shop_prod_net", 50, "p")
+	versions, next, err := c.ListStateVersions(context.Background(), "acme", "shop_prod_net", 50, "2")
 	require.NoError(t, err)
 	assert.Equal(t, "Bearer admp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopq1ZqpkG", gotAuth)
-	assert.Equal(t, "/v1/organizations/acme/workspaces/shop_prod_net/state-versions", gotPath)
-	assert.Equal(t, "page_size=50&page_token=p", gotQuery)
+	assert.Equal(t, "/api/v2/state-versions", gotPath)
+	assert.Equal(t, "acme", gotQuery.Get("filter[organization][name]"))
+	assert.Equal(t, "shop_prod_net", gotQuery.Get("filter[workspace][name]"))
+	assert.Equal(t, "50", gotQuery.Get("page[size]"))
+	assert.Equal(t, "2", gotQuery.Get("page[number]"))
 	require.Len(t, versions, 1)
 	assert.Equal(t, int64(7), versions[0].Serial)
-	assert.Equal(t, "job-1", versions[0].Writer.Job.JobID)
-	assert.Equal(t, "n", next)
+	assert.True(t, versions[0].Forced)
+	assert.Equal(t, StateWriter{Type: "jobs", ID: "job-1", Attempt: 2}, versions[0].CreatedBy)
+	assert.Equal(t, "3", next, "the next page number is the next token")
 }
 
 func TestAStateErrorCarriesItsDetail(t *testing.T) {
@@ -74,7 +81,7 @@ func TestAStateErrorCarriesItsDetail(t *testing.T) {
 		w.WriteHeader(http.StatusNotFound)
 		_, _ = io.WriteString(w, `{"errors":[{"status":"404","title":"not found","detail":"no hosted state by that name"}]}`)
 	})
-	_, err := c.DownloadStateVersion(context.Background(), "acme", "shop_prod_net", "stv-1")
+	_, err := c.DownloadStateVersion(context.Background(), "stv-1")
 	assert.True(t, errors.Is(err, ErrStateNotFound))
 	assert.ErrorContains(t, err, "no hosted state by that name")
 }
