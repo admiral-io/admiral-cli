@@ -95,7 +95,7 @@ func sweepArgs(files map[string]string) map[string][]string {
 		"component version get":  {"component", "version", "get", "x:v1"},
 		"component version list": {"component", "version", "list", "x"},
 
-		"apikey create":                  {"apikey", "create", "x", "--scope", "app:read"},
+		"apikey create":                  {"apikey", "create", "x", "--scope", "state:write"},
 		"apikey list":                    {"apikey", "list"},
 		"apikey revoke":                  {"apikey", "revoke", "x", "--yes"},
 		"credential create basic-auth":   {"credential", "create", "basic-auth", "x", "--username", "u", "--password-stdin"},
