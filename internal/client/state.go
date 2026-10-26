@@ -35,22 +35,22 @@ type StateClient struct {
 // StateVersion is one stored version of a state, from the HCP Terraform
 // API's state-versions object.
 type StateVersion struct {
-	ID        string
-	Serial    int64
-	SizeBytes int64
-	Forced    bool
-	CreatedAt time.Time
+	ID        string    `json:"id"`
+	Serial    int64     `json:"serial"`
+	SizeBytes int64     `json:"size_bytes"`
+	Forced    bool      `json:"forced"`
+	CreatedAt time.Time `json:"created_at"`
 	// CreatedBy is who wrote it: a user, a service account, or a job's
 	// attempt.
-	CreatedBy StateWriter
+	CreatedBy StateWriter `json:"created_by"`
 }
 
 // StateWriter is the created-by relationship: its type ("users",
 // "service-accounts" or "jobs"), its id, and a job's attempt.
 type StateWriter struct {
-	Type    string
-	ID      string
-	Attempt int32
+	Type    string `json:"type"`
+	ID      string `json:"id"`
+	Attempt int32  `json:"attempt,omitempty"`
 }
 
 type stateVersionDoc struct {
