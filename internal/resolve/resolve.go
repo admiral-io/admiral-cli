@@ -147,7 +147,7 @@ func Credential(ctx context.Context, c credentialv1.CredentialAPIClient, nameOrI
 
 // PersonalAccessToken resolves a personal API key name or ID.
 func PersonalAccessToken(ctx context.Context, c apikeyv1.ApiKeyAPIClient, nameOrID string) (string, error) {
-	return byName(ctx, "API key", nameOrID, "", "auth key list", "",
+	return byName(ctx, "API key", nameOrID, "", "apikey list", "",
 		func(ctx context.Context, f string) ([]*apikeyv1.ApiKey, error) {
 			resp, err := c.ListApiKeys(ctx, &apikeyv1.ListApiKeysRequest{Filter: f})
 			if err != nil {

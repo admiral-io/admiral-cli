@@ -9,7 +9,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
 	go.admiral.io/bundle v1.1.0
-	go.admiral.io/sdk v1.44.0
+	go.admiral.io/sdk v1.45.0
 	golang.org/x/oauth2 v0.37.0
 	golang.org/x/sync v0.24.0
 	golang.org/x/sys v0.49.0

@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	agentcmd "go.admiral.io/cli/cmd/agent"
+	apikeycmd "go.admiral.io/cli/cmd/apikey"
 	appcmd "go.admiral.io/cli/cmd/app"
 	authcmd "go.admiral.io/cli/cmd/auth"
 	changesetcmd "go.admiral.io/cli/cmd/changeset"
@@ -22,6 +23,7 @@ import (
 	credentialcmd "go.admiral.io/cli/cmd/credential"
 	envcmd "go.admiral.io/cli/cmd/env"
 	runcmd "go.admiral.io/cli/cmd/run"
+	statecmd "go.admiral.io/cli/cmd/state"
 	internalauth "go.admiral.io/cli/internal/auth"
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
@@ -262,8 +264,10 @@ Documentation: https://admiral.io/docs`,
 		runcmd.NewRunCmd(&clientOpts).Cmd,
 		componentcmd.NewComponentCmd(&clientOpts).Cmd,
 		credentialcmd.NewCredentialCmd(&clientOpts).Cmd,
+		statecmd.NewStateCmd(&clientOpts).Cmd,
 		agentcmd.NewAgentCmd(&clientOpts).Cmd,
 		authcmd.NewAuthCmd(&clientOpts).Cmd,
+		apikeycmd.NewAPIKeyCmd(&clientOpts).Cmd,
 		configcmd.NewConfigCmd(&clientOpts).Cmd,
 		newCompletionCmd(),
 		newVersionCmd(ver),
