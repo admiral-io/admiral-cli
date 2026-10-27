@@ -46,6 +46,15 @@ var sweepOffline = map[string]string{
 	"version":      "local only",
 }
 
+// sweepDocuments are the commands whose table output is a document in its
+// own format, not a view, so the blank-line rule does not apply.
+var sweepDocuments = map[string]string{
+	"changeset values": "prints a YAML document",
+	"env values":       "prints a YAML document",
+	"state download":   "prints the state file",
+	"run logs":         "prints the agent's transcript",
+}
+
 // sweepArgs is one invocation of each command that reaches the API, with
 // arguments it accepts. files holds paths to fixtures it reads.
 func sweepArgs(files map[string]string) map[string][]string {
@@ -272,6 +281,13 @@ func TestShapeSweep(t *testing.T) {
 							reached, failed = true, r.err
 						}
 					}
+					if r.err == nil && (format == "table" || format == "wide") && sweepDocuments[name] == "" {
+						for _, out := range []string{r.stdout, r.stderr} {
+							for _, v := range blankLineViolations(out) {
+								t.Errorf("admiral %s with a %s response: %s\n%s", strings.Join(args, " "), s, v, out)
+							}
+						}
+					}
 					if r.err == nil && format == "json" {
 						if trimmed := strings.TrimSpace(r.stdout); strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
 							require.True(t, json.Valid([]byte(trimmed)),
@@ -290,5 +306,57 @@ func TestShapeSweep(t *testing.T) {
 			require.True(t, succeeded, "admiral %s fails for every response, last with: %v",
 				strings.Join(invocations[name], " "), failed)
 		})
+	}
+}
+
+// blankLineViolations checks output against the blank-line rule in
+// CLAUDE.md: a blank line before each top-level section and each table,
+// except as the first thing in a block; never two in a row, never one
+// first, and never one holding only spaces.
+func blankLineViolations(out string) []string {
+	lines := strings.Split(strings.TrimSuffix(out, "\n"), "\n")
+	blank := func(i int) bool { return i < 0 || lines[i] == "" }
+	heading := func(l string) bool {
+		t := strings.TrimSpace(l)
+		return strings.HasSuffix(t, ":") && !strings.Contains(t, "  ")
+	}
+	underline := func(l string) bool {
+		t := strings.TrimSpace(l)
+		return t != "" && strings.Trim(t, "- ") == ""
+	}
+	indent := func(l string) int { return len(l) - len(strings.TrimLeft(l, " ")) }
+	var out2 []string
+	for i, l := range lines {
+		switch {
+		case l != "" && strings.TrimSpace(l) == "":
+			out2 = append(out2, fmt.Sprintf("line %d is blank but holds spaces", i+1))
+		case l == "" && i == 0 && len(lines) > 1:
+			out2 = append(out2, "the output opens with a blank line")
+		case l == "" && i > 0 && lines[i-1] == "":
+			out2 = append(out2, fmt.Sprintf("lines %d and %d are both blank", i, i+1))
+		case i+1 < len(lines) && underline(lines[i+1]) && !underline(l) && i > 0 && !blank(i-1) && !heading(lines[i-1]):
+			out2 = append(out2, fmt.Sprintf("the table at line %d follows %q with no blank line", i+1, lines[i-1]))
+		case indent(l) == 0 && heading(l) && i > 0 && !blank(i-1) &&
+			i+1 < len(lines) && indent(lines[i+1]) > 0:
+			out2 = append(out2, fmt.Sprintf("the section %q at line %d has no blank line before it", l, i+1))
+		}
+	}
+	return out2
+}
+
+func TestBlankLineViolations(t *testing.T) {
+	good := "ID:      run-1\nStatus:  applied\n\nPlan:\n  Digest:  sha256:1\n\n" +
+		"  Component  Changes\n  ---------  -------\n  api        +1\n\nEvents:\n  Age  Type\n  ---  ----\n  3h   Normal\n\n" +
+		"To see the changes, run: admiral run diff run-1\n"
+	require.Empty(t, blankLineViolations(good))
+
+	for name, bad := range map[string]string{
+		"a table straight after fields":   "Plan:\n  Digest:  sha256:1\n  Component  Changes\n  ---------  -------\n",
+		"a section straight after fields": "ID:  run-1\nPlan:\n  Digest:  sha256:1\n",
+		"a blank line first":              "\nID:  run-1\n",
+		"two blank lines":                 "ID:  run-1\n\n\nPlan:\n  Digest:  sha256:1\n",
+		"a blank line holding spaces":     "ID:  run-1\n  \nPlan:\n  Digest:  sha256:1\n",
+	} {
+		require.NotEmpty(t, blankLineViolations(bad), name)
 	}
 }

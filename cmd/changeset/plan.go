@@ -2,6 +2,7 @@ package changeset
 
 import (
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -156,15 +157,15 @@ func planRevision(cmd *cobra.Command, opts *client.Options, runs runv1.RunAPICli
 		}
 		return runcmd.Outcome(r)
 	}
-	if err := runcmd.PrintBeforeDiff(p, r, cs.GetTitle()); err != nil {
-		return err
-	}
 	diff, err := runs.GetRunPlanDiff(cmd.Context(), &runv1.GetRunPlanDiffRequest{RunId: r.GetId()})
 	if err != nil {
 		return err
 	}
-	output.Writef(p.Out(), "\n")
-	runcmd.WriteDiff(p.Out(), diff.GetDiff(), r.GetPlan())
+	if err := runcmd.PrintWithDiff(p, r, cs.GetTitle(), func(w io.Writer) {
+		runcmd.WriteBriefDiff(w, diff.GetDiff(), r.GetPlan(), r.GetId())
+	}); err != nil {
+		return err
+	}
 	return runcmd.Outcome(r)
 }
 

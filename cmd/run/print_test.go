@@ -2,6 +2,7 @@ package run
 
 import (
 	"bytes"
+	"io"
 	"strings"
 	"testing"
 
@@ -71,9 +72,14 @@ func TestPlannedRunHints(t *testing.T) {
 	assert.NotContains(t, out, "approve")
 	assert.NotContains(t, out, "admiral run apply")
 
-	out = render(t, PrintBeforeDiff, planned(&environmentv1.ApprovalRule{RequiredApprovals: 1}))
-	assert.NotContains(t, out, "run diff", "the diff follows")
-	assert.Contains(t, out, "It needs 1 approval(s) from someone other than the changeset's author: admiral changeset approve "+csID)
+	withDiff := func(p *output.Printer, r *runv1.Run, title string) error {
+		return PrintWithDiff(p, r, title, func(w io.Writer) { output.Writef(w, "\n+ podinfo: the diff\n") })
+	}
+	out = render(t, withDiff, planned(&environmentv1.ApprovalRule{RequiredApprovals: 1}))
+	assert.NotContains(t, out, "run diff", "the diff is shown")
+	hint := "It needs 1 approval(s) from someone other than the changeset's author: admiral changeset approve " + csID
+	assert.Contains(t, out, hint)
+	assert.Contains(t, out, "\n\n+ podinfo: the diff\n\n"+hint, "the diff, set apart once, then the next steps")
 
 	groups := planned(&environmentv1.ApprovalRule{Groups: []*environmentv1.ApprovalRule_GroupApproval{{GroupId: "grp-1", Approvals: 2}}})
 	assert.Contains(t, render(t, Print, groups), "It needs 2 approval(s)")
@@ -299,4 +305,63 @@ func TestRunShowsItsChangesetTitle(t *testing.T) {
 func TestNoChangesRunHasNoDiffHint(t *testing.T) {
 	r := &runv1.Run{Id: testRunID, Status: runv1.Run_STATUS_NO_CHANGES, Plan: &runv1.PlanPhase{PlanDigest: "sha256:1"}}
 	assert.NotContains(t, render(t, Print, r), "run diff")
+}
+
+// Before approving, a takeover counts what it takes, a Kubernetes create
+// counts what it sets, and resources changed the same way share one body.
+// The whole diff is one command away.
+func TestWriteBriefDiffFoldsWhatRepeats(t *testing.T) {
+	helmOff := `{"metadata":{"annotations":{"meta.helm.sh/release-name":"web"},"labels":{}}}`
+	admiralOn := `{"metadata":{"annotations":{},"labels":{"admiral.io/environment":"env-1"}}}`
+	taken := func(paths ...string) *agentv1.ResourceDiff_Kubernetes {
+		k := &agentv1.KubernetesChange{}
+		for _, p := range paths {
+			k.Taken = append(k.Taken, &agentv1.TakenField{Manager: "helm", Path: path("spec", p)})
+		}
+		return &agentv1.ResourceDiff_Kubernetes{Kubernetes: k}
+	}
+	takeOver := agentv1.ResourceChange_ACTION_TAKE_OVER
+	d := &agentv1.PlanDiff{Resources: []*agentv1.ResourceDiff{
+		{Component: "web", Resource: k8sRef("Deployment", "web"), Action: takeOver,
+			Before: obj(t, `{"metadata":{"annotations":{"meta.helm.sh/release-name":"web"},"labels":{}},"spec":{"image":"web:latest"}}`),
+			After:  obj(t, `{"metadata":{"annotations":{},"labels":{"admiral.io/environment":"env-1"}},"spec":{"image":"web:abc"}}`),
+			Change: taken("image", "replicas", "selector")},
+		{Component: "web", Resource: k8sRef("Job", "migrate"), Action: agentv1.ResourceChange_ACTION_CREATE,
+			After: obj(t, `{"spec":{"backoffLimit":2,"dnsPolicy":"ClusterFirst"}}`)},
+		{Component: "web", Resource: k8sRef("Service", "web"), Action: takeOver,
+			Before: obj(t, helmOff), After: obj(t, admiralOn), Change: taken("ports", "selector")},
+		{Component: "web", Resource: k8sRef("ConfigMap", "web"), Action: takeOver,
+			Before: obj(t, helmOff), After: obj(t, admiralOn), Change: taken("data")},
+	}}
+	var b bytes.Buffer
+	WriteBriefDiff(&b, d, nil, testRunID)
+	out := b.String()
+
+	assert.Contains(t, out, "~ web: v1 Deployment podinfo-dev/web (take over)\n")
+	assert.Contains(t, out, `    spec.image: "web:latest" -> "web:abc"`)
+	assert.Contains(t, out, "    takes 3 fields from helm\n")
+	assert.NotContains(t, out, "takes spec.", "no field is named one by one")
+
+	assert.Contains(t, out, "+ web: v1 Job podinfo-dev/migrate (create)\n    sets 2 fields\n")
+	assert.NotContains(t, out, "dnsPolicy", "a create's defaults stay out")
+
+	assert.Contains(t, out, "~ web: 2 resources (take over)\n"+
+		"    v1 Service podinfo-dev/web\n"+
+		"    v1 ConfigMap podinfo-dev/web\n"+
+		"  on each:\n")
+	assert.Equal(t, 2, strings.Count(out, `metadata.labels."admiral.io/environment": <absent> -> "env-1"`),
+		"once for the Deployment, once for the two that share it")
+	assert.Contains(t, out, "    takes its fields from helm, 3 in all\n")
+	assert.Contains(t, out, "\nEvery field: admiral run diff "+testRunID+"\n")
+}
+
+// A diff with nothing left out says nothing about where the rest is.
+func TestWriteBriefDiffPointsAtTheWholeDiffOnlyWhenItCutsSomething(t *testing.T) {
+	d := &agentv1.PlanDiff{Resources: []*agentv1.ResourceDiff{
+		{Component: "web", Resource: k8sRef("ConfigMap", "web"), Action: agentv1.ResourceChange_ACTION_UPDATE,
+			Before: obj(t, `{"data":{"a":"1"}}`), After: obj(t, `{"data":{"a":"2"}}`)},
+	}}
+	var b bytes.Buffer
+	WriteBriefDiff(&b, d, nil, testRunID)
+	assert.Equal(t, writeDiff(d, nil), b.String())
 }

@@ -25,8 +25,9 @@ import (
 //	d.Table("Events", []string{"Age", "Type", "Message"}, rows)
 //	d.Hint("To see the transcript, run: admiral run logs " + id)
 type Describe struct {
-	root  Block
-	hints []string
+	root    Block
+	trailer func(w io.Writer)
+	hints   []string
 }
 
 // Block is a group of fields, nested blocks and tables at one indent level.
@@ -74,6 +75,10 @@ func (d *Describe) Unavailable(name, reason string) {
 	d.root.Block(name, func(b *Block) { b.Line("<unavailable: " + reason + ">") })
 }
 
+// Trailer adds what fn writes, such as a diff the view leads into, after the
+// sections and before the hints, set apart by a blank line like a section.
+func (d *Describe) Trailer(fn func(w io.Writer)) { d.trailer = fn }
+
 // Hint adds a trailing next-step line, printed after a blank line.
 func (d *Describe) Hint(line string) { d.hints = append(d.hints, line) }
 
@@ -81,6 +86,15 @@ func (d *Describe) Hint(line string) { d.hints = append(d.hints, line) }
 func (d *Describe) Render(w io.Writer) error {
 	if err := d.root.render(w, 0); err != nil {
 		return err
+	}
+	if d.trailer != nil {
+		var b strings.Builder
+		d.trailer(&b)
+		if t := strings.TrimLeft(b.String(), "\n"); t != "" {
+			if _, err := fmt.Fprintf(w, "\n%s", t); err != nil {
+				return err
+			}
+		}
 	}
 	for _, h := range d.hints {
 		if _, err := fmt.Fprintf(w, "\n%s\n", h); err != nil {
@@ -127,8 +141,8 @@ func (b *Block) Table(headers []string, rows [][]string) {
 
 // render writes the block at the given indent. Consecutive fields share one
 // tabwriter so their values align; a nested block or table starts a new
-// alignment group, and top-level sections and back-to-back tables are
-// separated by a blank line.
+// alignment group, and top-level sections, and a table and whatever comes
+// before it, are separated by a blank line.
 func (b *Block) render(w io.Writer, indent int) error {
 	pad := strings.Repeat(" ", indent)
 	var tw *tabwriter.Writer
@@ -162,7 +176,7 @@ func (b *Block) render(w io.Writer, indent int) error {
 			if err := flush(); err != nil {
 				return err
 			}
-			if i > 0 && b.items[i-1].table != nil {
+			if i > 0 {
 				if _, err := fmt.Fprintln(w); err != nil {
 					return err
 				}
