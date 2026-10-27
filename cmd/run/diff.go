@@ -1,6 +1,7 @@
 package run
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -31,6 +32,7 @@ var actionMark = map[agentv1.ResourceChange_Action]string{
 // would change, and why a failed plan failed follow. plan says which
 // components the plan removes outright; nil is fine.
 func WriteDiff(w io.Writer, d *agentv1.PlanDiff, plan *runv1.PlanPhase) {
+	w = &noLeadingBlank{w: w}
 	writeResources(w, d, false)
 	writeTail(w, d, plan)
 }
@@ -43,6 +45,7 @@ func WriteDiff(w io.Writer, d *agentv1.PlanDiff, plan *runv1.PlanPhase) {
 // anything out it says where the whole diff is: 'admiral run diff runID'.
 // What changed outside Admiral is never shortened.
 func WriteBriefDiff(w io.Writer, d *agentv1.PlanDiff, plan *runv1.PlanPhase, runID string) {
+	w = &noLeadingBlank{w: w}
 	if writeResources(w, d, true) && runID != "" {
 		output.Writef(w, "\nEvery field: admiral run diff %s\n", runID)
 	}
@@ -370,4 +373,27 @@ func under(path string, set map[string]bool) bool {
 		}
 	}
 	return false
+}
+
+// noLeadingBlank drops the newlines a diff opens with: each group writes the
+// blank line before it, and the first has nothing to be set apart from. The
+// caller sets the whole diff apart from what precedes it.
+type noLeadingBlank struct {
+	w       io.Writer
+	started bool
+}
+
+func (n *noLeadingBlank) Write(p []byte) (int, error) {
+	if n.started {
+		return n.w.Write(p)
+	}
+	t := bytes.TrimLeft(p, "\n")
+	if len(t) == 0 {
+		return len(p), nil
+	}
+	n.started = true
+	if _, err := n.w.Write(t); err != nil {
+		return 0, err
+	}
+	return len(p), nil
 }

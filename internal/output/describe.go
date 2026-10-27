@@ -25,8 +25,9 @@ import (
 //	d.Table("Events", []string{"Age", "Type", "Message"}, rows)
 //	d.Hint("To see the transcript, run: admiral run logs " + id)
 type Describe struct {
-	root  Block
-	hints []string
+	root    Block
+	trailer func(w io.Writer)
+	hints   []string
 }
 
 // Block is a group of fields, nested blocks and tables at one indent level.
@@ -74,6 +75,10 @@ func (d *Describe) Unavailable(name, reason string) {
 	d.root.Block(name, func(b *Block) { b.Line("<unavailable: " + reason + ">") })
 }
 
+// Trailer adds what fn writes, such as a diff the view leads into, after the
+// sections and before the hints, set apart by a blank line like a section.
+func (d *Describe) Trailer(fn func(w io.Writer)) { d.trailer = fn }
+
 // Hint adds a trailing next-step line, printed after a blank line.
 func (d *Describe) Hint(line string) { d.hints = append(d.hints, line) }
 
@@ -81,6 +86,15 @@ func (d *Describe) Hint(line string) { d.hints = append(d.hints, line) }
 func (d *Describe) Render(w io.Writer) error {
 	if err := d.root.render(w, 0); err != nil {
 		return err
+	}
+	if d.trailer != nil {
+		var b strings.Builder
+		d.trailer(&b)
+		if t := strings.TrimLeft(b.String(), "\n"); t != "" {
+			if _, err := fmt.Fprintf(w, "\n%s", t); err != nil {
+				return err
+			}
+		}
 	}
 	for _, h := range d.hints {
 		if _, err := fmt.Fprintf(w, "\n%s\n", h); err != nil {

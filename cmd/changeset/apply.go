@@ -191,7 +191,7 @@ func showPlan(ctx context.Context, w io.Writer, c sdkclient.AdmiralClient, cs *c
 	if err != nil {
 		return err
 	}
-	output.Writef(w, "%s  %q  by %s  (%s)\n", cs.GetId(), cs.GetTitle(), output.FormatActor(cs.GetCreatedBy()), r.GetId())
+	output.Writef(w, "%s  %q  by %s  (%s)\n\n", cs.GetId(), cs.GetTitle(), output.FormatActor(cs.GetCreatedBy()), r.GetId())
 	runcmd.WriteBriefDiff(w, diff.GetDiff(), r.GetPlan(), r.GetId())
 	return nil
 }

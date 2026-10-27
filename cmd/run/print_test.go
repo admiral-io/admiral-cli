@@ -2,6 +2,7 @@ package run
 
 import (
 	"bytes"
+	"io"
 	"strings"
 	"testing"
 
@@ -71,9 +72,14 @@ func TestPlannedRunHints(t *testing.T) {
 	assert.NotContains(t, out, "approve")
 	assert.NotContains(t, out, "admiral run apply")
 
-	out = render(t, PrintBeforeDiff, planned(&environmentv1.ApprovalRule{RequiredApprovals: 1}))
-	assert.NotContains(t, out, "run diff", "the diff follows")
-	assert.Contains(t, out, "It needs 1 approval(s) from someone other than the changeset's author: admiral changeset approve "+csID)
+	withDiff := func(p *output.Printer, r *runv1.Run, title string) error {
+		return PrintWithDiff(p, r, title, func(w io.Writer) { output.Writef(w, "\n+ podinfo: the diff\n") })
+	}
+	out = render(t, withDiff, planned(&environmentv1.ApprovalRule{RequiredApprovals: 1}))
+	assert.NotContains(t, out, "run diff", "the diff is shown")
+	hint := "It needs 1 approval(s) from someone other than the changeset's author: admiral changeset approve " + csID
+	assert.Contains(t, out, hint)
+	assert.Contains(t, out, "\n\n+ podinfo: the diff\n\n"+hint, "the diff, set apart once, then the next steps")
 
 	groups := planned(&environmentv1.ApprovalRule{Groups: []*environmentv1.ApprovalRule_GroupApproval{{GroupId: "grp-1", Approvals: 2}}})
 	assert.Contains(t, render(t, Print, groups), "It needs 2 approval(s)")

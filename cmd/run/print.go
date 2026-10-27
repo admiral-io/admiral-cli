@@ -2,6 +2,7 @@ package run
 
 import (
 	"fmt"
+	"io"
 	"strconv"
 
 	"go.admiral.io/cli/internal/output"
@@ -66,13 +67,13 @@ func changeSummary(cs []*agentv1.ComponentPlan) string {
 // Print writes a run's detail view, or the run itself under -o json|yaml.
 // title is its changeset's, "" when unknown.
 func Print(p *output.Printer, r *runv1.Run, title string) error {
-	return printRun(p, r, title, false)
+	return printRun(p, r, title, nil)
 }
 
-// PrintBeforeDiff is Print for a caller that writes the plan's diff right
-// after, so the view does not point at 'run diff'.
-func PrintBeforeDiff(p *output.Printer, r *runv1.Run, title string) error {
-	return printRun(p, r, title, true)
+// PrintWithDiff is Print with the plan's diff, which diff writes, after the
+// run and before the next steps, so the view does not point at 'run diff'.
+func PrintWithDiff(p *output.Printer, r *runv1.Run, title string, diff func(w io.Writer)) error {
+	return printRun(p, r, title, diff)
 }
 
 // ChangeSetLabel is a changeset's id with its title, when known.
@@ -83,8 +84,12 @@ func ChangeSetLabel(id, title string) string {
 	return fmt.Sprintf("%s %q", id, title)
 }
 
-func printRun(p *output.Printer, r *runv1.Run, title string, diffShown bool) error {
+func printRun(p *output.Printer, r *runv1.Run, title string, diff func(w io.Writer)) error {
 	d := output.NewDescribe()
+	diffShown := diff != nil
+	if diffShown {
+		d.Trailer(diff)
+	}
 	d.Field("ID", r.GetId())
 	d.Field("Environment", r.GetEnvironmentId())
 	if r.GetRevisionId() != "" {
