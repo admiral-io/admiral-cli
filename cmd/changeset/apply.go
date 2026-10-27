@@ -120,6 +120,8 @@ it failed or applied partway.`,
 			if err := showPlan(cmd.Context(), cmd.ErrOrStderr(), c, cs, r); err != nil {
 				return err
 			}
+			// The plan is one group; the prompt and the wait are the next.
+			output.Writef(cmd.ErrOrStderr(), "\n")
 			if err := input.Confirm(cmd, yes, "Apply this plan"); err != nil {
 				return err
 			}
@@ -131,13 +133,15 @@ it failed or applied partway.`,
 			}
 			r = resp.GetRun()
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+			progress := runcmd.NewProgress(p.Err(), !yes)
 			if !po.noWait {
-				done, err := runcmd.Wait(cmd.Context(), c.Run(), r, po.waitTimeout, true, p.Err())
+				done, err := runcmd.Wait(cmd.Context(), c.Run(), r, po.waitTimeout, true, progress)
 				if err != nil {
 					return runcmd.WaitError(err, r)
 				}
 				r = done
 			}
+			progress.End()
 			if err := runcmd.Print(p, r, cs.GetTitle()); err != nil {
 				return err
 			}

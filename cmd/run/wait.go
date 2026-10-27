@@ -56,6 +56,31 @@ type errNotEnrolled struct{ last *runv1.Run }
 
 func (errNotEnrolled) Error() string { return "agent not enrolled" }
 
+// Progress is where a command writes what it does while the user waits:
+// its prompt and the lines a wait prints. It remembers whether it wrote, so
+// the record that follows is set apart by a blank line, as the next group.
+type Progress struct {
+	w     io.Writer
+	wrote bool
+}
+
+// NewProgress writes to w; started is true when the group began before it,
+// as with a prompt the user just answered.
+func NewProgress(w io.Writer, started bool) *Progress { return &Progress{w: w, wrote: started} }
+
+func (p *Progress) Write(b []byte) (int, error) {
+	p.wrote = p.wrote || len(b) > 0
+	return p.w.Write(b)
+}
+
+// End sets what follows apart from anything written, with a blank line.
+func (p *Progress) End() {
+	if p.wrote {
+		output.Writef(p.w, "\n")
+		p.wrote = false
+	}
+}
+
 // Wait polls until the run settles or timeout elapses, writing a line to
 // progress whenever its status moves. With stopUnenrolled it ends early on an
 // agent that has never enrolled; without it, it waits through an install. A
