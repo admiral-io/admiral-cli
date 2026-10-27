@@ -5,7 +5,7 @@ go 1.26.8
 require (
 	buf.build/gen/go/admiral/common/protocolbuffers/go v1.36.12-20261014011555-22b2905b9cfc.2
 	github.com/coreos/go-oidc/v3 v3.21.0
-	github.com/go-jose/go-jose/v4 v4.1.5
+	github.com/go-jose/go-jose/v4 v4.1.6
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
 	go.admiral.io/bundle v1.1.0
