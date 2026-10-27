@@ -164,7 +164,7 @@ func planRevision(cmd *cobra.Command, opts *client.Options, runs runv1.RunAPICli
 		return err
 	}
 	output.Writef(p.Out(), "\n")
-	runcmd.WriteDiff(p.Out(), diff.GetDiff(), r.GetPlan())
+	runcmd.WriteBriefDiff(p.Out(), diff.GetDiff(), r.GetPlan(), r.GetId())
 	return runcmd.Outcome(r)
 }
 

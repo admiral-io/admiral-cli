@@ -184,7 +184,7 @@ func latestPlan(ctx context.Context, c sdkclient.AdmiralClient, csID string) (*c
 }
 
 // showPlan writes what is about to be approved or applied: which
-// changeset, whose, and its diff resource by resource. It goes to stderr
+// changeset, whose, and its diff, shortened. It goes to stderr
 // with the question; stdout stays the answer.
 func showPlan(ctx context.Context, w io.Writer, c sdkclient.AdmiralClient, cs *changesetv1.ChangeSet, r *runv1.Run) error {
 	diff, err := c.Run().GetRunPlanDiff(ctx, &runv1.GetRunPlanDiffRequest{RunId: r.GetId()})
@@ -192,6 +192,6 @@ func showPlan(ctx context.Context, w io.Writer, c sdkclient.AdmiralClient, cs *c
 		return err
 	}
 	output.Writef(w, "%s  %q  by %s  (%s)\n", cs.GetId(), cs.GetTitle(), output.FormatActor(cs.GetCreatedBy()), r.GetId())
-	runcmd.WriteDiff(w, diff.GetDiff(), r.GetPlan())
+	runcmd.WriteBriefDiff(w, diff.GetDiff(), r.GetPlan(), r.GetId())
 	return nil
 }

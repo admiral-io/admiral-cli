@@ -93,7 +93,8 @@ func TestPrintDescribe_RejectsMachineFormats(t *testing.T) {
 	require.Equal(t, "Name:  x\n", out.String())
 }
 
-func TestDescribe_BackToBackTablesAreSeparated(t *testing.T) {
+// A table is set apart from the fields above it as well as from another table.
+func TestDescribe_TablesAreSetApart(t *testing.T) {
 	d := NewDescribe()
 	d.Section("Plan", func(b *Block) {
 		b.Field("Digest", "sha256:1")
@@ -105,6 +106,7 @@ func TestDescribe_BackToBackTablesAreSeparated(t *testing.T) {
 	require.NoError(t, d.Render(&buf))
 	want := `Plan:
   Digest:  sha256:1
+
   Component  Changes
   ---------  -------
   api        +1 ~0 ±0 -0
