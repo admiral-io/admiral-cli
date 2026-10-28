@@ -2,14 +2,16 @@ package changeset
 
 import (
 	"bytes"
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"go.admiral.io/cli/internal/cmderr"
 	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
 	runv1 "go.admiral.io/sdk/proto/admiral/api/run/v1"
 )
@@ -69,7 +71,7 @@ func TestDescribeWithoutItsRunsStillShowsTheChange(t *testing.T) {
 		diff: &changesetv1.DiffChangeSetResponse{Components: []*changesetv1.ComponentDiff{{
 			Component: "api", Action: changesetv1.EntryAction_ENTRY_ACTION_CREATE,
 		}}},
-		runsErr: errors.New("permission denied"),
+		runsErr: status.Error(codes.PermissionDenied, "needs run:read"),
 	}
 	var b bytes.Buffer
 	require.NoError(t, describeChangeSet(cs, sec).Render(&b))
@@ -78,4 +80,5 @@ func TestDescribeWithoutItsRunsStillShowsTheChange(t *testing.T) {
 	assert.Regexp(t, `api\s+create`, out)
 	assert.Contains(t, out, "Runs:")
 	assert.Contains(t, out, "unavailable")
+	assert.Contains(t, out, cmderr.ScopeHint)
 }

@@ -8,6 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
@@ -182,6 +184,9 @@ func describeChangeSet(cs *changesetv1.ChangeSet, sec csSections) *output.Descri
 
 	for _, h := range nextSteps(cs, latest, sec) {
 		d.Hint(h)
+	}
+	if status.Code(sec.diffErr) == codes.PermissionDenied || status.Code(sec.runsErr) == codes.PermissionDenied {
+		d.Hint(cmderr.ScopeHint)
 	}
 	return d
 }
