@@ -220,7 +220,7 @@ func TestRoot_Timeout(t *testing.T) {
 		_, _, stderr, code := runRoot(t, []string{"--timeout", "soon", "version"}, nil)
 		require.Equal(t, cmderr.ExitUsage, code)
 		require.Contains(t, stderr, `invalid argument "soon" for "--timeout"`)
-		require.Contains(t, stderr, "--help' for usage.")
+		require.Contains(t, stderr, " --help")
 	})
 }
 
@@ -265,18 +265,18 @@ func TestRoot_UnknownFlagAndCommand(t *testing.T) {
 	_, _, stderr, code := runRoot(t, []string{"--bogus", "version"}, nil)
 	require.Equal(t, cmderr.ExitUsage, code)
 	require.Contains(t, stderr, "unknown flag: --bogus")
-	require.Contains(t, stderr, "Run 'admiral --help' for usage.")
+	require.Contains(t, stderr, "For usage, run: admiral --help")
 
 	_, _, stderr, code = runRoot(t, []string{"bogus"}, nil)
 	require.Equal(t, cmderr.ExitUsage, code)
 	require.Contains(t, stderr, `unknown command "bogus" for "admiral"`)
-	require.Contains(t, stderr, "Run 'admiral --help' for usage.")
+	require.Contains(t, stderr, "For usage, run: admiral --help")
 
 	// The same under a noun, attributed to the noun.
 	_, _, stderr, code = runRoot(t, []string{"app", "bogus"}, nil)
 	require.Equal(t, cmderr.ExitUsage, code)
 	require.Contains(t, stderr, `unknown command "bogus" for "admiral app"`)
-	require.Contains(t, stderr, "Run 'admiral app --help' for usage.")
+	require.Contains(t, stderr, "For usage, run: admiral app --help")
 
 	// A bare noun prints its help and succeeds.
 	_, stdout, _, code := runRoot(t, []string{"app"}, nil)
@@ -312,9 +312,9 @@ func TestRoot_ExitCodes(t *testing.T) {
 	}{
 		{"usage", cmderr.Usage("bad thing"), cmderr.ExitUsage, []string{"Error: bad thing"}},
 		{"usage with hint", cmderr.UsageHint("Try --yes.", "needs a terminal"), cmderr.ExitUsage, []string{"Error: needs a terminal", "Try --yes."}},
-		{"not signed in", credentials.ErrNotAuthenticated, cmderr.ExitAuth, []string{"Error: not signed in", "Run 'admiral auth login' to sign in, or set ADMIRAL_API_KEY."}},
-		{"session expired", credentials.ErrSessionExpired, cmderr.ExitAuth, []string{"Run 'admiral auth login'"}},
-		{"server unauthenticated", status.Error(codes.Unauthenticated, "key revoked"), cmderr.ExitAuth, []string{"Error: not signed in: key revoked", "Run 'admiral auth login'"}},
+		{"not signed in", credentials.ErrNotAuthenticated, cmderr.ExitAuth, []string{"Error: not signed in", "To sign in, run: admiral auth login\nOr set ADMIRAL_API_KEY to an API key."}},
+		{"session expired", credentials.ErrSessionExpired, cmderr.ExitAuth, []string{"To sign in, run: admiral auth login"}},
+		{"server unauthenticated", status.Error(codes.Unauthenticated, "key revoked"), cmderr.ExitAuth, []string{"Error: not signed in: key revoked", "To sign in, run: admiral auth login"}},
 		{"permission denied", status.Error(codes.PermissionDenied, "scope"), cmderr.ExitError, []string{"Error: permission denied: scope", cmderr.ScopeHint}},
 		{"plain error", errors.New("boom"), cmderr.ExitError, []string{"Error: boom"}},
 		{"required flag", errors.New(`required flag(s) "app" not set`), cmderr.ExitUsage, []string{"required flag"}},

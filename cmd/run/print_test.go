@@ -257,7 +257,7 @@ func TestRefusalSaysWhatUnblocksIt(t *testing.T) {
 	assert.Contains(t, cmderr.Hint(Refusal(needs, "admiral run", testRunID)), "must run 'admiral run approve "+testRunID+"' first")
 
 	held := status.Error(codes.FailedPrecondition, "change set "+csID+"'s partial apply holds the environment; revert it or accept it first")
-	assert.Equal(t, "Run 'admiral changeset revert "+csID+"' to undo it, or 'admiral run accept <run> --reason ...' to accept what landed.",
+	assert.Equal(t, "To undo it, run: admiral changeset revert "+csID+"\nTo accept what landed, run: admiral run accept <run> --reason ...",
 		cmderr.Hint(Refusal(held, "admiral changeset", "cs-other0000000")))
 
 	scope := status.Error(codes.PermissionDenied, "missing scope run:write")
@@ -266,7 +266,7 @@ func TestRefusalSaysWhatUnblocksIt(t *testing.T) {
 
 func TestPartialOutcomeNamesRevertAndAccept(t *testing.T) {
 	err := Outcome(&runv1.Run{Id: testRunID, ChangeSetId: csID, Status: runv1.Run_STATUS_PARTIAL})
-	assert.Equal(t, "Run 'admiral changeset revert "+csID+"' to undo it, or 'admiral run accept "+testRunID+" --reason ...' to accept what landed.",
+	assert.Equal(t, "To undo it, run: admiral changeset revert "+csID+"\nTo accept what landed, run: admiral run accept "+testRunID+" --reason ...",
 		cmderr.Hint(err))
 }
 

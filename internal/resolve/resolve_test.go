@@ -75,7 +75,7 @@ func TestApp_ByName(t *testing.T) {
 func TestApp_NotFound(t *testing.T) {
 	_, err := App(context.Background(), &appClient{}, "nope")
 	require.EqualError(t, err, `application "nope" not found`)
-	require.Equal(t, "Run 'admiral app list' to see applications.", cmderr.Hint(err))
+	require.Equal(t, "To see applications, run: admiral app list", cmderr.Hint(err))
 	require.Equal(t, cmderr.ExitError, cmderr.Code(err))
 	var nf *NotFoundError
 	require.ErrorAs(t, err, &nf)
@@ -112,5 +112,5 @@ func TestEnvironment_ScopedLookup(t *testing.T) {
 
 	_, err = Environment(context.Background(), &envClient{}, apps, "shop", "prd")
 	require.EqualError(t, err, `environment "prd" not found in application "shop"`)
-	require.Equal(t, "Run 'admiral env list --app shop' to see environments.", cmderr.Hint(err))
+	require.Equal(t, "To see environments, run: admiral env list --app shop", cmderr.Hint(err))
 }

@@ -129,7 +129,7 @@ func WaitError(err error, r *runv1.Run) error {
 		return &cmderr.Error{
 			Err:  fmt.Errorf("run %s is still %s; it continues on the server", e.last.GetId(), describeStatus(e.last)),
 			Code: cmderr.ExitTimeout,
-			Hint: fmt.Sprintf("Run 'admiral run get %s --wait' to wait again.", r.GetId()),
+			Hint: "To wait again, run: admiral run get "+r.GetId()+" --wait",
 		}
 	case errNotEnrolled:
 		agent, key := "its agent", "admiral agent enrollment-key <agent>"
@@ -139,8 +139,9 @@ func WaitError(err error, r *runv1.Run) error {
 		return &cmderr.Error{
 			Err:  fmt.Errorf("run %s is queued: %s has never enrolled", r.GetId(), agent),
 			Code: cmderr.ExitError,
-			Hint: fmt.Sprintf("Install the agent with its enrollment key ('%s' issues a new one); the run starts once it enrolls. "+
-				"Run 'admiral run get %s --wait' to follow it.", key, r.GetId()),
+			Hint: "Install the agent with its enrollment key; the run starts once it enrolls.\n" +
+				"To issue a new key, run: " + key + "\n" +
+				"To follow the run, run: admiral run get " + r.GetId() + " --wait",
 		}
 	}
 	return err
@@ -187,14 +188,14 @@ var changeSetIDPattern = regexp.MustCompile(`cs-[0-9a-z]{12}`)
 // HoldHint is how to release an environment a partial apply holds: undo the
 // changeset, or accept what landed.
 func HoldHint(changeSetID, runID string) string {
-	accept := "'admiral run accept " + runID + " --reason ...'"
+	accept := "admiral run accept " + runID + " --reason ..."
 	if runID == "" {
-		accept = "'admiral run accept <run> --reason ...'"
+		accept = "admiral run accept <run> --reason ..."
 	}
 	if changeSetID == "" {
-		return "Run " + accept + " to accept what landed."
+		return "To accept what landed, run: " + accept
 	}
-	return fmt.Sprintf("Run 'admiral changeset revert %s' to undo it, or %s to accept what landed.", changeSetID, accept)
+	return "To undo it, run: admiral changeset revert " + changeSetID + "\nTo accept what landed, run: " + accept
 }
 
 // waitWords says why a queued run waits, for the progress line.

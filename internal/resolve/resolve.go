@@ -62,7 +62,7 @@ func (e *NotFoundError) Hint() string {
 	if e.ListCommand == "" {
 		return ""
 	}
-	return fmt.Sprintf("Run 'admiral %s' to see %ss.", e.ListCommand, e.Kind)
+	return fmt.Sprintf("To see %ss, run: admiral %s", e.Kind, e.ListCommand)
 }
 
 // AmbiguousError is returned when a name matches more than one resource.

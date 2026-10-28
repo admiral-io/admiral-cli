@@ -163,7 +163,7 @@ func latestPlan(ctx context.Context, c sdkclient.AdmiralClient, csID string) (*c
 	cs := resp.GetChangeSet()
 	if cs.GetLatestRunId() == "" {
 		return nil, nil, cmderr.WithHint(fmt.Errorf("%s has not been planned", csID),
-			"Run 'admiral changeset plan "+csID+"'.")
+			"To plan it, run: admiral changeset plan "+csID)
 	}
 	run, err := c.Run().GetRun(ctx, &runv1.GetRunRequest{RunId: cs.GetLatestRunId()})
 	if err != nil {

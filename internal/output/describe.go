@@ -232,7 +232,7 @@ func (t *table) render(w io.Writer, indent int) error {
 // than table is a usage error naming that path.
 func (p *Printer) PrintDescribe(d *Describe, getCommand string) error {
 	if !p.Format.IsTable() {
-		return cmderr.UsageHint("Run '"+getCommand+" -o "+p.Format.String()+"' for machine-readable output.",
+		return cmderr.UsageHint("For machine-readable output, run: "+getCommand+" -o "+p.Format.String(),
 			"describe has no -o %s output", p.Format)
 	}
 	return d.Render(p.IO.Out)

@@ -75,7 +75,7 @@ Recent Runs:
   --     ------
   run-1  Succeeded
 
-Run 'admiral auth status' to see the active credential and its scopes.
+To see the active credential and its scopes, run: admiral auth status
 `
 	require.Equal(t, want, buf.String())
 }
@@ -85,7 +85,7 @@ func TestPrintDescribe_RejectsMachineFormats(t *testing.T) {
 	err := testPrinter(FormatJSON, &out).PrintDescribe(NewDescribe(), "admiral env get prod --app shop")
 	require.EqualError(t, err, "describe has no -o json output")
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
-	require.Equal(t, "Run 'admiral env get prod --app shop -o json' for machine-readable output.", cmderr.Hint(err))
+	require.Equal(t, "For machine-readable output, run: admiral env get prod --app shop -o json", cmderr.Hint(err))
 
 	d := NewDescribe()
 	d.Field("Name", "x")

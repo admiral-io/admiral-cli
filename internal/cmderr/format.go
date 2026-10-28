@@ -12,7 +12,7 @@ import (
 // ScopeHint is the remedy line for a PermissionDenied: printed after the
 // top-level error, and as the closing hint of a describe view that could
 // not load one of its sections.
-const ScopeHint = "Run 'admiral auth status' to see the active credential and its scopes."
+const ScopeHint = "To see the active credential and its scopes, run: admiral auth status"
 
 // Format returns the user-facing message for err, for the top-level
 // `Error:` line and for inline notes such as an unavailable describe

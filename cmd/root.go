@@ -216,7 +216,7 @@ Documentation: https://admiral.io/docs`,
 	// A bad or unknown flag is a usage error: exit 2, one line, and a hint
 	// to --help rather than the full usage block.
 	cmd.SetFlagErrorFunc(func(c *cobra.Command, err error) error {
-		return cmderr.UsageHint("Run '"+c.CommandPath()+" --help' for usage.", "%s", err.Error())
+		return cmderr.UsageHint("For usage, run: "+c.CommandPath()+" --help", "%s", err.Error())
 	})
 
 	defaultConfigPath, err := config.ConfigDir()

@@ -29,7 +29,7 @@ func TestExactArgs(t *testing.T) {
 	printed, err := exec(cmd)
 	require.EqualError(t, err, "missing argument: get <name>")
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
-	require.Equal(t, "Run 'get --help' for usage.", cmderr.Hint(err))
+	require.Equal(t, "For usage, run: get --help", cmderr.Hint(err))
 	require.Empty(t, printed, "no help dump")
 
 	_, err = exec(cmd, "a", "b")

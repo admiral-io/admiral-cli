@@ -70,11 +70,11 @@ approve' and 'admiral changeset apply'.`,
 			}
 			if resp.Head == nil {
 				return cmderr.WithHint(fmt.Errorf("%s has no revision to plan", csID),
-					"Edit it first: 'admiral changeset set "+csID+" <component>.<path>=<value>'.")
+					"To edit it, run: admiral changeset set "+csID+" <component>.<path>=<value>")
 			}
 			if want := ifRevision(cmd, ifRev); want != nil && *want != resp.Head.Number {
 				return cmderr.WithHint(fmt.Errorf("%s is at revision %d, not %d", csID, resp.Head.Number, *want),
-					"Run 'admiral changeset diff "+csID+"' to see the head.")
+					"To see the head, run: admiral changeset diff "+csID)
 			}
 			return planRevision(cmd, opts, c.Run(), resp.ChangeSet, resp.Head, po)
 		},
