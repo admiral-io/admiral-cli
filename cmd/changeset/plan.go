@@ -92,6 +92,8 @@ type planOptions struct {
 	plan        bool
 	noWait      bool
 	waitTimeout time.Duration
+	// full shows the plan's resources whole rather than in brief.
+	full bool
 }
 
 func waitFlags(cmd *cobra.Command, po *planOptions) {
@@ -104,6 +106,7 @@ func waitFlagsFor(cmd *cobra.Command, po *planOptions, what string) {
 	cmd.Flags().BoolVar(&po.noWait, "no-wait", false, "return once the run is started")
 	cmd.Flags().DurationVar(&po.waitTimeout, "wait-timeout", defaultWaitTimeout,
 		"how long to wait for "+what+"; exits 124 when it elapses")
+	cmd.Flags().BoolVar(&po.full, "full", false, "show each changed resource whole, as YAML, with its changed lines marked")
 }
 
 // planFlags registers --plan and its wait flags on an edit verb.
@@ -113,8 +116,8 @@ func planFlags(cmd *cobra.Command, po *planOptions) {
 }
 
 func (po *planOptions) check(cmd *cobra.Command) error {
-	if !po.plan && (cmd.Flags().Changed("no-wait") || cmd.Flags().Changed("wait-timeout")) {
-		return cmderr.Usage("--no-wait and --wait-timeout need --plan")
+	if !po.plan && (cmd.Flags().Changed("no-wait") || cmd.Flags().Changed("wait-timeout") || po.full) {
+		return cmderr.Usage("--no-wait, --wait-timeout and --full need --plan")
 	}
 	if po.waitTimeout <= 0 {
 		return cmderr.Usage("--wait-timeout must be positive")
@@ -164,7 +167,7 @@ func planRevision(cmd *cobra.Command, opts *client.Options, runs runv1.RunAPICli
 		return err
 	}
 	if err := runcmd.PrintWithDiff(p, r, cs.GetTitle(), func(w io.Writer) {
-		runcmd.WriteBriefDiff(w, diff.GetDiff(), r.GetPlan(), r.GetId())
+		writePlan(w, diff.GetDiff(), r, po.full)
 	}); err != nil {
 		return err
 	}

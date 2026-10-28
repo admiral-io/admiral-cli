@@ -352,7 +352,8 @@ func TestWriteBriefDiffFoldsWhatRepeats(t *testing.T) {
 	assert.Equal(t, 2, strings.Count(out, `metadata.labels."admiral.io/environment": <absent> -> "env-1"`),
 		"once for the Deployment, once for the two that share it")
 	assert.Contains(t, out, "    takes its fields from helm, 3 in all\n")
-	assert.Contains(t, out, "\nEvery field: admiral run diff "+testRunID+"\n")
+	assert.Contains(t, out, "\nTo see every field, run: admiral run diff "+testRunID+"\n")
+	assert.Contains(t, out, "To see each resource whole, run: admiral run diff "+testRunID+" --full\n")
 }
 
 // A diff with nothing left out says nothing about where the rest is.
