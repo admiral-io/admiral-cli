@@ -24,9 +24,7 @@ func newValuesCmd(opts *client.Options) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "values <name> <component>",
 		Short: "Print the values a live component runs with",
-		Long: `Print the values a component live in the environment runs with, as YAML.
-By default only the values set on it; --effective prints the whole tree it
-receives, its defaults included.
+		Long: `Print the values set on a component live in the environment, as YAML.
 
 The output is a values file 'admiral changeset add --values' reads, so a
 component's values can be carried to another environment.`,
@@ -34,10 +32,7 @@ component's values can be carried to another environment.`,
 
   # Carry dev's values to a prod changeset
   admiral env values shop/dev api > api.yaml
-  admiral changeset add shop/prod api:v1.4.0 --values api.yaml
-
-  # Everything the component receives
-  admiral env values shop/prod api --effective`,
+  admiral changeset add shop/prod api:v1.4.0 --values api.yaml`,
 		Args:              flags.ExactArgs(2),
 		ValidArgsFunction: complete.Positions(complete.Envs(opts), complete.ComponentsOf(opts, false)),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -93,5 +88,7 @@ component's values can be carried to another environment.`,
 
 	flags.App(cmd, &appName, opts)
 	cmd.Flags().BoolVar(&effective, "effective", false, "print the whole tree the component receives, defaults included")
+	// Hidden until the platform builds the effective tree; it refuses the flag today.
+	_ = cmd.Flags().MarkHidden("effective")
 	return cmd
 }

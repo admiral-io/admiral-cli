@@ -295,6 +295,10 @@ func TestValuesArguments(t *testing.T) {
 		_, err = run(t, args...)
 		require.ErrorIs(t, err, credentials.ErrNotAuthenticated, "%v should be accepted", args)
 	}
+
+	help, err := run(t, "values", "--help")
+	require.NoError(t, err)
+	require.NotContains(t, help, "effective")
 }
 
 func TestUpdateSaysWhatChanged(t *testing.T) {
