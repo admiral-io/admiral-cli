@@ -1,6 +1,7 @@
 package run
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"google.golang.org/grpc"
 
 	"go.admiral.io/cli/internal/cmderr"
+	"go.admiral.io/cli/internal/output"
 	agentv1 "go.admiral.io/sdk/proto/admiral/api/agent/v1"
 	runv1 "go.admiral.io/sdk/proto/admiral/api/run/v1"
 )
@@ -80,4 +82,22 @@ func noPollDelay(t *testing.T) {
 	old := pollFirst
 	pollFirst = 0
 	t.Cleanup(func() { pollFirst = old })
+}
+
+// What a command prints while the user waits is one group, and the record
+// after it the next, so a blank line comes between them; with nothing
+// printed there is nothing to set apart.
+func TestProgressSetsTheRecordApart(t *testing.T) {
+	var b bytes.Buffer
+	p := NewProgress(&b, false)
+	p.End()
+	assert.Empty(t, b.String())
+
+	output.Writef(p, "Run run-1 is planning\n")
+	p.End()
+	assert.Equal(t, "Run run-1 is planning\n\n", b.String())
+
+	b.Reset()
+	NewProgress(&b, true).End()
+	assert.Equal(t, "\n", b.String(), "a prompt the user answered began the group")
 }

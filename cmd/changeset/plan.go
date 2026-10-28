@@ -140,15 +140,17 @@ func planRevision(cmd *cobra.Command, opts *client.Options, runs runv1.RunAPICli
 	}
 	r := resp.Run
 	p := output.NewPrinter(cmd, opts.OutputFormat)
-	output.Writef(p.Err(), "Planning %s revision %d in %s\n", cs.Id, rev.Number, r.Id)
+	progress := runcmd.NewProgress(p.Err(), false)
+	output.Writef(progress, "Planning %s revision %d in %s\n", cs.Id, rev.Number, r.Id)
 
 	if !po.noWait {
-		done, err := runcmd.Wait(cmd.Context(), runs, r, po.waitTimeout, true, p.Err())
+		done, err := runcmd.Wait(cmd.Context(), runs, r, po.waitTimeout, true, progress)
 		if err != nil {
 			return runcmd.WaitError(err, r)
 		}
 		r = done
 	}
+	progress.End()
 	// Under -o json|yaml the run is the whole answer; 'run diff' has the rest.
 	withDiff := r.GetStatus() == runv1.Run_STATUS_PLANNED && opts.OutputFormat.IsTable()
 	if !withDiff {

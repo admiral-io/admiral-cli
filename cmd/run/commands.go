@@ -49,10 +49,12 @@ func (w *waitOptions) register(cmd *cobra.Command, def bool, what string) {
 func (w waitOptions) finish(cmd *cobra.Command, opts *client.Options, c sdkclient.AdmiralClient, r *runv1.Run) error {
 	p := output.NewPrinter(cmd, opts.OutputFormat)
 	if w.wait {
+		progress := NewProgress(p.Err(), false)
 		var err error
-		if r, err = Wait(cmd.Context(), c.Run(), r, w.timeout, !w.follow, p.Err()); err != nil {
+		if r, err = Wait(cmd.Context(), c.Run(), r, w.timeout, !w.follow, progress); err != nil {
 			return WaitError(err, r)
 		}
+		progress.End()
 	}
 	if err := printTitled(cmd, p, c, r); err != nil {
 		return err
