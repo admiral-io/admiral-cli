@@ -129,7 +129,7 @@ func WaitError(err error, r *runv1.Run) error {
 		return &cmderr.Error{
 			Err:  fmt.Errorf("run %s is still %s; it continues on the server", e.last.GetId(), describeStatus(e.last)),
 			Code: cmderr.ExitTimeout,
-			Hint: "To wait again, run: admiral run get "+r.GetId()+" --wait",
+			Hint: "To wait again, run: admiral run get " + r.GetId() + " --wait",
 		}
 	case errNotEnrolled:
 		agent, key := "its agent", "admiral agent enrollment-key <agent>"
