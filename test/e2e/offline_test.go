@@ -29,11 +29,11 @@ func TestUsageErrors(t *testing.T) {
 		msg  string
 		hint string
 	}{
-		{"unknown command", []string{"bogus"}, `unknown command "bogus" for "admiral"`, "Run 'admiral --help' for usage."},
-		{"unknown subcommand", []string{"app", "bogus"}, `unknown command "bogus" for "admiral app"`, "Run 'admiral app --help' for usage."},
-		{"unknown flag", []string{"--bogus", "version"}, "unknown flag: --bogus", "--help' for usage."},
-		{"missing positional", []string{"app", "get"}, "missing argument: get <name>", "Run 'admiral app get --help' for usage."},
-		{"extra positional", []string{"app", "list", "extra"}, `unknown argument "extra"`, "Run 'admiral app list --help' for usage."},
+		{"unknown command", []string{"bogus"}, `unknown command "bogus" for "admiral"`, "For usage, run: admiral --help"},
+		{"unknown subcommand", []string{"app", "bogus"}, `unknown command "bogus" for "admiral app"`, "For usage, run: admiral app --help"},
+		{"unknown flag", []string{"--bogus", "version"}, "unknown flag: --bogus", "For usage, run: admiral"},
+		{"missing positional", []string{"app", "get"}, "missing argument: get <name>", "For usage, run: admiral app get --help"},
+		{"extra positional", []string{"app", "list", "extra"}, `unknown argument "extra"`, "For usage, run: admiral app list --help"},
 		{"bad output format", []string{"-o", "xml", "version"}, `invalid output format "xml"`, ""},
 		{"bad timeout flag", []string{"--timeout", "soon", "version"}, `invalid argument "soon" for "--timeout"`, ""},
 		{"bad shell", []string{"completion", "tcsh"}, `unknown shell "tcsh"`, ""},
@@ -71,7 +71,7 @@ func TestNotSignedIn(t *testing.T) {
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			r := newCLI(t).Run(args...).Exits(exitAuth).StderrContains("not signed in")
-			r.StderrContains("Run 'admiral auth login' to sign in, or set ADMIRAL_API_KEY.")
+			r.StderrContains("To sign in, run: admiral auth login\nOr set ADMIRAL_API_KEY to an API key.")
 		})
 	}
 }
@@ -83,7 +83,7 @@ func TestAuthWithTokenLifecycle(t *testing.T) {
 
 	cli.Run("auth", "status", "--no-verify").Exits(exitAuth).
 		StdoutContains("Authenticated:  no").
-		StdoutContains("Run 'admiral auth login' to sign in, or set ADMIRAL_API_KEY.")
+		StdoutContains("To sign in, run: admiral auth login\nOr set ADMIRAL_API_KEY to an API key.")
 
 	cli.WithStdin(wellFormedKey+"\n").Run("auth", "login", "--with-token").Succeeds()
 	cli.Run("auth", "status", "--no-verify").Succeeds().

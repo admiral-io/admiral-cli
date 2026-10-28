@@ -102,12 +102,11 @@ describe is a human view. Use 'env get -o json' for the raw record.`,
 					EnvironmentId: &envID,
 					PageSize:      100,
 				})
-				if err != nil {
-					sec.compsErr = err
-					return nil
+				sec.compsErr = err
+				if err == nil {
+					sec.comps = compResp.Components
+					sec.values = componentValues(gctx, c, envID, sec.comps)
 				}
-				sec.comps = compResp.Components
-				sec.values = componentValues(gctx, c, envID, sec.comps)
 				return nil
 			})
 			g.Go(func() error {
