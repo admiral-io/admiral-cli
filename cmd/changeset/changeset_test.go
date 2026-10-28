@@ -170,7 +170,7 @@ func TestRevertNamesAChangesetByID(t *testing.T) {
 	requireUsage(t, err, `invalid changeset "shop/prod": expected cs-xxxxxxxxxxxx`)
 
 	_, err = run(t, "revert", csID, "--no-wait")
-	requireUsage(t, err, "--no-wait and --wait-timeout need --plan")
+	requireUsage(t, err, "--no-wait, --wait-timeout and --full need --plan")
 
 	for _, args := range [][]string{
 		{"revert", csID},

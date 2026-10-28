@@ -69,11 +69,17 @@ func TestShowPlan(t *testing.T) {
 	}}}}}
 	var w bytes.Buffer
 	err := showPlan(context.Background(), &w, c,
-		&changesetv1.ChangeSet{Id: csID, Title: "First deploy"}, &runv1.Run{Id: runID})
+		&changesetv1.ChangeSet{Id: csID, Title: "First deploy"}, &runv1.Run{Id: runID}, false)
 	require.NoError(t, err)
 	require.Contains(t, w.String(), csID+`  "First deploy"`)
 	require.Contains(t, w.String(), "("+runID+")")
 	require.Contains(t, w.String(), "~ hello: apps/v1 Deployment shop-dev/hello (update)\n    replicas: 1 -> 2\n")
+
+	// --full shows the resource whole, its changed line marked.
+	w.Reset()
+	require.NoError(t, showPlan(context.Background(), &w, c,
+		&changesetv1.ChangeSet{Id: csID, Title: "First deploy"}, &runv1.Run{Id: runID}, true))
+	require.Contains(t, w.String(), "~ hello: apps/v1 Deployment shop-dev/hello (update)\n  - replicas: 1\n  + replicas: 2\n")
 }
 
 // Both verbs check their argument and whether they can ask before any

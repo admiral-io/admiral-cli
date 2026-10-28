@@ -42,12 +42,14 @@ func WriteDiff(w io.Writer, d *agentv1.PlanDiff, plan *runv1.PlanPhase) {
 // naming each one, a Kubernetes create counts what it sets, since most of
 // that is the API server's defaults, and the resources a component changes
 // the same way are listed once over the change they share. When it leaves
-// anything out it says where the whole diff is: 'admiral run diff runID'.
+// anything out it says where the whole diff is: 'admiral run diff runID',
+// and each resource whole with --full.
 // What changed outside Admiral is never shortened.
 func WriteBriefDiff(w io.Writer, d *agentv1.PlanDiff, plan *runv1.PlanPhase, runID string) {
 	w = &noLeadingBlank{w: w}
 	if writeResources(w, d, true) && runID != "" {
-		output.Writef(w, "\nEvery field: admiral run diff %s\n", runID)
+		output.Writef(w, "\nTo see every field, run: admiral run diff %s\n", runID)
+		output.Writef(w, "To see each resource whole, run: admiral run diff %s --full\n", runID)
 	}
 	writeTail(w, d, plan)
 }

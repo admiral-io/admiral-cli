@@ -15,6 +15,7 @@ import (
 	"go.admiral.io/cli/internal/input"
 	"go.admiral.io/cli/internal/output"
 	sdkclient "go.admiral.io/sdk/client"
+	agentv1 "go.admiral.io/sdk/proto/admiral/api/agent/v1"
 	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
 	runv1 "go.admiral.io/sdk/proto/admiral/api/run/v1"
 )
@@ -23,6 +24,7 @@ func newApproveCmd(opts *client.Options) *cobra.Command {
 	var (
 		reason string
 		yes    bool
+		full   bool
 	)
 	cmd := &cobra.Command{
 		Use:               "approve <changeset>",
@@ -55,7 +57,7 @@ approved by it. The changeset's author cannot approve it.`,
 			if err != nil {
 				return err
 			}
-			if err := showPlan(cmd.Context(), cmd.ErrOrStderr(), c, cs, r); err != nil {
+			if err := showPlan(cmd.Context(), cmd.ErrOrStderr(), c, cs, r, full); err != nil {
 				return err
 			}
 			if err := input.Confirm(cmd, yes, "Approve this plan"); err != nil {
@@ -72,6 +74,7 @@ approved by it. The changeset's author cannot approve it.`,
 	}
 	cmd.Flags().StringVar(&reason, "reason", "", "why, recorded with the approval")
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip the confirmation prompt")
+	cmd.Flags().BoolVar(&full, "full", false, "show each changed resource whole, as YAML, with its changed lines marked")
 	return cmd
 }
 
@@ -117,7 +120,7 @@ it failed or applied partway.`,
 			if err != nil {
 				return err
 			}
-			if err := showPlan(cmd.Context(), cmd.ErrOrStderr(), c, cs, r); err != nil {
+			if err := showPlan(cmd.Context(), cmd.ErrOrStderr(), c, cs, r, po.full); err != nil {
 				return err
 			}
 			// The plan is one group; the prompt and the wait are the next.
@@ -188,14 +191,23 @@ func latestPlan(ctx context.Context, c sdkclient.AdmiralClient, csID string) (*c
 }
 
 // showPlan writes what is about to be approved or applied: which
-// changeset, whose, and its diff, shortened. It goes to stderr
+// changeset, whose, and its diff, shortened unless full. It goes to stderr
 // with the question; stdout stays the answer.
-func showPlan(ctx context.Context, w io.Writer, c sdkclient.AdmiralClient, cs *changesetv1.ChangeSet, r *runv1.Run) error {
+func showPlan(ctx context.Context, w io.Writer, c sdkclient.AdmiralClient, cs *changesetv1.ChangeSet, r *runv1.Run, full bool) error {
 	diff, err := c.Run().GetRunPlanDiff(ctx, &runv1.GetRunPlanDiffRequest{RunId: r.GetId()})
 	if err != nil {
 		return err
 	}
 	output.Writef(w, "%s  %q  by %s  (%s)\n\n", cs.GetId(), cs.GetTitle(), output.FormatActor(cs.GetCreatedBy()), r.GetId())
-	runcmd.WriteBriefDiff(w, diff.GetDiff(), r.GetPlan(), r.GetId())
+	writePlan(w, diff.GetDiff(), r, full)
 	return nil
+}
+
+// writePlan writes a plan's diff in brief, or each resource whole.
+func writePlan(w io.Writer, d *agentv1.PlanDiff, r *runv1.Run, full bool) {
+	if full {
+		runcmd.WriteFullDiff(w, d, r.GetPlan())
+		return
+	}
+	runcmd.WriteBriefDiff(w, d, r.GetPlan(), r.GetId())
 }

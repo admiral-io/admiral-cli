@@ -323,10 +323,22 @@ func newCancelCmd(opts *client.Options) *cobra.Command {
 }
 
 func newDiffCmd(opts *client.Options) *cobra.Command {
-	return &cobra.Command{
+	var full bool
+	cmd := &cobra.Command{
 		Use:   "diff <run>",
 		Short: "Show what a run's plan changes, resource by resource",
-		Args:  flags.ExactArgs(1),
+		Long: `Show what a run's plan changes, resource by resource: each changed value
+at its path, before and after.
+
+--full shows each changed resource whole, as YAML, with the lines the plan
+changes marked - and +. It is the object as the apply leaves it, the
+cluster's defaults included. Sensitive values are never shown. Resources
+the plan leaves alone are not in it.`,
+		Example: `  admiral run diff run-7zd93c9p4qer
+
+  # Each changed resource whole
+  admiral run diff run-7zd93c9p4qer --full`,
+		Args: flags.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := runID(args[0])
 			if err != nil {
@@ -349,10 +361,16 @@ func newDiffCmd(opts *client.Options) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if full {
+				WriteFullDiff(p.Out(), resp.GetDiff(), r.GetPlan())
+				return nil
+			}
 			WriteDiff(p.Out(), resp.GetDiff(), r.GetPlan())
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&full, "full", false, "show each changed resource whole, as YAML, with its changed lines marked")
+	return cmd
 }
 
 func newLogsCmd(opts *client.Options) *cobra.Command {

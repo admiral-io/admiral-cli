@@ -57,7 +57,7 @@ func TestPlanFlagOnEachEditVerb(t *testing.T) {
 		for _, extra := range []string{"--no-wait", "--wait-timeout=1m"} {
 			a := append(append([]string{}, args...), extra)
 			_, err := run(t, a...)
-			requireUsage(t, err, "--no-wait and --wait-timeout need --plan")
+			requireUsage(t, err, "--no-wait, --wait-timeout and --full need --plan")
 		}
 	}
 
