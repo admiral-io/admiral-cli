@@ -165,7 +165,7 @@ it, so a script can gate on it.`,
 				}
 			}
 			if !st.Authenticated && !opts.OutputFormat.IsMachine() {
-				d.Hint("Run 'admiral auth login' to sign in, or set " + credentials.EnvAPIKey + ".")
+				d.Hint("To sign in, run: admiral auth login\nOr set " + credentials.EnvAPIKey + " to an API key.")
 			}
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)

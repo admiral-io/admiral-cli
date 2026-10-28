@@ -158,7 +158,11 @@ func TestCreateInfraPrintsItsOwnChart(t *testing.T) {
 func describeErr(sas *saClient) (string, error) {
 	var w bytes.Buffer
 	a := &agentv1.Agent{Id: agentID, ServiceAccountId: saID}
-	err := writeServiceAccount(context.Background(), &w, &fakeClient{sas: sas}, a)
+	d := output.NewDescribe()
+	if _, err := addServiceAccount(context.Background(), d, &fakeClient{sas: sas}, a); err != nil {
+		return "", err
+	}
+	err := d.Render(&w)
 	return w.String(), err
 }
 
@@ -174,7 +178,7 @@ func describe(t *testing.T, sa *serviceaccountv1.ServiceAccount) string {
 func TestGetWithoutServiceAccountRead(t *testing.T) {
 	out, err := describeErr(&saClient{err: status.Error(codes.PermissionDenied, "missing scope")})
 	require.NoError(t, err)
-	assert.Regexp(t, `Service Account:\s+`+saID, out)
+	assert.Regexp(t, `Service Account:\n\s+ID:\s+`+saID, out)
 	assert.Regexp(t, `Enrolled:\s+needs serviceaccount:read`, out)
 	assert.NotContains(t, out, "Subject")
 

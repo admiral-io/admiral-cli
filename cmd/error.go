@@ -54,7 +54,7 @@ func errorHint(err error) string {
 		return h
 	}
 	if isAuthError(err) {
-		return "Run 'admiral auth login' to sign in, or set " + credentials.EnvAPIKey + "."
+		return "To sign in, run: admiral auth login\nOr set " + credentials.EnvAPIKey + " to an API key."
 	}
 	if status.Code(err) == codes.PermissionDenied {
 		return cmderr.ScopeHint

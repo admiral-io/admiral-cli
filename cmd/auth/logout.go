@@ -31,7 +31,7 @@ if set, is not affected.`,
 			case res.Kind == "":
 				// The file was there but unreadable, so what it held is
 				// unknown. It is gone; say that rather than "not logged in".
-				output.Writeln(cmd.OutOrStdout(), "Removed an unreadable credentials file. Run 'admiral auth login' to sign in again.")
+				output.Writeln(cmd.OutOrStdout(), "Removed an unreadable credentials file. To sign in again, run: admiral auth login")
 			case res.Kind == credentials.KindAPIKey:
 				output.Writeln(cmd.OutOrStdout(), "Stored API key removed.")
 			case res.Kind == credentials.KindAPIKeyRef:

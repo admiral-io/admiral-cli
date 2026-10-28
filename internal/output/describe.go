@@ -142,7 +142,7 @@ func (b *Block) Table(headers []string, rows [][]string) {
 // render writes the block at the given indent. Consecutive fields share one
 // tabwriter so their values align; a nested block or table starts a new
 // alignment group, and top-level sections, and a table and whatever comes
-// before it, are separated by a blank line.
+// before or after it, are separated by a blank line.
 func (b *Block) render(w io.Writer, indent int) error {
 	pad := strings.Repeat(" ", indent)
 	var tw *tabwriter.Writer
@@ -161,7 +161,7 @@ func (b *Block) render(w io.Writer, indent int) error {
 			if err := flush(); err != nil {
 				return err
 			}
-			if indent == 0 && i > 0 {
+			if i > 0 && (indent == 0 || b.items[i-1].table != nil) {
 				if _, err := fmt.Fprintln(w); err != nil {
 					return err
 				}
@@ -232,7 +232,7 @@ func (t *table) render(w io.Writer, indent int) error {
 // than table is a usage error naming that path.
 func (p *Printer) PrintDescribe(d *Describe, getCommand string) error {
 	if !p.Format.IsTable() {
-		return cmderr.UsageHint("Run '"+getCommand+" -o "+p.Format.String()+"' for machine-readable output.",
+		return cmderr.UsageHint("For machine-readable output, run: "+getCommand+" -o "+p.Format.String(),
 			"describe has no -o %s output", p.Format)
 	}
 	return d.Render(p.IO.Out)

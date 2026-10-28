@@ -58,7 +58,7 @@ func usageError(cmd *cobra.Command, want, got int) error {
 }
 
 func helpHint(cmd *cobra.Command) string {
-	return "Run '" + cmd.CommandPath() + " --help' for usage."
+	return "For usage, run: " + cmd.CommandPath() + " --help"
 }
 
 // Group marks cmd as one that only groups subcommands. Cobra skips Args on

@@ -65,6 +65,7 @@ func sweepArgs(files map[string]string) map[string][]string {
 	return map[string][]string{
 		"agent create":         {"agent", "create", "x", "--kind", "kubernetes"},
 		"agent delete":         {"agent", "delete", "x"},
+		"agent describe":       {"agent", "describe", "x"},
 		"agent enrollment-key": {"agent", "enrollment-key", "x"},
 		"agent get":            {"agent", "get", "x"},
 		"agent grant":          {"agent", "grant", "x", "app:x"},

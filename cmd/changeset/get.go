@@ -138,7 +138,7 @@ func getRendered(cmd *cobra.Command, c sdkclient.AdmiralClient, csID string, ro 
 	resp, err := c.ChangeSet().GetArtifact(ctx, &changesetv1.GetArtifactRequest{ChangeSetId: csID, Revision: rev})
 	if err != nil {
 		if status.Code(err) == codes.FailedPrecondition {
-			return cmderr.WithHint(err, fmt.Sprintf("Run 'admiral changeset plan %s' to prepare the head.", csID))
+			return cmderr.WithHint(err, "To prepare the head, run: admiral changeset plan "+csID)
 		}
 		return err
 	}
@@ -180,7 +180,7 @@ func lastPlanned(cmd *cobra.Command, c sdkclient.AdmiralClient, csID string) (st
 	runID := resp.ChangeSet.GetLatestRunId()
 	if runID == "" {
 		return "", cmderr.WithHint(fmt.Errorf("%s has not been planned", csID),
-			fmt.Sprintf("Run 'admiral changeset plan %s' to prepare the head.", csID))
+			"To prepare the head, run: admiral changeset plan "+csID)
 	}
 	run, err := c.Run().GetRun(ctx, &runv1.GetRunRequest{RunId: runID})
 	if err != nil {
