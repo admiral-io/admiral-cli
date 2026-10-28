@@ -82,3 +82,14 @@ func TestDescribeWithoutItsRunsStillShowsTheChange(t *testing.T) {
 	assert.Contains(t, out, "unavailable")
 	assert.Contains(t, out, cmderr.ScopeHint)
 }
+
+// The platform lists runs only within an environment, so describe names the
+// changeset's environment along with the changeset.
+func TestDescribeListsRunsWithinTheChangesetsEnvironment(t *testing.T) {
+	f, err := changeSetRunsFilter(&changesetv1.ChangeSet{Id: csID, EnvironmentId: "env-dcd44upzgg4z"})
+	require.NoError(t, err)
+	assert.Equal(t, "field['environment_id'] = 'env-dcd44upzgg4z' AND field['change_set_id'] = '"+csID+"'", f)
+
+	hints := nextSteps(&changesetv1.ChangeSet{Id: csID}, nil, csSections{where: "shop/prod", moreRuns: true})
+	assert.Contains(t, hints, "Showing the 5 most recent runs. To list them all, run: admiral run list shop/prod --changeset "+csID)
+}

@@ -72,7 +72,7 @@ describe is a human view. Use 'changeset get -o json' for the raw record and
 				return nil
 			})
 			g.Go(func() error {
-				sec.runs, sec.moreRuns, sec.runsErr = listChangeSetRuns(gctx, c, csID)
+				sec.runs, sec.moreRuns, sec.runsErr = listChangeSetRuns(gctx, c, cs)
 				return nil
 			})
 			g.Go(func() error {
@@ -99,8 +99,8 @@ type csSections struct {
 	runsErr  error
 }
 
-func listChangeSetRuns(ctx context.Context, c sdkclient.AdmiralClient, csID string) ([]*runv1.Run, bool, error) {
-	f, err := filter.Eq("change_set_id", csID)
+func listChangeSetRuns(ctx context.Context, c sdkclient.AdmiralClient, cs *changesetv1.ChangeSet) ([]*runv1.Run, bool, error) {
+	f, err := changeSetRunsFilter(cs)
 	if err != nil {
 		return nil, false, err
 	}
@@ -109,6 +109,20 @@ func listChangeSetRuns(ctx context.Context, c sdkclient.AdmiralClient, csID stri
 		return nil, false, err
 	}
 	return resp.Runs, resp.NextPageToken != "", nil
+}
+
+// changeSetRunsFilter selects a changeset's runs. Runs are listed within an
+// environment, so the filter names the changeset's as well.
+func changeSetRunsFilter(cs *changesetv1.ChangeSet) (string, error) {
+	env, err := filter.Eq("environment_id", cs.EnvironmentId)
+	if err != nil {
+		return "", err
+	}
+	id, err := filter.Eq("change_set_id", cs.Id)
+	if err != nil {
+		return "", err
+	}
+	return filter.And(env, id), nil
 }
 
 // environmentPath names where the changeset goes as app/env, as the commands
@@ -229,6 +243,10 @@ func nextSteps(cs *changesetv1.ChangeSet, latest *runv1.Run, sec csSections) []s
 	if n := len(sec.diff.GetComponents()); n > 0 {
 		hints = append(hints, "To see every value, run: admiral changeset diff "+cs.Id)
 	}
+	if sec.moreRuns {
+		hints = append(hints, fmt.Sprintf("Showing the %d most recent runs. To list them all, run: admiral run list %s --changeset %s",
+			recentRunsLimit, sec.where, cs.Id))
+	}
 	if cs.Status != changesetv1.ChangeSet_STATUS_OPEN {
 		return hints
 	}
@@ -241,10 +259,6 @@ func nextSteps(cs *changesetv1.ChangeSet, latest *runv1.Run, sec csSections) []s
 	case latest.Status == runv1.Run_STATUS_FAILED:
 		hints = append(hints, "To see why the last run failed, run: admiral run get "+latest.Id,
 			"To plan it again, run: admiral changeset plan "+cs.Id)
-	}
-	if sec.moreRuns {
-		hints = append(hints, fmt.Sprintf("Showing the %d most recent runs. To list them all, run: admiral run list --changeset %s",
-			recentRunsLimit, cs.Id))
 	}
 	return hints
 }
