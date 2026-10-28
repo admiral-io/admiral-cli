@@ -10,6 +10,8 @@ import (
 	commonv1 "buf.build/gen/go/admiral/common/protocolbuffers/go/admiral/common/v1"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"go.admiral.io/cli/internal/client"
@@ -369,4 +371,28 @@ func TestDescribeShowsTerraformSettings(t *testing.T) {
 	out := render(e)
 	require.Regexp(t, `Engine:\s+terraform@1.9.8`, out)
 	require.Regexp(t, `Backend:\s+s3 bucket=acme region=us-east-1`, out)
+}
+
+// A component's version names its chart, not what the environment set on
+// it, so describe names the values set (never their contents) and points
+// at 'env values' for them.
+func TestDescribeNamesTheValuesEachComponentSets(t *testing.T) {
+	comps := []*environmentv1.EnvironmentComponent{{Name: "api"}, {Name: "web"}, {Name: "db"}}
+	sec := envSections{comps: comps, values: map[string]setValues{
+		"api": {paths: []string{"image.tag", "ingress.host", "replicaCount", "resources.limits.memory"}},
+		"web": {},
+		"db":  {err: status.Error(codes.PermissionDenied, "missing required scope env:read")},
+	}}
+	var b bytes.Buffer
+	require.NoError(t, describeEnv(&environmentv1.Environment{Name: "prod"}, &applicationv1.Application{Name: "shop"}, sec).Render(&b))
+	out := b.String()
+	require.Regexp(t, `api:\n\s+Values:\s+4 set: image.tag, ingress.host, replicaCount, \+1`, out)
+	require.Regexp(t, `web:\n\s+Values:\s+none set`, out)
+	require.Regexp(t, `db:\n\s+Values:\s+<unavailable: `, out)
+	require.Contains(t, out, "To see a component's values, run: admiral env values shop/prod <component>")
+	require.Contains(t, out, cmderr.ScopeHint)
+
+	var paths []string
+	leafPaths("", map[string]any{"image": map[string]any{"tag": "35bd16b"}, "args": []any{"a"}, "empty": map[string]any{}}, &paths)
+	require.ElementsMatch(t, []string{"image.tag", "args", "empty"}, paths)
 }

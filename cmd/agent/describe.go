@@ -73,11 +73,11 @@ func describeAgent(ctx context.Context, c sdkclient.AdmiralClient, a *agentv1.Ag
 	d.Field("Created", output.FormatDescribeTime(a.GetCreatedAt()))
 	d.Field("Created By", output.FormatActorWithID(a.GetCreatedBy()))
 
-	denied, err := addServiceAccount(ctx, d, c, a)
+	grantsDenied, err := addGrants(ctx, d, c, a)
 	if err != nil {
 		return nil, err
 	}
-	grantsDenied, err := addGrants(ctx, d, c, a)
+	denied, err := addServiceAccount(ctx, d, c, a)
 	if err != nil {
 		return nil, err
 	}

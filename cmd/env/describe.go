@@ -3,7 +3,10 @@ package env
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
+	"strings"
+	"sync"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
@@ -18,6 +21,7 @@ import (
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
 	"go.admiral.io/cli/internal/resolve"
+	"go.admiral.io/cli/internal/valuesfile"
 	sdkclient "go.admiral.io/sdk/client"
 	agentv1 "go.admiral.io/sdk/proto/admiral/api/agent/v1"
 	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
@@ -100,9 +104,10 @@ describe is a human view. Use 'env get -o json' for the raw record.`,
 				})
 				if err != nil {
 					sec.compsErr = err
-				} else {
-					sec.comps = compResp.Components
+					return nil
 				}
+				sec.comps = compResp.Components
+				sec.values = componentValues(gctx, c, envID, sec.comps)
 				return nil
 			})
 			g.Go(func() error {
@@ -173,12 +178,103 @@ type envSections struct {
 	// tags is each version's tags by version ID, for components whose
 	// reference is not a tag.
 	tags map[string][]string
+	// values is the paths set on each component, by name; nil past
+	// valuesLimit components.
+	values map[string]setValues
+}
+
+// valuesLimit caps the components whose values describe reads, one read
+// each.
+const valuesLimit = 10
+
+// setValues is the paths the environment sets on a component, or why they
+// could not be read. The values themselves are not shown: they may be
+// secrets, and 'env values' prints them.
+type setValues struct {
+	paths []string
+	err   error
+}
+
+func componentValues(ctx context.Context, c sdkclient.AdmiralClient, envID string, comps []*environmentv1.EnvironmentComponent) map[string]setValues {
+	if len(comps) > valuesLimit {
+		return nil
+	}
+	var mu sync.Mutex
+	out := make(map[string]setValues, len(comps))
+	var g errgroup.Group
+	for _, comp := range comps {
+		g.Go(func() error {
+			v := readSetValues(ctx, c, envID, comp.Name)
+			mu.Lock()
+			out[comp.Name] = v
+			mu.Unlock()
+			return nil
+		})
+	}
+	_ = g.Wait() // nothing returns an error
+	return out
+}
+
+func readSetValues(ctx context.Context, c sdkclient.AdmiralClient, envID, comp string) setValues {
+	resp, err := c.Environment().GetEnvironmentComponentValues(ctx, &environmentv1.GetEnvironmentComponentValuesRequest{
+		EnvironmentId: envID,
+		Component:     comp,
+	})
+	if err != nil {
+		return setValues{err: err}
+	}
+	if resp.TreeJson == "" {
+		return setValues{}
+	}
+	tree, err := valuesfile.DecodeJSON(resp.TreeJson)
+	if err != nil {
+		return setValues{err: err}
+	}
+	var paths []string
+	leafPaths("", tree, &paths)
+	sort.Strings(paths)
+	return setValues{paths: paths}
+}
+
+// leafPaths appends the dotted path of every value under m. A list is one
+// value, as 'changeset set' writes it.
+func leafPaths(prefix string, m map[string]any, out *[]string) {
+	for k, v := range m {
+		path := k
+		if prefix != "" {
+			path = prefix + "." + k
+		}
+		if sub, ok := v.(map[string]any); ok && len(sub) > 0 {
+			leafPaths(path, sub, out)
+			continue
+		}
+		*out = append(*out, path)
+	}
+}
+
+// valuesInBrief counts the paths set and names the first few.
+func valuesInBrief(v setValues) string {
+	const shown = 3
+	switch {
+	case v.err != nil:
+		return "<unavailable: " + cmderr.Format(v.err) + ">"
+	case len(v.paths) == 0:
+		return "none set"
+	case len(v.paths) <= shown:
+		return fmt.Sprintf("%d set: %s", len(v.paths), strings.Join(v.paths, ", "))
+	}
+	return fmt.Sprintf("%d set: %s, +%d", len(v.paths), strings.Join(v.paths[:shown], ", "), len(v.paths)-shown)
 }
 
 // permissionDenied reports whether any section read was refused for scope.
 func (s envSections) permissionDenied() bool {
 	for _, err := range []error{s.compsErr, s.runsErr, s.openCSErr} {
 		if status.Code(err) == codes.PermissionDenied {
+			return true
+		}
+	}
+	for _, v := range s.values {
+		if status.Code(v.err) == codes.PermissionDenied {
 			return true
 		}
 	}
@@ -266,7 +362,21 @@ func describeEnv(e *environmentv1.Environment, app *applicationv1.Application, s
 				rows = append(rows, []string{c.Name, output.FormatEnumKebab(c.Kind), resolve.VersionLabel(c.Version, sec.tags), applied})
 			}
 			b.Table([]string{"Name", "Kind", "Version", "Applied"}, rows)
+			for _, c := range comps {
+				v, ok := sec.values[c.Name]
+				if !ok {
+					continue
+				}
+				b.Block(c.Name, func(b *output.Block) { b.Field("Values", valuesInBrief(v)) })
+			}
 		})
+		if len(comps) > 0 {
+			name := "<component>"
+			if len(comps) == 1 {
+				name = comps[0].Name
+			}
+			d.Hint(fmt.Sprintf("To see a component's values, run: admiral env values %s/%s %s", app.Name, e.Name, name))
+		}
 	}
 
 	if sec.openCSErr != nil {
