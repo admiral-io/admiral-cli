@@ -1,14 +1,11 @@
 package agent
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"strings"
 
 	"github.com/spf13/cobra"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	"go.admiral.io/cli/internal/client"
@@ -19,9 +16,6 @@ import (
 	"go.admiral.io/cli/internal/resolve"
 	sdkclient "go.admiral.io/sdk/client"
 	agentv1 "go.admiral.io/sdk/proto/admiral/api/agent/v1"
-	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
-	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
-	serviceaccountv1 "go.admiral.io/sdk/proto/admiral/api/serviceaccount/v1"
 )
 
 func newListCmd(opts *client.Options) *cobra.Command {
@@ -60,7 +54,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 func newGetCmd(opts *client.Options) *cobra.Command {
 	return &cobra.Command{
 		Use:   "get <agent>",
-		Short: "Get an agent, with what it last reported and whether it has enrolled",
+		Short: "Get an agent",
 		Args:  flags.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := client.CreateClient(cmd.Context(), opts)
@@ -78,60 +72,9 @@ func newGetCmd(opts *client.Options) *cobra.Command {
 			}
 			a := resp.GetAgent()
 			p := output.NewPrinter(cmd, opts.OutputFormat)
-			if err := p.PrintOne(a, a.GetName(), agentTable.Render(p, a)); err != nil {
-				return err
-			}
-			if !opts.OutputFormat.IsTable() {
-				return nil
-			}
-			if err := writeServiceAccount(cmd.Context(), p.Out(), c, a); err != nil {
-				return err
-			}
-			return writeGrants(cmd.Context(), p.Out(), c, a)
+			return p.PrintOne(a, a.GetName(), agentTable.Render(p, a))
 		},
 	}
-}
-
-// writeGrants lists who may use the agent, applications and environments by
-// name.
-func writeGrants(ctx context.Context, w io.Writer, c sdkclient.AdmiralClient, a *agentv1.Agent) error {
-	d := output.NewDescribe()
-	resp, err := c.Agent().ListAgentGrants(ctx, &agentv1.ListAgentGrantsRequest{AgentId: a.GetId()})
-	switch {
-	case status.Code(err) == codes.PermissionDenied:
-		d.Unavailable("Granted to", "needs agent:read on its grants")
-	case err != nil:
-		return err
-	default:
-		targets := make([]string, 0, len(resp.GetGrants()))
-		for _, g := range resp.GetGrants() {
-			targets = append(targets, grantName(ctx, c, g))
-		}
-		d.Fields("Granted to", targets)
-	}
-	fmt.Fprintln(w)
-	return d.Render(w)
-}
-
-// grantName is a grant's target as 'agent grant' takes it, with names in
-// place of ids where they can be read.
-func grantName(ctx context.Context, c sdkclient.AdmiralClient, g *agentv1.AgentGrant) string {
-	switch {
-	case g.GetApplicationId() != "":
-		if resp, err := c.Application().GetApplication(ctx, &applicationv1.GetApplicationRequest{ApplicationId: g.GetApplicationId()}); err == nil {
-			return "app:" + resp.GetApplication().GetName()
-		}
-	case g.GetEnvironmentId() != "":
-		env, err := c.Environment().GetEnvironment(ctx, &environmentv1.GetEnvironmentRequest{EnvironmentId: g.GetEnvironmentId()})
-		if err != nil {
-			break
-		}
-		app, err := c.Application().GetApplication(ctx, &applicationv1.GetApplicationRequest{ApplicationId: env.GetEnvironment().GetApplicationId()})
-		if err == nil {
-			return "env:" + app.GetApplication().GetName() + "/" + env.GetEnvironment().GetName()
-		}
-	}
-	return grantTarget(g)
 }
 
 func newUpdateCmd(opts *client.Options) *cobra.Command {
@@ -168,32 +111,6 @@ signs in by its service account, not its name.`,
 	cmd.Flags().StringVar(&name, "name", "", "the agent's new name")
 	_ = cmd.MarkFlagRequired("name")
 	return cmd
-}
-
-// writeServiceAccount follows the agent to its service account, which is
-// where enrollment records the issuer and subject it signs in with.
-func writeServiceAccount(ctx context.Context, w io.Writer, c sdkclient.AdmiralClient, a *agentv1.Agent) error {
-	resp, err := c.ServiceAccount().GetServiceAccount(ctx,
-		&serviceaccountv1.GetServiceAccountRequest{ServiceAccountId: a.GetServiceAccountId()})
-	if err != nil && status.Code(err) != codes.PermissionDenied {
-		return err
-	}
-	sa := resp.GetServiceAccount()
-	d := output.NewDescribe()
-	d.Field("Service Account", a.GetServiceAccountId())
-	switch {
-	case err != nil:
-		// Reading an agent does not imply reading its service account.
-		d.Field("Enrolled", "needs serviceaccount:read")
-	case sa.GetEnrolledAt() == nil:
-		d.Field("Enrolled", "not enrolled")
-	default:
-		d.Field("Enrolled", output.FormatDescribeTime(sa.GetEnrolledAt()))
-		d.Field("Subject", sa.GetSubject())
-		d.Field("Issuer", sa.GetIssuerId())
-	}
-	fmt.Fprintln(w)
-	return d.Render(w)
 }
 
 var agentKinds = map[string]agentv1.Agent_Kind{
