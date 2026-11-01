@@ -177,10 +177,25 @@ func Outcome(r *runv1.Run) error {
 			Code: cmderr.ExitError,
 			Hint: HoldHint(r.GetChangeSetId(), r.GetId()),
 		})
+	case runv1.Run_STATUS_UNKNOWN:
+		return cmderr.Reported(&cmderr.Error{
+			Err:  fmt.Errorf("run %s's apply never reported, so what it changed is unknown; the environment is held", r.GetId()),
+			Code: cmderr.ExitError,
+			Hint: UnknownHint(r.GetChangeSetId(), r.GetId()),
+		})
 	case runv1.Run_STATUS_SUPERSEDED:
 		return cmderr.Reported(fmt.Errorf("run %s was superseded by a newer plan", r.GetId()))
 	}
 	return nil
+}
+
+// UnknownHint is how to get out of an apply whose outcome is unknown: plan
+// first, which diffs against what is really there, then undo or accept.
+func UnknownHint(changeSetID, runID string) string {
+	if changeSetID == "" {
+		return HoldHint(changeSetID, runID)
+	}
+	return "To see what landed, run: admiral changeset plan " + changeSetID + "\n" + HoldHint(changeSetID, runID)
 }
 
 var changeSetIDPattern = regexp.MustCompile(`cs-[0-9a-z]{12}`)

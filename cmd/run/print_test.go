@@ -270,6 +270,17 @@ func TestPartialOutcomeNamesRevertAndAccept(t *testing.T) {
 		cmderr.Hint(err))
 }
 
+// An unknown outcome says to plan first: the plan diffs against what is
+// really there, so it shows what landed before anyone undoes or accepts it.
+func TestUnknownOutcomeSaysToPlanFirst(t *testing.T) {
+	err := Outcome(&runv1.Run{Id: testRunID, ChangeSetId: csID, Status: runv1.Run_STATUS_UNKNOWN})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown")
+	assert.Equal(t, "To see what landed, run: admiral changeset plan "+csID+
+		"\nTo undo it, run: admiral changeset revert "+csID+"\nTo accept what landed, run: admiral run accept "+testRunID+" --reason ...",
+		cmderr.Hint(err))
+}
+
 func execRun(t *testing.T, args ...string) error {
 	t.Helper()
 	t.Setenv(credentials.EnvAPIKey, "")
