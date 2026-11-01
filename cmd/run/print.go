@@ -174,6 +174,9 @@ func printRun(p *output.Printer, r *runv1.Run, title string, diff func(w io.Writ
 			d.Hint("To see why the plan failed, run: admiral run diff " + r.GetId())
 		}
 		d.Hint("To see the agent's output, run: admiral run logs " + r.GetId())
+	case runv1.Run_STATUS_UNKNOWN:
+		d.Hint("Its apply never reported, so what it changed is unknown.")
+		d.Hint(UnknownHint(r.GetChangeSetId(), r.GetId()))
 	}
 	return p.PrintStatus(r, d)
 }
