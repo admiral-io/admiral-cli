@@ -256,17 +256,23 @@ func TestRefusalSaysWhatUnblocksIt(t *testing.T) {
 	needs := status.Error(codes.FailedPrecondition, "the plan needs 1 approval(s) and has 0")
 	assert.Contains(t, cmderr.Hint(Refusal(needs, "admiral run", testRunID)), "must run 'admiral run approve "+testRunID+"' first")
 
-	held := status.Error(codes.FailedPrecondition, "change set "+csID+"'s partial apply holds the environment; revert it or accept it first")
-	assert.Equal(t, "To undo it, run: admiral changeset revert "+csID+"\nTo accept what landed, run: admiral run accept <run> --reason ...",
+	held := status.Error(codes.FailedPrecondition, "change set "+csID+"'s partial apply holds the environment; it is applied again, edited or reverted first")
+	assert.Equal(t, "To finish it, run: admiral changeset plan "+csID+", then apply it\n"+
+		"To undo it, run: admiral changeset revert "+csID+"\n"+
+		"As break-glass, a tenant admin accepts what landed: admiral run accept <run> --reason ...",
 		cmderr.Hint(Refusal(held, "admiral changeset", "cs-other0000000")))
 
 	scope := status.Error(codes.PermissionDenied, "missing scope run:write")
 	assert.Empty(t, cmderr.Hint(Refusal(scope, "admiral run", testRunID)), "a real scope refusal keeps the root's scope hint")
 }
 
-func TestPartialOutcomeNamesRevertAndAccept(t *testing.T) {
+// A partial outcome names finishing the changeset first; accepting what
+// landed is break-glass.
+func TestPartialOutcomeNamesApplyAgainRevertAndAccept(t *testing.T) {
 	err := Outcome(&runv1.Run{Id: testRunID, ChangeSetId: csID, Status: runv1.Run_STATUS_PARTIAL})
-	assert.Equal(t, "To undo it, run: admiral changeset revert "+csID+"\nTo accept what landed, run: admiral run accept "+testRunID+" --reason ...",
+	assert.Equal(t, "To finish it, run: admiral changeset plan "+csID+", then apply it\n"+
+		"To undo it, run: admiral changeset revert "+csID+"\n"+
+		"As break-glass, a tenant admin accepts what landed: admiral run accept "+testRunID+" --reason ...",
 		cmderr.Hint(err))
 }
 
@@ -276,8 +282,9 @@ func TestUnknownOutcomeSaysToPlanFirst(t *testing.T) {
 	err := Outcome(&runv1.Run{Id: testRunID, ChangeSetId: csID, Status: runv1.Run_STATUS_UNKNOWN})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown")
-	assert.Equal(t, "To see what landed, run: admiral changeset plan "+csID+
-		"\nTo undo it, run: admiral changeset revert "+csID+"\nTo accept what landed, run: admiral run accept "+testRunID+" --reason ...",
+	assert.Equal(t, "To see what landed and finish it, run: admiral changeset plan "+csID+", then apply it\n"+
+		"To undo it, run: admiral changeset revert "+csID+"\n"+
+		"As break-glass, a tenant admin accepts what landed: admiral run accept "+testRunID+" --reason ...",
 		cmderr.Hint(err))
 }
 

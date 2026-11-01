@@ -25,7 +25,8 @@ A changeset is a proposal against one environment: add a component from
 the registry, change its version, set or unset values, remove it. Each
 command cuts one immutable revision. 'plan' starts a run that plans the
 head and shows its diff; 'approve' and 'apply' act on that plan. 'revert'
-opens a changeset that undoes an applied one.
+undoes one: in place while a partial apply of it holds the environment, or
+with a new changeset once it has applied.
 
 A changeset is named by its ID (cs-7f2a1c9d0e3b) or by its environment
 (shop/dev) while that environment has one open changeset. With several,

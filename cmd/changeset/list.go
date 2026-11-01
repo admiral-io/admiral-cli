@@ -86,7 +86,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 		},
 	}
 
-	flags.Enum(cmd, &status, "status", "", "only changesets in this status", "open", "applied", "closed")
+	flags.Enum(cmd, &status, "status", "", "only changesets in this status", "open", "applied", "closed", "reverted")
 	flags.Paging(cmd, &paging)
 
 	return cmd

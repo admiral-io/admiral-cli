@@ -190,27 +190,35 @@ func Outcome(r *runv1.Run) error {
 }
 
 // UnknownHint is how to get out of an apply whose outcome is unknown: plan
-// first, which diffs against what is really there, then undo or accept.
+// first, which diffs against what is really there, then finish or undo it.
 func UnknownHint(changeSetID, runID string) string {
 	if changeSetID == "" {
-		return HoldHint(changeSetID, runID)
+		return acceptHint(runID)
 	}
-	return "To see what landed, run: admiral changeset plan " + changeSetID + "\n" + HoldHint(changeSetID, runID)
+	return "To see what landed and finish it, run: admiral changeset plan " + changeSetID + ", then apply it\n" +
+		undoHint(changeSetID, runID)
 }
 
 var changeSetIDPattern = regexp.MustCompile(`cs-[0-9a-z]{12}`)
 
-// HoldHint is how to release an environment a partial apply holds: undo the
-// changeset, or accept what landed.
+// HoldHint is how to release an environment a partial apply holds: apply
+// the changeset again, or undo it. Accepting what landed is break-glass.
 func HoldHint(changeSetID, runID string) string {
-	accept := "admiral run accept " + runID + " --reason ..."
-	if runID == "" {
-		accept = "admiral run accept <run> --reason ..."
-	}
 	if changeSetID == "" {
-		return "To accept what landed, run: " + accept
+		return acceptHint(runID)
 	}
-	return "To undo it, run: admiral changeset revert " + changeSetID + "\nTo accept what landed, run: " + accept
+	return "To finish it, run: admiral changeset plan " + changeSetID + ", then apply it\n" + undoHint(changeSetID, runID)
+}
+
+func undoHint(changeSetID, runID string) string {
+	return "To undo it, run: admiral changeset revert " + changeSetID + "\n" + acceptHint(runID)
+}
+
+func acceptHint(runID string) string {
+	if runID == "" {
+		runID = "<run>"
+	}
+	return "As break-glass, a tenant admin accepts what landed: admiral run accept " + runID + " --reason ..."
 }
 
 // waitWords says why a queued run waits, for the progress line.
