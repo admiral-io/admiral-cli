@@ -153,6 +153,9 @@ func describeChangeSet(cs *changesetv1.ChangeSet, sec csSections) *output.Descri
 	if cs.RevertsChangeSetId != "" {
 		d.Field("Reverts", cs.RevertsChangeSetId)
 	}
+	if cs.RevertedByChangeSetId != "" {
+		d.Field("Reverted by", cs.RevertedByChangeSetId)
+	}
 	var latest *runv1.Run
 	if len(sec.runs) > 0 {
 		latest = sec.runs[0]

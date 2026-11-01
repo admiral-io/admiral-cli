@@ -175,6 +175,7 @@ func TestRevertNamesAChangesetByID(t *testing.T) {
 	for _, args := range [][]string{
 		{"revert", csID},
 		{"revert", csID, "--title", "Back out the bump", "--plan"},
+		{"revert", csID, "--component", "api", "--component", "db"},
 	} {
 		_, err = run(t, args...)
 		requireAccepted(t, err, args...)

@@ -263,11 +263,17 @@ func newAcceptCmd(opts *client.Options) *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "accept <run>",
-		Short: "Accept a partial apply as the environment's state",
-		Long: `Accept a run that applied partway. The environment is released, with the
-components that applied recorded as live and the rest as they were. The
-command asks first; --yes skips the question.`,
-		Example: `  admiral run accept run-7f2a1c9d0e3b --reason "fixing forward"`,
+		Short: "Accept a partial apply as the environment's state (break-glass)",
+		Long: `Accept a run that applied partway, recording the live state as it is. The
+environment is released, with the components that applied recorded as live
+and the rest as they were.
+
+This is break-glass, for when nothing can be applied: the target is gone, or
+someone repaired it by hand. It takes a tenant admin. Otherwise finish the
+changeset: plan and apply it again, edit it, or revert it.
+
+The command asks first; --yes skips the question.`,
+		Example: `  admiral run accept run-7f2a1c9d0e3b --reason "the cluster was rebuilt by hand"`,
 		Args:    flags.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := runID(args[0])
