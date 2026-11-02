@@ -50,6 +50,15 @@ type errWaitElapsed struct{ last *runv1.Run }
 
 func (errWaitElapsed) Error() string { return "wait elapsed" }
 
+// errWaitBroken is a poll that failed: the wait ended, not the run.
+type errWaitBroken struct {
+	last *runv1.Run
+	err  error
+}
+
+func (e errWaitBroken) Error() string { return e.err.Error() }
+func (e errWaitBroken) Unwrap() error { return e.err }
+
 // errNotEnrolled ends a wait on an agent that has never enrolled: nothing
 // enrolls it unless someone installs it, so waiting longer rarely helps.
 type errNotEnrolled struct{ last *runv1.Run }
@@ -108,7 +117,10 @@ func Wait(ctx context.Context, c runv1.RunAPIClient, cur *runv1.Run, timeout tim
 		}
 		resp, err := c.GetRun(ctx, &runv1.GetRunRequest{RunId: cur.GetId()})
 		if err != nil {
-			return cur, err
+			if ctx.Err() != nil {
+				return cur, err
+			}
+			return cur, errWaitBroken{last: cur, err: err}
 		}
 		next := resp.GetRun()
 		if progressStatus(next) != progressStatus(cur) && !Settled(next.GetStatus()) {
@@ -130,6 +142,12 @@ func WaitError(err error, r *runv1.Run) error {
 			Err:  fmt.Errorf("run %s is still %s; it continues on the server", e.last.GetId(), describeStatus(e.last)),
 			Code: cmderr.ExitTimeout,
 			Hint: "To wait again, run: admiral run get " + r.GetId() + " --wait",
+		}
+	case errWaitBroken:
+		return &cmderr.Error{
+			Err:  fmt.Errorf("lost track of run %s while it was %s: %w", e.last.GetId(), describeStatus(e.last), e.err),
+			Code: cmderr.ExitError,
+			Hint: "The run continues on the server. To check on it, run: admiral run get " + r.GetId() + " --wait",
 		}
 	case errNotEnrolled:
 		agent, key := "its agent", "admiral agent enrollment-key <agent>"

@@ -21,6 +21,14 @@ const ScopeHint = "To see the active credential and its scopes, run: admiral aut
 // that is a server-side message-quality concern, not something to paper
 // over here.
 func Format(err error) string {
+	msg := format(err)
+	if e, ok := errors.AsType[*requestIDError](err); ok {
+		msg += " (request " + e.id + ")"
+	}
+	return msg
+}
+
+func format(err error) string {
 	if err == nil {
 		return ""
 	}
@@ -51,6 +59,19 @@ func Format(err error) string {
 	}
 	return prefix + msg
 }
+
+// requestIDError is a server fault with the id the API gave its request, so
+// the person can quote it and an operator can find the request in the logs.
+type requestIDError struct {
+	err error
+	id  string
+}
+
+func (e *requestIDError) Error() string { return e.err.Error() }
+func (e *requestIDError) Unwrap() error { return e.err }
+
+// WithRequestID attaches the request id to err, for Format to print.
+func WithRequestID(err error, id string) error { return &requestIDError{err: err, id: id} }
 
 // innermostStatus finds the deepest gRPC status in err's chain and the
 // context callers wrapped around it ("listing environments: "). Callers

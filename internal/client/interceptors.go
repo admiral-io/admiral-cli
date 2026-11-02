@@ -9,8 +9,10 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/credentials"
 )
 
@@ -36,6 +38,24 @@ func deadlineInterceptor(timeout time.Duration) grpc.UnaryClientInterceptor {
 			defer cancel()
 		}
 		return invoker(ctx, method, req, reply, cc, opts...)
+	}
+}
+
+// requestIDInterceptor keeps the request id the API returns with a server
+// fault, so the error line names it. The API sends it as a response header.
+func requestIDInterceptor() grpc.UnaryClientInterceptor {
+	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		var header, trailer metadata.MD
+		err := invoker(ctx, method, req, reply, cc, append(opts, grpc.Header(&header), grpc.Trailer(&trailer))...)
+		if c := status.Code(err); c != codes.Internal && c != codes.Unknown {
+			return err
+		}
+		for _, md := range []metadata.MD{header, trailer} {
+			if ids := md.Get("x-request-id"); len(ids) > 0 && ids[0] != "" {
+				return cmderr.WithRequestID(err, ids[0])
+			}
+		}
+		return err
 	}
 }
 

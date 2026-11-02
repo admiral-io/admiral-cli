@@ -51,8 +51,9 @@ func CreateClient(ctx context.Context, opts *Options) (sdkclient.AdmiralClient, 
 		timeout = DefaultTimeout
 	}
 
-	// Outermost first: the deadline spans every retry below it.
-	interceptors := []grpc.UnaryClientInterceptor{deadlineInterceptor(timeout)}
+	// Outermost first: the deadline spans every retry below it, and the
+	// request id is the last attempt's.
+	interceptors := []grpc.UnaryClientInterceptor{deadlineInterceptor(timeout), requestIDInterceptor()}
 
 	if cred.Source == credentials.SourceSession {
 		tok := newBearerToken(cred.Token, mode.plaintext())
