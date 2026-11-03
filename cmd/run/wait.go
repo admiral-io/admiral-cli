@@ -203,6 +203,8 @@ func Outcome(r *runv1.Run) error {
 		})
 	case runv1.Run_STATUS_SUPERSEDED:
 		return cmderr.Reported(fmt.Errorf("run %s was superseded by a newer plan", r.GetId()))
+	case runv1.Run_STATUS_CANCELLED: //nolint:misspell // the proto spells it so
+		return cmderr.Reported(fmt.Errorf("run %s was canceled", r.GetId()))
 	}
 	return nil
 }
