@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/output"
@@ -20,11 +22,15 @@ import (
 type stubRuns struct {
 	runv1.RunAPIClient
 	next  *runv1.Run
+	err   error
 	polls int
 }
 
 func (s *stubRuns) GetRun(context.Context, *runv1.GetRunRequest, ...grpc.CallOption) (*runv1.GetRunResponse, error) {
 	s.polls++
+	if s.err != nil {
+		return nil, s.err
+	}
 	return &runv1.GetRunResponse{Run: s.next}, nil
 }
 
@@ -54,6 +60,21 @@ func TestWaitStopsOnAnUnenrolledAgent(t *testing.T) {
 	assert.Equal(t, cmderr.ExitError, cmderr.Code(err))
 	assert.Contains(t, cmderr.Hint(err), "admiral agent enrollment-key agt-prod")
 	assert.Contains(t, cmderr.Hint(err), "admiral run get "+testRunID+" --wait")
+}
+
+// A poll the server fails ends the wait, not the apply: the error says the
+// run was still applying and how to pick it up again, with the request id.
+func TestABrokenWaitSaysTheRunContinues(t *testing.T) {
+	noPollDelay(t)
+
+	stub := &stubRuns{err: cmderr.WithRequestID(status.Error(codes.Internal, "internal error"), "3f6c1d2e-req")}
+	start := &runv1.Run{Id: testRunID, Status: runv1.Run_STATUS_APPLYING}
+	_, err := Wait(context.Background(), stub, start, DefaultWaitTimeout, true, io.Discard)
+
+	err = WaitError(err, start)
+	assert.Equal(t, "lost track of run "+testRunID+" while it was applying: internal error (request 3f6c1d2e-req)", cmderr.Format(err))
+	assert.Equal(t, cmderr.ExitError, cmderr.Code(err))
+	assert.Equal(t, "The run continues on the server. To check on it, run: admiral run get "+testRunID+" --wait", cmderr.Hint(err))
 }
 
 // Following a run waits through its agent's install.

@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
+	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/credentials"
 	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
 )
@@ -38,11 +39,16 @@ type fakeAPI struct {
 	mu     sync.Mutex
 	script map[string][]error // per method, consumed one per call
 	calls  []recordedCall
+	// requestID is echoed as a response header, as admiral-api does.
+	requestID string
 }
 
 func (f *fakeAPI) record(ctx context.Context, method string) error {
 	md, _ := metadata.FromIncomingContext(ctx)
 	_, hasDL := ctx.Deadline()
+	if f.requestID != "" {
+		_ = grpc.SetHeader(ctx, metadata.Pairs("x-request-id", f.requestID))
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, recordedCall{method: method, authz: md.Get("authorization"), hasDeadline: hasDL})
@@ -267,4 +273,25 @@ func TestCreateClient_VerboseLogsEveryAttemptOnBothPaths(t *testing.T) {
 			require.Contains(t, out, "ListApplications")
 		})
 	}
+}
+
+// A server fault names the request it failed, so it can be found in the
+// API's logs; an error about the request itself does not need it.
+func TestAServerFaultNamesItsRequest(t *testing.T) {
+	api := &fakeAPI{requestID: "3f6c1d2e-req", script: map[string][]error{
+		"ListApplications":  {status.Error(codes.Internal, "internal error")},
+		"CreateApplication": {status.Error(codes.AlreadyExists, "application web already exists")},
+	}}
+	startServer(t, api)
+
+	c, err := CreateClient(context.Background(), sessionOpts(t, refreshServer(t, "unused").URL))
+	require.NoError(t, err)
+	defer c.Close() //nolint:errcheck
+
+	_, err = c.Application().ListApplications(context.Background(), &applicationv1.ListApplicationsRequest{})
+	require.Equal(t, "internal error (request 3f6c1d2e-req)", cmderr.Format(err))
+	require.Equal(t, codes.Internal, status.Code(err), "the code still reads through the wrapper")
+
+	_, err = c.Application().CreateApplication(context.Background(), &applicationv1.CreateApplicationRequest{})
+	require.Equal(t, "application web already exists", cmderr.Format(err))
 }
