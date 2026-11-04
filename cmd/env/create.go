@@ -18,6 +18,7 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 		labelStrs   []string
 		target      targetFlags
 		infra       infraFlags
+		track       trackFlag
 	)
 
 	cmd := &cobra.Command{
@@ -74,6 +75,9 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 			if _, err := infra.apply(cmd, e); err != nil {
 				return err
 			}
+			if _, err := track.apply(cmd, e); err != nil {
+				return err
+			}
 			req := &environmentv1.CreateEnvironmentRequest{ApplicationId: resolvedAppID, Environment: e}
 
 			resp, err := c.Environment().CreateEnvironment(cmd.Context(), req)
@@ -92,6 +96,7 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 	target.register(cmd, "agent to deploy through, by name or agt- id (repeatable)",
 		"the Kubernetes namespace components render into unless they name one (needs one --agent; default <app>-<env>)")
 	infra.register(cmd)
+	track.register(cmd)
 
 	return cmd
 }

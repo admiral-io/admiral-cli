@@ -133,7 +133,7 @@ func TestWellFormedTargetsAreAccepted(t *testing.T) {
 
 func TestUpdate_RequiresAtLeastOneField(t *testing.T) {
 	_, err := run(t, "update", "shop/prod")
-	require.ErrorContains(t, err, "at least one of --name, --description, --label, --agent, --namespace, --approvals, --engine or --backend")
+	require.ErrorContains(t, err, "at least one of --name, --description, --label, --agent, --namespace, --approvals, --engine, --backend or --track")
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 }
 
@@ -399,4 +399,46 @@ func TestDescribeNamesTheValuesEachComponentSets(t *testing.T) {
 	var paths []string
 	leafPaths("", map[string]any{"image": map[string]any{"tag": "35bd16b"}, "args": []any{"a"}, "empty": map[string]any{}}, &paths)
 	require.ElementsMatch(t, []string{"image.tag", "args", "empty"}, paths)
+}
+
+// --track reaches the environment as its own mask path, pins it with none,
+// and refuses a value it cannot read before any request.
+func TestTrackFlagApply(t *testing.T) {
+	parse := func(e *environmentv1.Environment, args ...string) ([]string, error) {
+		cmd := &cobra.Command{Use: "x"}
+		var f trackFlag
+		f.register(cmd)
+		require.NoError(t, cmd.ParseFlags(args))
+		return f.apply(cmd, e)
+	}
+
+	e := &environmentv1.Environment{}
+	paths, err := parse(e, "--track", "branch=main")
+	require.NoError(t, err)
+	require.Equal(t, []string{"tracking"}, paths)
+	require.Equal(t, environmentv1.Tracking_KIND_BRANCH, e.GetTracking().GetKind())
+	require.Equal(t, "main", e.GetTracking().GetPattern())
+	require.Equal(t, "branch=main", trackingName(e.GetTracking()))
+
+	e = &environmentv1.Environment{}
+	_, err = parse(e, "--track", "range=>=1.4.0 <2.0.0")
+	require.NoError(t, err)
+	require.Equal(t, environmentv1.Tracking_KIND_RANGE, e.GetTracking().GetKind())
+	require.Equal(t, ">=1.4.0 <2.0.0", e.GetTracking().GetPattern())
+
+	e = &environmentv1.Environment{Tracking: &environmentv1.Tracking{Kind: environmentv1.Tracking_KIND_TAG, Pattern: "v*"}}
+	paths, err = parse(e, "--track", "none")
+	require.NoError(t, err)
+	require.Equal(t, []string{"tracking"}, paths)
+	require.Nil(t, e.GetTracking(), "none pins the environment")
+	require.Equal(t, "pinned", trackingName(nil))
+
+	paths, err = parse(&environmentv1.Environment{})
+	require.NoError(t, err)
+	require.Empty(t, paths, "an update without the flag leaves tracking alone")
+
+	for _, bad := range []string{"main", "branch=", "commit=abc", "tag"} {
+		_, err := parse(&environmentv1.Environment{}, "--track", bad)
+		require.Error(t, err, bad)
+	}
 }

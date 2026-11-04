@@ -290,6 +290,7 @@ func describeEnv(e *environmentv1.Environment, app *applicationv1.Application, s
 	d.Field("Description", e.Description)
 	d.Fields("Labels", output.LabelLines(e.Labels))
 	d.Field("Generation", strconv.FormatInt(e.Generation, 10))
+	d.Field("Tracking", trackingName(e.GetTracking()))
 	d.Field("Hold", holdLine(e.Hold, sec.holdRun))
 	d.Field("Last Apply", lastApplyLine(e.LastApply, sec.lastApplyRun))
 	if r := applying(runs); r != nil {
@@ -358,9 +359,13 @@ func describeEnv(e *environmentv1.Environment, app *applicationv1.Application, s
 				if c.LastApply != nil {
 					applied = output.FormatAge(c.LastApply.AppliedAt) + " ago"
 				}
-				rows = append(rows, []string{c.Name, output.FormatEnumKebab(c.Kind), resolve.VersionLabel(c.Version, sec.tags), applied})
+				behind := ""
+				if n := c.GetNewestMatching(); n != nil {
+					behind = n.GetReference()
+				}
+				rows = append(rows, []string{c.Name, output.FormatEnumKebab(c.Kind), resolve.VersionLabel(c.Version, sec.tags), applied, behind})
 			}
-			b.Table([]string{"Name", "Kind", "Version", "Applied"}, rows)
+			b.Table([]string{"Name", "Kind", "Version", "Applied", "Behind"}, rows)
 			for _, c := range comps {
 				v, ok := sec.values[c.Name]
 				if !ok {
