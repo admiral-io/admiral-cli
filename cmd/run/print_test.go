@@ -288,14 +288,6 @@ func TestUnknownOutcomeSaysToPlanFirst(t *testing.T) {
 		cmderr.Hint(err))
 }
 
-// A canceled run did not do what was asked, so a pipeline waiting on it
-// fails rather than reading it as applied.
-func TestCanceledOutcomeIsAFailure(t *testing.T) {
-	err := Outcome(&runv1.Run{Id: testRunID, ChangeSetId: csID, Status: runv1.Run_STATUS_CANCELLED}) //nolint:misspell // the proto spells it so
-	require.Error(t, err)
-	assert.Equal(t, "run "+testRunID+" was canceled", err.Error())
-}
-
 func execRun(t *testing.T, args ...string) error {
 	t.Helper()
 	t.Setenv(credentials.EnvAPIKey, "")

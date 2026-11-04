@@ -24,6 +24,7 @@ func newUpdateCmd(opts *client.Options) *cobra.Command {
 		labelStrs   []string
 		target      targetFlags
 		infra       infraFlags
+		track       trackFlag
 	)
 
 	cmd := &cobra.Command{
@@ -84,8 +85,8 @@ one that is dropped stops serving the environment.`,
 				return err
 			}
 			targetChanged := cmd.Flags().Changed("agent") || cmd.Flags().Changed("namespace") || cmd.Flags().Changed("approvals")
-			if len(paths) == 0 && !targetChanged && !infra.changed(cmd) {
-				return cmderr.Usage("at least one of --name, --description, --label, --agent, --namespace, --approvals, --engine or --backend must be specified")
+			if len(paths) == 0 && !targetChanged && !infra.changed(cmd) && !track.changed(cmd) {
+				return cmderr.Usage("at least one of --name, --description, --label, --agent, --namespace, --approvals, --engine, --backend or --track must be specified")
 			}
 
 			c, err := client.CreateClient(cmd.Context(), opts)
@@ -130,6 +131,11 @@ one that is dropped stops serving the environment.`,
 				return err
 			}
 			paths = append(paths, infraPaths...)
+			trackPaths, err := track.apply(cmd, e)
+			if err != nil {
+				return err
+			}
+			paths = append(paths, trackPaths...)
 			resp, err := c.Environment().UpdateEnvironment(cmd.Context(), &environmentv1.UpdateEnvironmentRequest{
 				Environment: e,
 				UpdateMask:  &fieldmaskpb.FieldMask{Paths: paths},
@@ -153,6 +159,7 @@ one that is dropped stops serving the environment.`,
 	target.register(cmd, "agent to deploy through, by name or agt- id (repeatable; replaces the list)",
 		"the Kubernetes namespace components render into unless they name one (needs exactly one agent)")
 	infra.register(cmd)
+	track.register(cmd)
 
 	return cmd
 }
@@ -173,6 +180,7 @@ func settingChanges(before, after *environmentv1.Environment) []string {
 	change("namespace", namespaces(before), namespaces(after))
 	change("engine", engineName(before.GetInfraEngine()), engineName(after.GetInfraEngine()))
 	change("backend", backendName(before.GetInfraBackend()), backendName(after.GetInfraBackend()))
+	change("tracking", trackingName(before.GetTracking()), trackingName(after.GetTracking()))
 	return out
 }
 

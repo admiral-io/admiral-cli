@@ -15,6 +15,7 @@ var envTable = output.Table[*environmentv1.Environment]{
 	{Header: "AGENTS", Wide: true, Cell: agentIDs},
 	{Header: "NAMESPACE", Wide: true, Cell: namespaces},
 	{Header: "APPROVALS", Wide: true, Cell: approvals},
+	{Header: "TRACKING", Wide: true, Cell: func(e *environmentv1.Environment) string { return trackingName(e.GetTracking()) }},
 	{Header: "HELD-BY", Wide: true, Cell: func(e *environmentv1.Environment) string { return e.GetHold().GetChangeSetId() }},
 	{Header: "ID", Wide: true, Cell: func(e *environmentv1.Environment) string { return e.Id }},
 	{Header: "CREATED BY", Wide: true, Cell: func(e *environmentv1.Environment) string { return output.FormatActor(e.CreatedBy) }},
