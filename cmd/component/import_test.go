@@ -36,11 +36,11 @@ func TestParseSourceReadsTheKindOffTheForm(t *testing.T) {
 		"registry.acme.example/ns/net/aws",
 		"registry.acme.example:8443/ns/net/aws//sub",
 	} {
-		src, err = parseSource(addr, sourceFlags{version: "~> 8.0"})
+		src, err = parseSource(addr, sourceFlags{version: "8.1.0"})
 		require.NoError(t, err, addr)
 		require.NotNil(t, src.GetRegistryModule(), addr)
 		assert.Equal(t, addr, src.GetRegistryModule().Address)
-		assert.Equal(t, "~> 8.0", src.GetRegistryModule().Version)
+		assert.Equal(t, "8.1.0", src.GetRegistryModule().Version)
 	}
 
 	for _, u := range []string{
@@ -82,6 +82,7 @@ func TestParseSourceRefusesWhatDoesNotFit(t *testing.T) {
 		want string
 	}{
 		{"oci://ghcr.io/x/y", sourceFlags{}, "--version is required"},
+		{"GoogleCloudPlatform/cloud-armor/google", sourceFlags{}, "--version is required"},
 		{"cert-manager", sourceFlags{repo: "https://charts.jetstack.io"}, "--version is required"},
 		{"oci://ghcr.io/x/y", sourceFlags{version: "1", ref: "main"}, "--ref and --path apply to a git repository"},
 		{"https://github.com/acme/infra.git", sourceFlags{version: "1"}, "--ref, not --version"},

@@ -50,8 +50,7 @@ The source says what it is:
   oci://HOST/PATH/CHART            a Helm chart in an OCI registry; --version
   CHART --repo URL                 a Helm chart in an HTTP repository; --version
   NAMESPACE/NAME/SYSTEM[//DIR]     a module in a Terraform registry, host-
-                                   qualified for a private one; --version is
-                                   a constraint, unset means the latest
+                                   qualified for a private one; --version
   URL ending in .git, ssh://, git@ a git repository (github.com/OWNER/REPO
                                    needs no .git); --ref names a branch,
                                    tag or commit, --path one directory of it
@@ -76,8 +75,8 @@ of the version: importing with different baseline values is a new version.`,
   # A chart from an OCI registry, as argo-cd
   admiral component import oci://ghcr.io/argoproj/argo-helm/argo-cd --version 7.7.0
 
-  # A registry module at the newest 8.x, as cloud-armor
-  admiral component import GoogleCloudPlatform/cloud-armor/google --version '~> 8.0'
+  # A registry module at an exact version, as cloud-armor
+  admiral component import GoogleCloudPlatform/cloud-armor/google --version 8.1.0
 
   # One directory of a private repository, over SSH with a deploy key
   admiral component import git@github.com:acme/infra.git --ref v2.1.0 --path modules/vpc --credential infra-deploy
@@ -272,6 +271,9 @@ func parseSource(arg string, f sourceFlags) (*registryv1.ImportSource, error) {
 		}
 		if err := gitOnly("a registry module"); err != nil {
 			return nil, err
+		}
+		if f.version == "" {
+			return nil, cmderr.Usage("--version is required for a registry module, and it is exact: a range is what a source tracks, not what an import takes")
 		}
 		return &registryv1.ImportSource{Source: &registryv1.ImportSource_RegistryModule_{RegistryModule: &registryv1.ImportSource_RegistryModule{
 			Address: arg, Version: f.version,
