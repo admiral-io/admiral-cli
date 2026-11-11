@@ -38,6 +38,7 @@ var prefixOf = map[string]string{
 	"environment": "env",
 	"credential":  "cred",
 	"API key":     "key",
+	"source":      "src",
 }
 
 // NotFoundError is returned when a name matches nothing in its scope.

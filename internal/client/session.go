@@ -16,10 +16,12 @@ import (
 	credentialv1 "go.admiral.io/sdk/proto/admiral/api/credential/v1"
 	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
 	healthcheckv1 "go.admiral.io/sdk/proto/admiral/api/healthcheck/v1"
+	integrationv1 "go.admiral.io/sdk/proto/admiral/api/integration/v1"
 	invitationv1 "go.admiral.io/sdk/proto/admiral/api/invitation/v1"
 	registryv1 "go.admiral.io/sdk/proto/admiral/api/registry/v1"
 	runv1 "go.admiral.io/sdk/proto/admiral/api/run/v1"
 	serviceaccountv1 "go.admiral.io/sdk/proto/admiral/api/serviceaccount/v1"
+	sourcev1 "go.admiral.io/sdk/proto/admiral/api/source/v1"
 	tenantv1 "go.admiral.io/sdk/proto/admiral/api/tenant/v1"
 	userv1 "go.admiral.io/sdk/proto/admiral/api/user/v1"
 )
@@ -107,6 +109,10 @@ func (c *sessionClient) Healthcheck() healthcheckv1.HealthcheckAPIClient {
 	return healthcheckv1.NewHealthcheckAPIClient(c.conn)
 }
 
+func (c *sessionClient) Integration() integrationv1.IntegrationAPIClient {
+	return integrationv1.NewIntegrationAPIClient(c.conn)
+}
+
 func (c *sessionClient) Invitation() invitationv1.InvitationAPIClient {
 	return invitationv1.NewInvitationAPIClient(c.conn)
 }
@@ -116,6 +122,8 @@ func (c *sessionClient) Registry() registryv1.RegistryAPIClient {
 }
 
 func (c *sessionClient) Run() runv1.RunAPIClient { return runv1.NewRunAPIClient(c.conn) }
+
+func (c *sessionClient) Source() sourcev1.SourceAPIClient { return sourcev1.NewSourceAPIClient(c.conn) }
 
 func (c *sessionClient) ServiceAccount() serviceaccountv1.ServiceAccountAPIClient {
 	return serviceaccountv1.NewServiceAccountAPIClient(c.conn)

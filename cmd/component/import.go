@@ -22,6 +22,7 @@ import (
 
 func newImportCmd(opts *client.Options) *cobra.Command {
 	var (
+		from        string
 		repo        string
 		version     string
 		ref         string
@@ -35,17 +36,29 @@ func newImportCmd(opts *client.Options) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "import <source>",
+		Use:   "import <source> | --from SOURCE [ARTIFACT]",
 		Short: "Publish a copy of an artifact you do not own",
 		Long: `Publish a copy of an artifact you do not own.
 
-The registry fetches the source, closes it the way publish does, and
-publishes the result as a version with the source recorded as its
+The registry fetches the artifact, closes it the way publish does, and
+publishes the result as a version with where it came from recorded as its
 provenance. What is published is a copy: the bytes reviewed, whatever
 upstream does to the tag later. Importing the same thing twice yields the
 same version.
 
-The source says what it is:
+--from imports through one of the organization's sources, under the
+source's own grant and within what it allows; no credential is attached.
+ARTIFACT is what the source lists: a chart in a Helm repository, a module
+under a registry namespace, a name under a container registry, or a
+directory of a git repository (none is the root). --version is exact, as
+the source lists it: a tag or branch of a repository, a version of a
+chart or module, a tag of an image. No keyword, range or constraint is
+taken, so latest is a tag literally named latest. In a terminal, what is
+not given is asked from the list, with nothing pre-selected; without one
+the list is in the refusal. A container registry lists no names, so
+under one ARTIFACT is always given.
+
+Without --from, the source says what it is:
 
   oci://HOST/PATH/CHART            a Helm chart in an OCI registry; --version
   CHART --repo URL                 a Helm chart in an HTTP repository; --version
@@ -85,8 +98,20 @@ of the version: importing with different baseline values is a new version.`,
   admiral component import oci://ghcr.io/acme/charts/base --version 1.4.0 --name base-upstream --tag stable --credential github
 
   # A chart with the organization's defaults laid over its own
-  admiral component import cert-manager --repo https://charts.jetstack.io --version v1.16.2 --baseline-values cert-manager.yaml`,
-		Args: flags.ExactArgs(1),
+  admiral component import cert-manager --repo https://charts.jetstack.io --version v1.16.2 --baseline-values cert-manager.yaml
+
+  # Through a source, exactly what it lists
+  admiral component import --from jetstack cert-manager --version v1.16.2
+
+  # One directory of a repository source at a tag; in a terminal, --version is asked from the list
+  admiral component import --from infra modules/vpc --version v2.1.0
+  admiral component import --from infra modules/vpc`,
+		Args: func(cmd *cobra.Command, args []string) error {
+			if from == "" && len(args) == 0 {
+				return cmderr.UsageHint("For usage, run: "+cmd.CommandPath()+" --help", "missing argument: import <source>")
+			}
+			return flags.MaximumNArgs(1)(cmd, args)
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			labels, err := flags.ParseLabels(labelStrs)
 			if err != nil {
@@ -95,8 +120,16 @@ of the version: importing with different baseline values is a new version.`,
 			if name != "" && !manifest.ValidName(name) {
 				return cmderr.Usage("component name %q must be lowercase letters, digits and hyphens", name)
 			}
-			src, err := parseSource(args[0], sourceFlags{repo: repo, version: version, ref: ref, path: path})
-			if err != nil {
+			var (
+				src       *registryv1.ImportSource
+				importing string
+			)
+			if from == "" {
+				if src, err = parseSource(args[0], sourceFlags{repo: repo, version: version, ref: ref, path: path}); err != nil {
+					return err
+				}
+				importing = args[0]
+			} else if err := throughSourceOnly(repo, ref, path, credentials); err != nil {
 				return err
 			}
 			var baselineJSON string
@@ -112,6 +145,16 @@ of the version: importing with different baseline values is a new version.`,
 			}
 			defer c.Close() //nolint:errcheck
 
+			if from != "" {
+				artifact := ""
+				if len(args) == 1 {
+					artifact = args[0]
+				}
+				if src, importing, err = fromSource(cmd, c.Source(), from, artifact, version); err != nil {
+					return err
+				}
+			}
+
 			ids := make([]string, 0, len(credentials))
 			for _, cred := range credentials {
 				id, err := resolve.Credential(cmd.Context(), c.Credential(), cred)
@@ -122,7 +165,7 @@ of the version: importing with different baseline values is a new version.`,
 			}
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
-			output.Writef(p.Err(), "Importing %s\n", args[0])
+			output.Writef(p.Err(), "Importing %s\n", importing)
 			resp, err := c.Registry().ImportComponent(cmd.Context(), &registryv1.ImportComponentRequest{
 				Name:               name,
 				Source:             src,
@@ -146,8 +189,10 @@ of the version: importing with different baseline values is a new version.`,
 		},
 	}
 
+	cmd.Flags().StringVar(&from, "from", "", "the source to import through, by name or ID; the argument is then the artifact it lists")
+	complete.Flag(cmd, "from", complete.Sources(opts))
 	cmd.Flags().StringVar(&repo, "repo", "", "the Helm repository the chart is in; the source is then the chart's name")
-	cmd.Flags().StringVar(&version, "version", "", "the chart's version, or a module's version constraint")
+	cmd.Flags().StringVar(&version, "version", "", "the chart's or module's version; through a source, exactly as it lists it")
 	cmd.Flags().StringVar(&ref, "ref", "", "the branch, tag or commit of a git repository (default: its default branch)")
 	cmd.Flags().StringVar(&path, "path", "", "one directory of a git repository")
 	cmd.Flags().StringVar(&name, "name", "", "component name (default: the artifact's own)")
@@ -178,6 +223,22 @@ func readBaseline(file string) (string, error) {
 		return "", fmt.Errorf("--baseline-values %s: %w", file, err)
 	}
 	return s, nil
+}
+
+// throughSourceOnly refuses the flags that say where and how to fetch when
+// --from already does: a source's location and grant are its own.
+func throughSourceOnly(repo, ref, path string, credentials []string) error {
+	switch {
+	case repo != "":
+		return cmderr.Usage("--repo names a Helm repository, and --from already says where the chart is")
+	case ref != "":
+		return cmderr.Usage("through a source the tag or branch is --version, not --ref")
+	case path != "":
+		return cmderr.Usage("through a source the directory is the ARTIFACT argument, not --path")
+	case len(credentials) > 0:
+		return cmderr.Usage("a source carries its own grant; --credential does not apply with --from")
+	}
+	return nil
 }
 
 func atRef(ref string) string {

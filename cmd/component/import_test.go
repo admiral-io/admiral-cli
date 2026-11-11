@@ -156,3 +156,22 @@ func TestReportPublishedListsEachFindingOnceAndInfoOnlyWhenVerbose(t *testing.T)
 	assert.Contains(t, loud, "curlimages/curl:7.69.0")
 	assert.NotContains(t, loud, "--verbose lists them")
 }
+
+func TestImportThroughASourceRefusesTheAddressFlags(t *testing.T) {
+	cases := []struct {
+		args []string
+		want string
+	}{
+		{[]string{"--repo", "https://x"}, "--from already says where the chart is"},
+		{[]string{"--ref", "main"}, "is --version, not --ref"},
+		{[]string{"--path", "modules/vpc"}, "the ARTIFACT argument, not --path"},
+		{[]string{"--credential", "deploy"}, "a source carries its own grant"},
+		{[]string{"a", "b"}, "accepts at most 1 arg(s), received 2"},
+	}
+	for _, tc := range cases {
+		_, err := run(t, append([]string{"import", "--from", "infra"}, tc.args...)...)
+		require.Error(t, err, tc.args)
+		assert.Contains(t, err.Error(), tc.want, tc.args)
+		assert.Equal(t, cmderr.ExitUsage, cmderr.Code(err), tc.args)
+	}
+}
