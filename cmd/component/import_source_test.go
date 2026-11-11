@@ -88,6 +88,7 @@ func TestFromSourceTakesWhatIsGivenAsIs(t *testing.T) {
 	src, importing, err = fromSource(cmd, c, "upstream", "/modules/vpc/", "v2.1.0")
 	require.NoError(t, err)
 	assert.Equal(t, "modules/vpc", src.GetFromSource().Artifact)
+	assert.Equal(t, "modules/vpc v2.1.0 from upstream", importing)
 	src, importing, err = fromSource(cmd, c, "upstream", "", "v2.1.0")
 	require.NoError(t, err)
 	assert.Equal(t, "", src.GetFromSource().Artifact, "a git repository's root is the empty path")
