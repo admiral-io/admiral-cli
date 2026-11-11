@@ -133,7 +133,7 @@ func TestWellFormedTargetsAreAccepted(t *testing.T) {
 
 func TestUpdate_RequiresAtLeastOneField(t *testing.T) {
 	_, err := run(t, "update", "shop/prod")
-	require.ErrorContains(t, err, "at least one of --name, --description, --label, --agent, --namespace, --approvals, --engine, --backend or --track")
+	require.ErrorContains(t, err, "at least one of --name, --description, --label, --agent, --namespace, --approvals, --engine, --backend, --track or --after-merge")
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 }
 
@@ -441,4 +441,21 @@ func TestTrackFlagApply(t *testing.T) {
 		_, err := parse(&environmentv1.Environment{}, "--track", bad)
 		require.Error(t, err, bad)
 	}
+
+	// --after-merge rides on the policy: set with it, alone on one that
+	// tracks, never on a pin.
+	e = &environmentv1.Environment{}
+	_, err = parse(e, "--track", "branch=main", "--after-merge", "wait")
+	require.NoError(t, err)
+	require.Equal(t, environmentv1.Tracking_AFTER_MERGE_WAIT, e.GetTracking().GetAfterMerge())
+	require.Equal(t, "branch=main (wait after merge)", trackingName(e.GetTracking()))
+	paths, err = parse(e, "--after-merge", "apply")
+	require.NoError(t, err)
+	require.Equal(t, []string{"tracking"}, paths)
+	require.Equal(t, environmentv1.Tracking_AFTER_MERGE_APPLY, e.GetTracking().GetAfterMerge())
+	require.Equal(t, "main", e.GetTracking().GetPattern(), "the policy itself is kept")
+	_, err = parse(&environmentv1.Environment{}, "--after-merge", "wait")
+	require.Error(t, err, "nothing merges into a pin")
+	_, err = parse(&environmentv1.Environment{}, "--track", "branch=main", "--after-merge", "later")
+	require.Error(t, err)
 }
