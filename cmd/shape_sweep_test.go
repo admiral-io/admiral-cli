@@ -203,16 +203,28 @@ type sweepResult struct {
 	panicked       string
 }
 
-func sweepRun(t *testing.T, addr string, args []string) (r sweepResult) {
+func sweepRun(t *testing.T, addr string, args []string) sweepResult {
+	t.Helper()
+	return runAgainst(t, addr, "s3cret\n", append([]string{"--no-input"}, args...))
+}
+
+// interactiveRun is sweepRun with stdin scripted and prompts allowed; the
+// caller sets ADMIRAL_FORCE_INTERACTIVE.
+func interactiveRun(t *testing.T, addr, stdin string, args []string) sweepResult {
+	t.Helper()
+	return runAgainst(t, addr, stdin, args)
+}
+
+func runAgainst(t *testing.T, addr, stdin string, args []string) (r sweepResult) {
 	t.Helper()
 	root, err := newRootCmd(version.GetVersion(), func(int) {})
 	require.NoError(t, err)
 	var out, errOut bytes.Buffer
 	root.cmd.SetOut(&out)
 	root.cmd.SetErr(&errOut)
-	root.cmd.SetIn(strings.NewReader("s3cret\n"))
+	root.cmd.SetIn(strings.NewReader(stdin))
 	root.cmd.SetArgs(append([]string{
-		"--config-dir", t.TempDir(), "--server", addr, "--plaintext", "--no-input",
+		"--config-dir", t.TempDir(), "--server", addr, "--plaintext",
 	}, args...))
 	// A command that polls, such as a wait or a followed log, stops here;
 	// the sweep is after panics, not after what a wait settles on.

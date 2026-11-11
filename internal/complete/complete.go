@@ -23,6 +23,7 @@ import (
 	credentialv1 "go.admiral.io/sdk/proto/admiral/api/credential/v1"
 	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
 	registryv1 "go.admiral.io/sdk/proto/admiral/api/registry/v1"
+	sourcev1 "go.admiral.io/sdk/proto/admiral/api/source/v1"
 )
 
 // Func is cobra's completion signature, shared by ValidArgsFunction and
@@ -216,6 +217,29 @@ func Credentials(opts *client.Options) Func {
 				}
 				for _, cr := range resp.Credentials {
 					out = append(out, Candidate{Name: cr.Name, Description: cr.Description})
+				}
+				return resp.NextPageToken, nil
+			}, &out)
+			return out, err
+		})
+	}
+}
+
+// Sources completes a source name.
+func Sources(opts *client.Options) Func {
+	return func(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return withClient(cmd, opts, toComplete, func(ctx context.Context, c sdkclient.AdmiralClient) ([]Candidate, error) {
+			var out []Candidate
+			err := paged(func(token string) (string, error) {
+				resp, err := c.Source().ListSources(ctx, &sourcev1.ListSourcesRequest{
+					PageSize:  pageSize,
+					PageToken: token,
+				})
+				if err != nil {
+					return "", err
+				}
+				for _, s := range resp.Sources {
+					out = append(out, Candidate{Name: s.Name, Description: s.Location})
 				}
 				return resp.NextPageToken, nil
 			}, &out)
