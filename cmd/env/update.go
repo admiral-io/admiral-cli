@@ -86,7 +86,7 @@ one that is dropped stops serving the environment.`,
 			}
 			targetChanged := cmd.Flags().Changed("agent") || cmd.Flags().Changed("namespace") || cmd.Flags().Changed("approvals")
 			if len(paths) == 0 && !targetChanged && !infra.changed(cmd) && !track.changed(cmd) {
-				return cmderr.Usage("at least one of --name, --description, --label, --agent, --namespace, --approvals, --engine, --backend or --track must be specified")
+				return cmderr.Usage("at least one of --name, --description, --label, --agent, --namespace, --approvals, --engine, --backend, --track or --after-merge must be specified")
 			}
 
 			c, err := client.CreateClient(cmd.Context(), opts)
