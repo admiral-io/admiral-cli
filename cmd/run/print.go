@@ -3,7 +3,9 @@ package run
 import (
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
+	"strings"
 
 	"go.admiral.io/cli/internal/output"
 	agentv1 "go.admiral.io/sdk/proto/admiral/api/agent/v1"
@@ -30,10 +32,18 @@ func source(r *runv1.Run) string {
 
 // changeSummary counts resource changes the way a plan reads:
 // +create ~update ±replace -destroy, then the takeovers and the objects left
-// in place when there are any.
+// in place when there are any. A component the plan deferred reads as what
+// it waits for, since its changes are known only once that applies.
 func changeSummary(cs []*agentv1.ComponentPlan) string {
+	if len(cs) == 1 && cs[0].GetDeferred() != nil {
+		return deferredSummary(cs[0])
+	}
 	var add, change, replace, destroy, takeOver, orphan int
 	for _, c := range cs {
+		if c.GetDeferred() != nil {
+			add++ // it will change something; how much is known at apply
+			continue
+		}
 		for _, rc := range c.GetChanges() {
 			switch rc.GetAction() {
 			case agentv1.ResourceChange_ACTION_CREATE:
@@ -62,6 +72,21 @@ func changeSummary(cs []*agentv1.ComponentPlan) string {
 		s += fmt.Sprintf(", %d left in place", orphan)
 	}
 	return s
+}
+
+// deferredSummary is "planned after network applies".
+func deferredSummary(c *agentv1.ComponentPlan) string {
+	var waits []string
+	for _, w := range c.GetDeferred().GetWaitsFor() {
+		if !slices.Contains(waits, w.GetComponent()) {
+			waits = append(waits, w.GetComponent())
+		}
+	}
+	verb := "applies"
+	if len(waits) > 1 {
+		verb = "apply"
+	}
+	return "planned after " + strings.Join(waits, " and ") + " " + verb
 }
 
 // Print writes a run's detail view, or the run itself under -o json|yaml.
@@ -145,6 +170,11 @@ func printRun(p *output.Printer, r *runv1.Run, title string, diff func(w io.Writ
 			if len(apply.GetComponents()) > 0 {
 				planned := map[string]*agentv1.ComponentPlan{}
 				for _, c := range r.GetPlan().GetComponents() {
+					planned[c.GetComponent()] = c
+				}
+				// What the apply planned itself replaces the deferral it was
+				// reviewed as.
+				for _, c := range apply.GetPlanned() {
 					planned[c.GetComponent()] = c
 				}
 				rows := make([][]string, 0, len(apply.GetComponents()))
