@@ -21,7 +21,7 @@ Terraform or OpenTofu. Each runs as a service account made with it, and signs
 in with a short-lived token from where it runs, so no long-lived secret exists.
 
 An environment deploys through the agents assigned to it, and may be
-assigned only an agent granted to the organization, a team, its application
+assigned only an agent granted to the organization, a team, its project
 or the environment itself.
 
 Commands accept an agent name or ID as the positional argument.`,

@@ -257,9 +257,9 @@ func scalar(f protoreflect.FieldDescriptor, s Shape) protoreflect.Value {
 // idPrefixes are the typed id prefixes, keyed by the field or message they
 // name, so a command that checks an id's kind accepts the response's.
 var idPrefixes = map[string]string{
-	"application": "app", "environment": "env", "agent": "agt", "change_set": "cs", "changeset": "cs",
+	"project": "prj", "environment": "env", "agent": "agt", "change_set": "cs", "changeset": "cs",
 	"run": "run", "revision": "rev", "job": "job", "service_account": "sa", "user": "usr",
-	"tenant": "tnt", "assignment": "asg", "group": "grp", "issuer": "iss", "credential": "cred",
+	"organization": "tnt", "assignment": "asg", "group": "grp", "issuer": "iss", "credential": "cred",
 	"template": "cmp", "component": "cmp", "version": "ver", "api_key": "key", "key": "key",
 }
 

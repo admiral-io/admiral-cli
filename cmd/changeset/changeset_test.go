@@ -62,10 +62,10 @@ func TestPositionalUsageErrors(t *testing.T) {
 		args []string
 		want string
 	}{
-		{[]string{"create"}, "missing argument: create <app>/<env>"},
+		{[]string{"create"}, "missing argument: create <project>/<environment>"},
 		{[]string{"get"}, "missing argument: get <changeset>"},
 		{[]string{"discard"}, "missing argument: discard <changeset>"},
-		{[]string{"list"}, "missing argument: list <app>/<env>"},
+		{[]string{"list"}, "missing argument: list <project>/<environment>"},
 		{[]string{"revert"}, "missing argument: revert <changeset>"},
 		{[]string{"bogus"}, `unknown command "bogus" for "changeset"`},
 	}
@@ -80,20 +80,20 @@ func TestPositionalUsageErrors(t *testing.T) {
 	}
 }
 
-// A changeset is addressed by its cs- ID or by app/env; anything else is
+// A changeset is addressed by its cs- ID or by project/environment; anything else is
 // refused before any sign-in.
 func TestChangeSetIsCheckedBeforeTheNetwork(t *testing.T) {
 	for _, bad := range []string{"cs-7F2A1C9D0E3B", "cs-7f2a1", "7f2a1c9d0e3b", envID} {
 		_, err := run(t, "get", bad)
 		requireUsage(t, err, `invalid changeset "`+bad+`"`)
-		require.Contains(t, cmderr.Hint(err), "app/env")
+		require.Contains(t, cmderr.Hint(err), "project/environment")
 
 		_, err = run(t, "discard", bad, "--yes")
 		requireUsage(t, err, `invalid changeset "`+bad+`"`)
 	}
 	for _, bad := range []string{"shop/", "/dev", "shop/dev/x"} {
 		_, err := run(t, "plan", bad)
-		requireUsage(t, err, `invalid environment "`+bad+`": expected app/env`)
+		requireUsage(t, err, `invalid environment "`+bad+`": expected project/environment`)
 	}
 	for _, good := range []string{csID, "shop/dev"} {
 		_, err := run(t, "get", good)
@@ -103,15 +103,15 @@ func TestChangeSetIsCheckedBeforeTheNetwork(t *testing.T) {
 	}
 }
 
-// create takes the environment as app/env or a UUID; a bare name has no
-// application to look it up in.
+// create takes the environment as project/environment or a UUID; a bare name has no
+// project to look it up in.
 func TestCreate_NeedsAnEnvironmentPath(t *testing.T) {
 	_, err := run(t, "create", "prod")
-	requireUsage(t, err, "no application specified")
+	requireUsage(t, err, "no project specified")
 	require.Contains(t, cmderr.Hint(err), "shop/prod")
 
 	_, err = run(t, "create", "shop/")
-	requireUsage(t, err, `invalid environment "shop/": expected app/env`)
+	requireUsage(t, err, `invalid environment "shop/": expected project/environment`)
 
 	for _, target := range []string{"shop/prod", envID} {
 		_, err = run(t, "create", target, "--title", "bump api")
@@ -144,10 +144,10 @@ func TestCreate_SetIsParsedBeforeTheNetwork(t *testing.T) {
 
 func TestList_RequiresAnEnvironmentPath(t *testing.T) {
 	_, err := run(t, "list")
-	requireUsage(t, err, "missing argument: list <app>/<env>")
+	requireUsage(t, err, "missing argument: list <project>/<environment>")
 
 	_, err = run(t, "list", "prod")
-	requireUsage(t, err, "no application specified")
+	requireUsage(t, err, "no project specified")
 	require.Contains(t, cmderr.Hint(err), "changeset list shop/prod")
 
 	_, err = run(t, "list", "shop/prod", "--status", "merged")
@@ -462,7 +462,7 @@ func TestValuesUploadSendsTheTreeAndItsRevision(t *testing.T) {
 	path = downloaded(t, valuesfile.Header{ChangeSet: csID, Component: "api", Revision: 0}, map[string]any{})
 	data, err = os.ReadFile(path)
 	require.NoError(t, err)
-	// By app/env the header is not compared until the environment resolves.
+	// By project/environment the header is not compared until the environment resolves.
 	e, rev, _, err = uploadEdit(&stderr, path, changeSetRef{app: "shop", env: "dev"}, "api", data)
 	require.NoError(t, err)
 	assert.Equal(t, `{}`, e.GetReplaceValues().TreeJson)

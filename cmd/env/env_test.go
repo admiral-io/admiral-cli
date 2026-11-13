@@ -17,9 +17,9 @@ import (
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/credentials"
-	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
 	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
 	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
+	projectv1 "go.admiral.io/sdk/proto/admiral/api/project/v1"
 	registryv1 "go.admiral.io/sdk/proto/admiral/api/registry/v1"
 	runv1 "go.admiral.io/sdk/proto/admiral/api/run/v1"
 )
@@ -66,58 +66,58 @@ func TestPositionalUsageErrors(t *testing.T) {
 	}
 }
 
-// An environment is addressed as app/env or as a name with --app, never
+// An environment is addressed as project/environment or as a name with --project, never
 // both, and the rule is enforced by every verb that takes one.
 func TestPathAndAppFlagIsUsageError(t *testing.T) {
 	for _, verb := range []string{"get", "describe", "delete", "create"} {
 		t.Run(verb, func(t *testing.T) {
-			_, err := run(t, verb, "shop/prod", "--app", "shop")
-			require.EqualError(t, err, "--app cannot be combined with a path")
+			_, err := run(t, verb, "shop/prod", "--project", "shop")
+			require.EqualError(t, err, "--project cannot be combined with a path")
 			require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
-			require.Equal(t, "Give the environment as app/env or with --app, not both.", cmderr.Hint(err))
+			require.Equal(t, "Give the environment as project/environment or with --project, not both.", cmderr.Hint(err))
 		})
 	}
-	_, err := run(t, "update", "shop/prod", "--app", "shop", "--description", "x")
-	require.EqualError(t, err, "--app cannot be combined with a path")
+	_, err := run(t, "update", "shop/prod", "--project", "shop", "--description", "x")
+	require.EqualError(t, err, "--project cannot be combined with a path")
 }
 
 func TestMalformedPathIsUsageError(t *testing.T) {
 	for _, target := range []string{"/prod", "shop/", "a/b/c"} {
 		_, err := run(t, "get", target)
-		require.EqualError(t, err, `invalid environment "`+target+`": expected app/env`)
+		require.EqualError(t, err, `invalid environment "`+target+`": expected project/environment`)
 		require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 	}
 }
 
-// list is scoped by an application named positionally or with --app; the
+// list is scoped by a project named positionally or with --project; the
 // missing scope is reported before any client is built.
 func TestList_ScopeRules(t *testing.T) {
 	_, err := run(t, "list")
-	require.EqualError(t, err, "no application specified")
+	require.EqualError(t, err, "no project specified")
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 	require.Contains(t, cmderr.Hint(err), "admiral env list billing")
 
-	_, err = run(t, "list", "billing", "--app", "other")
-	require.EqualError(t, err, "--app cannot be combined with an application argument")
+	_, err = run(t, "list", "billing", "--project", "other")
+	require.EqualError(t, err, "--project cannot be combined with a project argument")
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 
 	_, err = run(t, "list", "shop/prod")
-	require.EqualError(t, err, `invalid application "shop/prod"`)
+	require.EqualError(t, err, `invalid project "shop/prod"`)
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
-	require.Contains(t, cmderr.Hint(err), "app/env addresses a single environment")
+	require.Contains(t, cmderr.Hint(err), "project/environment addresses a single environment")
 
 	// A well-formed scope proceeds to the client.
-	for _, args := range [][]string{{"list", "billing"}, {"list", "--app", "billing"}} {
+	for _, args := range [][]string{{"list", "billing"}, {"list", "--project", "billing"}} {
 		_, err = run(t, args...)
 		require.ErrorIs(t, err, credentials.ErrNotAuthenticated, "%v: should fail at client creation, not usage", args)
 	}
 }
 
-// A path, a --app-scoped name, or a bare id is accepted as the identity
+// A path, a --project-scoped name, or a bare id is accepted as the identity
 // and the command proceeds to client creation.
 func TestWellFormedTargetsAreAccepted(t *testing.T) {
 	for _, verb := range []string{"get", "describe", "delete"} {
-		for _, args := range [][]string{{verb, "shop/prod"}, {verb, "prod", "--app", "shop"}, {verb, envID}} {
+		for _, args := range [][]string{{verb, "shop/prod"}, {verb, "prod", "--project", "shop"}, {verb, envID}} {
 			if verb == "delete" {
 				args = append(args, "--yes") // a piped run cannot confirm
 			}
@@ -149,8 +149,8 @@ func TestDeleteWithoutYesFailsBeforeNetwork(t *testing.T) {
 	require.EqualError(t, err, "--yes required when not running interactively")
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 
-	_, err = run(t, "delete", "shop/prod", "--app", "shop")
-	require.EqualError(t, err, "--app cannot be combined with a path")
+	_, err = run(t, "delete", "shop/prod", "--project", "shop")
+	require.EqualError(t, err, "--project cannot be combined with a path")
 }
 
 func TestTargetFlags(t *testing.T) {
@@ -257,7 +257,7 @@ func TestDescribeEnv(t *testing.T) {
 		lastApplyRun: &runv1.Run{Apply: &runv1.ApplyPhase{AppliedBy: &commonv1.ActorRef{Id: "usr-s0jg9fam3x0x", DisplayName: "Ada Lovelace"}}},
 	}
 	var b bytes.Buffer
-	d := describeEnv(e, &applicationv1.Application{Name: "shop"}, sec)
+	d := describeEnv(e, &projectv1.Project{Name: "shop"}, sec)
 	require.NoError(t, d.Render(&b))
 	out := b.String()
 	require.Regexp(t, `Generation:\s+7`, out)
@@ -276,7 +276,7 @@ func TestDescribeEnv(t *testing.T) {
 
 	sec.moreRuns = false
 	b.Reset()
-	require.NoError(t, describeEnv(e, &applicationv1.Application{Name: "shop"}, sec).Render(&b))
+	require.NoError(t, describeEnv(e, &projectv1.Project{Name: "shop"}, sec).Render(&b))
 	require.NotContains(t, b.String(), "most recent runs")
 }
 
@@ -285,12 +285,12 @@ func TestValuesArguments(t *testing.T) {
 	require.EqualError(t, err, "missing argument: values <name> <component>")
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 
-	_, err = run(t, "values", "shop/dev", "api", "--app", "shop")
-	require.EqualError(t, err, "--app cannot be combined with a path")
+	_, err = run(t, "values", "shop/dev", "api", "--project", "shop")
+	require.EqualError(t, err, "--project cannot be combined with a path")
 
 	for _, args := range [][]string{
 		{"values", "shop/dev", "api"},
-		{"values", "dev", "api", "--app", "shop", "--effective"},
+		{"values", "dev", "api", "--project", "shop", "--effective"},
 	} {
 		_, err = run(t, args...)
 		require.ErrorIs(t, err, credentials.ErrNotAuthenticated, "%v should be accepted", args)
@@ -358,7 +358,7 @@ func TestInfraFlagsApply(t *testing.T) {
 func TestDescribeShowsTerraformSettings(t *testing.T) {
 	render := func(e *environmentv1.Environment) string {
 		var b bytes.Buffer
-		require.NoError(t, describeEnv(e, &applicationv1.Application{Name: "net"}, envSections{}).Render(&b))
+		require.NoError(t, describeEnv(e, &projectv1.Project{Name: "net"}, envSections{}).Render(&b))
 		return b.String()
 	}
 	require.Regexp(t, `Backend:\s+hosted`, render(&environmentv1.Environment{Name: "prod"}), "no backend means hosted state")
@@ -388,7 +388,7 @@ func TestDescribeNamesTheValuesEachComponentSets(t *testing.T) {
 		"db":  {err: status.Error(codes.PermissionDenied, "missing required scope env:read")},
 	}}
 	var b bytes.Buffer
-	require.NoError(t, describeEnv(&environmentv1.Environment{Name: "prod"}, &applicationv1.Application{Name: "shop"}, sec).Render(&b))
+	require.NoError(t, describeEnv(&environmentv1.Environment{Name: "prod"}, &projectv1.Project{Name: "shop"}, sec).Render(&b))
 	out := b.String()
 	require.Regexp(t, `api:\n\s+Values:\s+4 set: image.tag, ingress.host, replicaCount, \+1`, out)
 	require.Regexp(t, `web:\n\s+Values:\s+none set`, out)

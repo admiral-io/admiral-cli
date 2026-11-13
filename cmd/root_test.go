@@ -273,13 +273,13 @@ func TestRoot_UnknownFlagAndCommand(t *testing.T) {
 	require.Contains(t, stderr, "For usage, run: admiral --help")
 
 	// The same under a noun, attributed to the noun.
-	_, _, stderr, code = runRoot(t, []string{"app", "bogus"}, nil)
+	_, _, stderr, code = runRoot(t, []string{"project", "bogus"}, nil)
 	require.Equal(t, cmderr.ExitUsage, code)
-	require.Contains(t, stderr, `unknown command "bogus" for "admiral app"`)
-	require.Contains(t, stderr, "For usage, run: admiral app --help")
+	require.Contains(t, stderr, `unknown command "bogus" for "admiral project"`)
+	require.Contains(t, stderr, "For usage, run: admiral project --help")
 
 	// A bare noun prints its help and succeeds.
-	_, stdout, _, code := runRoot(t, []string{"app"}, nil)
+	_, stdout, _, code := runRoot(t, []string{"project"}, nil)
 	require.Equal(t, -1, code)
 	require.Contains(t, stdout, "Available Commands:")
 }
@@ -317,7 +317,7 @@ func TestRoot_ExitCodes(t *testing.T) {
 		{"server unauthenticated", status.Error(codes.Unauthenticated, "key revoked"), cmderr.ExitAuth, []string{"Error: not signed in: key revoked", "To sign in, run: admiral auth login"}},
 		{"permission denied", status.Error(codes.PermissionDenied, "scope"), cmderr.ExitError, []string{"Error: permission denied: scope", cmderr.ScopeHint}},
 		{"plain error", errors.New("boom"), cmderr.ExitError, []string{"Error: boom"}},
-		{"required flag", errors.New(`required flag(s) "app" not set`), cmderr.ExitUsage, []string{"required flag"}},
+		{"required flag", errors.New(`required flag(s) "project" not set`), cmderr.ExitUsage, []string{"required flag"}},
 		{"exclusive flags", errors.New("if any flags in the group [all page-token] are set none of the others can be; [all page-token] were all set"), cmderr.ExitUsage, []string{"[all page-token]"}},
 		{"canceled", context.Canceled, cmderr.ExitInterrupted, []string{"Interrupted."}},
 		{"wrapped canceled", fmt.Errorf("prompt canceled: %w", context.Canceled), cmderr.ExitInterrupted, []string{"Interrupted."}},

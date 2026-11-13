@@ -1,4 +1,4 @@
-package app
+package project
 
 import (
 	"github.com/spf13/cobra"
@@ -6,7 +6,7 @@ import (
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
-	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
+	projectv1 "go.admiral.io/sdk/proto/admiral/api/project/v1"
 )
 
 func newCreateCmd(opts *client.Options) *cobra.Command {
@@ -17,14 +17,14 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "create <name>",
-		Short: "Create an application",
-		Long: `Create an application with the given name. Add environments to it with
+		Short: "Create a project",
+		Long: `Create a project with the given name. Add environments to it with
 'admiral env create'.`,
-		Example: `  # Create an application
-  admiral app create billing-api
+		Example: `  # Create a project
+  admiral project create billing-api
 
   # Create with a description and labels
-  admiral app create billing-api --description "Handles billing" --label team=platform`,
+  admiral project create billing-api --description "Handles billing" --label team=platform`,
 		Args: flags.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			labels, err := flags.ParseLabels(labelStrs)
@@ -32,7 +32,7 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 				return err
 			}
 
-			req := &applicationv1.CreateApplicationRequest{Application: &applicationv1.Application{
+			req := &projectv1.CreateProjectRequest{Project: &projectv1.Project{
 				Name:        args[0],
 				Description: description,
 				Labels:      labels,
@@ -44,18 +44,18 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 			}
 			defer c.Close() //nolint:errcheck // best-effort cleanup
 
-			resp, err := c.Application().CreateApplication(cmd.Context(), req)
+			resp, err := c.Project().CreateProject(cmd.Context(), req)
 			if err != nil {
 				return err
 			}
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
-			return p.PrintOne(resp.Application, resp.Application.Name, appTable.Render(p, resp.Application))
+			return p.PrintOne(resp.Project, resp.Project.Name, projectTable.Render(p, resp.Project))
 		},
 	}
 
 	flags.Label(cmd, &labelStrs, "label to attach (key=value, repeatable)")
-	cmd.Flags().StringVar(&description, "description", "", "application description")
+	cmd.Flags().StringVar(&description, "description", "", "project description")
 
 	return cmd
 }

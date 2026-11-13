@@ -1,4 +1,4 @@
-package app
+package project
 
 import (
 	"github.com/spf13/cobra"
@@ -15,14 +15,14 @@ func NewAppCmd(opts *client.Options) *AppCmd {
 	root := &AppCmd{}
 
 	cmd := &cobra.Command{
-		Use:   "app",
-		Short: "Manage applications",
-		Long: `Manage applications. An application is the top-level unit of ownership:
+		Use:   "project",
+		Short: "Manage projects",
+		Long: `Manage projects. A project is the top-level unit of ownership:
 it holds environments, and each environment holds the components, variables,
 and runs deployed there.
 
-Commands accept an application name or ID as the positional argument.`,
-		Aliases:       []string{"application"},
+Commands accept a project name or ID as the positional argument.`,
+		Aliases:       []string{"project"},
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}

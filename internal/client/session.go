@@ -11,18 +11,18 @@ import (
 	sdkclient "go.admiral.io/sdk/client"
 	agentv1 "go.admiral.io/sdk/proto/admiral/api/agent/v1"
 	apikeyv1 "go.admiral.io/sdk/proto/admiral/api/apikey/v1"
-	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
 	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
 	credentialv1 "go.admiral.io/sdk/proto/admiral/api/credential/v1"
 	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
 	healthcheckv1 "go.admiral.io/sdk/proto/admiral/api/healthcheck/v1"
 	integrationv1 "go.admiral.io/sdk/proto/admiral/api/integration/v1"
 	invitationv1 "go.admiral.io/sdk/proto/admiral/api/invitation/v1"
+	organizationv1 "go.admiral.io/sdk/proto/admiral/api/organization/v1"
+	projectv1 "go.admiral.io/sdk/proto/admiral/api/project/v1"
 	registryv1 "go.admiral.io/sdk/proto/admiral/api/registry/v1"
 	runv1 "go.admiral.io/sdk/proto/admiral/api/run/v1"
 	serviceaccountv1 "go.admiral.io/sdk/proto/admiral/api/serviceaccount/v1"
 	sourcev1 "go.admiral.io/sdk/proto/admiral/api/source/v1"
-	tenantv1 "go.admiral.io/sdk/proto/admiral/api/tenant/v1"
 	userv1 "go.admiral.io/sdk/proto/admiral/api/user/v1"
 )
 
@@ -89,8 +89,8 @@ func (c *sessionClient) AgentRuntime() agentv1.AgentRuntimeAPIClient {
 	return agentv1.NewAgentRuntimeAPIClient(c.conn)
 }
 
-func (c *sessionClient) Application() applicationv1.ApplicationAPIClient {
-	return applicationv1.NewApplicationAPIClient(c.conn)
+func (c *sessionClient) Project() projectv1.ProjectAPIClient {
+	return projectv1.NewProjectAPIClient(c.conn)
 }
 
 func (c *sessionClient) ChangeSet() changesetv1.ChangeSetAPIClient {
@@ -133,7 +133,9 @@ func (c *sessionClient) Issuer() serviceaccountv1.IssuerAPIClient {
 	return serviceaccountv1.NewIssuerAPIClient(c.conn)
 }
 
-func (c *sessionClient) Tenant() tenantv1.TenantAPIClient { return tenantv1.NewTenantAPIClient(c.conn) }
+func (c *sessionClient) Organization() organizationv1.OrganizationAPIClient {
+	return organizationv1.NewOrganizationAPIClient(c.conn)
+}
 
 func (c *sessionClient) User() userv1.UserAPIClient { return userv1.NewUserAPIClient(c.conn) }
 

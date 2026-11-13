@@ -87,39 +87,39 @@ func TestScopeFlagsHaveNoDefault(t *testing.T) {
 	t.Setenv("ADMIRAL_ENV", "prod")
 	var app, env string
 	cmd := &cobra.Command{Use: "x", RunE: func(*cobra.Command, []string) error { return nil }}
-	App(cmd, &app, &client.Options{})
+	Project(cmd, &app, &client.Options{})
 	Env(cmd, &env, &client.Options{})
 	_, err := exec(cmd)
 	require.NoError(t, err)
 	require.Empty(t, app)
 	require.Empty(t, env)
-	require.NotContains(t, cmd.Flags().Lookup("app").Usage, "ADMIRAL")
+	require.NotContains(t, cmd.Flags().Lookup("project").Usage, "ADMIRAL")
 }
 
-// appScoped runs cmd with a --app flag registered and returns what
-// AppTarget makes of the positional arguments and the --app value.
+// appScoped runs cmd with a --project flag registered and returns what
+// ProjectTarget makes of the positional arguments and the --project value.
 func appScoped(t *testing.T, args []string, flagArgs ...string) (string, error) {
 	t.Helper()
-	var appFlag, got string
+	var projectFlag, got string
 	var gotErr error
 	cmd := &cobra.Command{Use: "x", RunE: func(cmd *cobra.Command, _ []string) error {
-		got, gotErr = AppTarget(cmd, appFlag, args)
+		got, gotErr = ProjectTarget(cmd, projectFlag, args)
 		return nil
 	}}
-	App(cmd, &appFlag, &client.Options{})
+	Project(cmd, &projectFlag, &client.Options{})
 	_, err := exec(cmd, flagArgs...)
 	require.NoError(t, err)
 	return got, gotErr
 }
 
-func TestAppTarget_ArgumentNamesTheApp(t *testing.T) {
+func TestAppTarget_ArgumentNamesTheProject(t *testing.T) {
 	app, err := appScoped(t, []string{"shop"})
 	require.NoError(t, err)
 	require.Equal(t, "shop", app)
 }
 
 func TestAppTarget_FallsBackToTheFlag(t *testing.T) {
-	app, err := appScoped(t, nil, "--app", "shop")
+	app, err := appScoped(t, nil, "--project", "shop")
 	require.NoError(t, err)
 	require.Equal(t, "shop", app)
 }
@@ -135,39 +135,39 @@ func TestAppTarget_NeitherIsEmpty(t *testing.T) {
 // Argument or flag, never both — even when they agree.
 func TestAppTarget_ArgumentAndFlagIsUsageError(t *testing.T) {
 	for _, flag := range []string{"shop", "other"} {
-		_, err := appScoped(t, []string{"shop"}, "--app", flag)
-		require.EqualError(t, err, "--app cannot be combined with an application argument")
+		_, err := appScoped(t, []string{"shop"}, "--project", flag)
+		require.EqualError(t, err, "--project cannot be combined with a project argument")
 		require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
-		require.Equal(t, "Name the application as the argument or with --app, not both.", cmderr.Hint(err))
+		require.Equal(t, "Name the project as the argument or with --project, not both.", cmderr.Hint(err))
 	}
 }
 
 // A path addresses one environment, so it cannot scope a collection.
 func TestAppTarget_PathIsUsageError(t *testing.T) {
 	_, err := appScoped(t, []string{"shop/prod"})
-	require.EqualError(t, err, `invalid application "shop/prod"`)
+	require.EqualError(t, err, `invalid project "shop/prod"`)
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
-	require.Contains(t, cmderr.Hint(err), "app/env addresses a single environment")
+	require.Contains(t, cmderr.Hint(err), "project/environment addresses a single environment")
 }
 
-// scoped runs cmd with a --app flag registered and returns what EnvTarget
-// makes of the given --app value and target.
+// scoped runs cmd with a --project flag registered and returns what EnvTarget
+// makes of the given --project value and target.
 func scoped(t *testing.T, target string, flagArgs ...string) (string, string, error) {
 	t.Helper()
-	var appFlag, gotApp, gotEnv string
+	var projectFlag, gotApp, gotEnv string
 	var gotErr error
 	cmd := &cobra.Command{Use: "x", RunE: func(cmd *cobra.Command, _ []string) error {
-		gotApp, gotEnv, gotErr = EnvTarget(cmd, appFlag, target)
+		gotApp, gotEnv, gotErr = EnvTarget(cmd, projectFlag, target)
 		return nil
 	}}
-	App(cmd, &appFlag, &client.Options{})
+	Project(cmd, &projectFlag, &client.Options{})
 	_, err := exec(cmd, flagArgs...)
 	require.NoError(t, err)
 	return gotApp, gotEnv, gotErr
 }
 
-func TestEnvTarget_BareNameTakesAppFromFlag(t *testing.T) {
-	app, env, err := scoped(t, "prod", "--app", "shop")
+func TestEnvTarget_BareNameTakesProjectFromFlag(t *testing.T) {
+	app, env, err := scoped(t, "prod", "--project", "shop")
 	require.NoError(t, err)
 	require.Equal(t, "shop", app)
 	require.Equal(t, "prod", env)
@@ -188,22 +188,22 @@ func TestEnvTarget_PathCarriesItsOwnScope(t *testing.T) {
 // Path or flag, never both — even when they agree.
 func TestEnvTarget_PathAndFlagIsUsageError(t *testing.T) {
 	for _, flag := range []string{"shop", "other"} {
-		_, _, err := scoped(t, "shop/prod", "--app", flag)
-		require.EqualError(t, err, "--app cannot be combined with a path")
+		_, _, err := scoped(t, "shop/prod", "--project", flag)
+		require.EqualError(t, err, "--project cannot be combined with a path")
 		require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
-		require.Equal(t, "Give the environment as app/env or with --app, not both.", cmderr.Hint(err))
+		require.Equal(t, "Give the environment as project/environment or with --project, not both.", cmderr.Hint(err))
 	}
 }
 
 func TestEnvTarget_MalformedPath(t *testing.T) {
 	for _, target := range []string{"/prod", "shop/", "a/b/c"} {
 		_, _, err := scoped(t, target)
-		require.EqualError(t, err, `invalid environment "`+target+`": expected app/env`)
+		require.EqualError(t, err, `invalid environment "`+target+`": expected project/environment`)
 		require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 	}
 }
 
-// A command without --app (changeset copy) can still take a path.
+// A command without --project (changeset copy) can still take a path.
 func TestEnvTarget_NoAppFlagRegistered(t *testing.T) {
 	cmd := &cobra.Command{Use: "x"}
 	app, env, err := EnvTarget(cmd, "", "shop/prod")

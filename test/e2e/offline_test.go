@@ -30,10 +30,10 @@ func TestUsageErrors(t *testing.T) {
 		hint string
 	}{
 		{"unknown command", []string{"bogus"}, `unknown command "bogus" for "admiral"`, "For usage, run: admiral --help"},
-		{"unknown subcommand", []string{"app", "bogus"}, `unknown command "bogus" for "admiral app"`, "For usage, run: admiral app --help"},
+		{"unknown subcommand", []string{"project", "bogus"}, `unknown command "bogus" for "admiral project"`, "For usage, run: admiral project --help"},
 		{"unknown flag", []string{"--bogus", "version"}, "unknown flag: --bogus", "For usage, run: admiral"},
-		{"missing positional", []string{"app", "get"}, "missing argument: get <name>", "For usage, run: admiral app get --help"},
-		{"extra positional", []string{"app", "list", "extra"}, `unknown argument "extra"`, "For usage, run: admiral app list --help"},
+		{"missing positional", []string{"project", "get"}, "missing argument: get <name>", "For usage, run: admiral project get --help"},
+		{"extra positional", []string{"project", "list", "extra"}, `unknown argument "extra"`, "For usage, run: admiral project list --help"},
 		{"bad output format", []string{"-o", "xml", "version"}, `invalid output format "xml"`, ""},
 		{"bad timeout flag", []string{"--timeout", "soon", "version"}, `invalid argument "soon" for "--timeout"`, ""},
 		{"bad shell", []string{"completion", "tcsh"}, `unknown shell "tcsh"`, ""},
@@ -63,10 +63,10 @@ func TestUsageErrors(t *testing.T) {
 // remedy when nothing is stored, before any network use.
 func TestNotSignedIn(t *testing.T) {
 	for _, args := range [][]string{
-		{"app", "list"},
-		{"app", "list", "-o", "json"},
-		{"app", "get", "shop"},
-		{"env", "list", "--app", "shop"},
+		{"project", "list"},
+		{"project", "list", "-o", "json"},
+		{"project", "get", "shop"},
+		{"env", "list", "--project", "shop"},
 		{"component", "list"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
@@ -103,7 +103,7 @@ func TestAuthWithTokenLifecycle(t *testing.T) {
 			StderrContains("Error: no API key on stdin")
 	})
 	t.Run("delete without --yes fails before sign-in", func(t *testing.T) {
-		newCLI(t).Run("app", "delete", "shop").Exits(exitUsage).
+		newCLI(t).Run("project", "delete", "shop").Exits(exitUsage).
 			StderrContains("--yes required when not running interactively")
 	})
 	t.Run("env key wins and refuses login", func(t *testing.T) {
@@ -121,7 +121,7 @@ func TestConfigRoundTrip(t *testing.T) {
 	cli.Run("config", "list").Succeeds().StdoutContains("localhost:9999")
 
 	// A signed-out run refuses before dialing, whatever server is stored.
-	cli.Run("app", "list").Exits(exitAuth)
+	cli.Run("project", "list").Exits(exitAuth)
 }
 
 func TestCompletionScripts(t *testing.T) {

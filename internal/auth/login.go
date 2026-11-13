@@ -71,7 +71,7 @@ type LoginOptions struct {
 	ClientID  string
 	ConfigDir string
 
-	// Scopes are resource scopes (e.g. "app:read") that narrow the session
+	// Scopes are resource scopes (e.g. "project:read") that narrow the session
 	// to a subset of the user's authority. They are added to DefaultScopes.
 	// Empty means the session carries the user's full authority.
 	Scopes []string

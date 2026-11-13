@@ -23,8 +23,8 @@ stdout. The secret is shown this once.`,
   admiral apikey create laptop-terraform --scope state:write
   export TF_TOKEN_state_admiral_io=$(admiral apikey create ci-state --scope state:read)
 
-  # A CI key that reads applications and environments
-  admiral apikey create ci-read --scope app:read,env:read`,
+  # A CI key that reads projects and environments
+  admiral apikey create ci-read --scope project:read,env:read`,
 		Args: flags.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			list, err := scopes.Validate(scopeFlag)

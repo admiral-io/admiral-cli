@@ -41,7 +41,7 @@ func TestLatestPlanRefusesWhatIsNotWaitingOnAPlan(t *testing.T) {
 		want   string
 		hint   string
 	}{
-		{runv1.Run_STATUS_PLANNING, "is still planning", "admiral run get " + runID + " --wait"},
+		{runv1.Run_STATUS_PLANNING, "is still planning", "admiral run describe " + runID + " --wait"},
 		{runv1.Run_STATUS_NO_CHANGES, "found nothing to change", ""},
 		{runv1.Run_STATUS_FAILED, "latest plan failed", "admiral changeset plan " + csID},
 		{runv1.Run_STATUS_APPLIED, "is applied, not waiting on a plan", ""},

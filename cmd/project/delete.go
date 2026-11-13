@@ -1,4 +1,4 @@
-package app
+package project
 
 import (
 	"fmt"
@@ -11,7 +11,7 @@ import (
 	"go.admiral.io/cli/internal/input"
 	"go.admiral.io/cli/internal/output"
 	"go.admiral.io/cli/internal/resolve"
-	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
+	projectv1 "go.admiral.io/sdk/proto/admiral/api/project/v1"
 )
 
 func newDeleteCmd(opts *client.Options) *cobra.Command {
@@ -21,17 +21,17 @@ func newDeleteCmd(opts *client.Options) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "delete <name>",
-		Short: "Delete an application",
-		Long: `Delete an application and everything in it: its environments, components,
-and runs. You must type the application name to confirm, or pass --yes to
+		Short: "Delete a project",
+		Long: `Delete a project and everything in it: its environments, components,
+and runs. You must type the project name to confirm, or pass --yes to
 skip the prompt.`,
-		Example: `  # Delete an application by name (prompts for the name to confirm)
-  admiral app delete billing-api
+		Example: `  # Delete a project by name (prompts for the name to confirm)
+  admiral project delete billing-api
 
   # Skip the prompt
-  admiral app delete billing-api --yes`,
+  admiral project delete billing-api --yes`,
 		Args:              flags.ExactArgs(1),
-		ValidArgsFunction: complete.First(complete.Apps(opts)),
+		ValidArgsFunction: complete.First(complete.Projects(opts)),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Before any network use: a run that cannot confirm and did not
 			// pass --yes fails here, in milliseconds, with the usage error.
@@ -44,7 +44,7 @@ skip the prompt.`,
 			}
 			defer c.Close() //nolint:errcheck // best-effort cleanup
 
-			id, err := resolve.App(cmd.Context(), c.Application(), args[0])
+			id, err := resolve.Project(cmd.Context(), c.Project(), args[0])
 			if err != nil {
 				return err
 			}
@@ -52,12 +52,12 @@ skip the prompt.`,
 			// The confirmation is typed by name. Given an ID, look the name
 			// up so the user is not asked to type an id.
 			name := args[0]
-			if resolve.IsID("app", name) {
-				resp, err := c.Application().GetApplication(cmd.Context(), &applicationv1.GetApplicationRequest{ApplicationId: id})
+			if resolve.IsID("prj", name) {
+				resp, err := c.Project().GetProject(cmd.Context(), &projectv1.GetProjectRequest{ProjectId: id})
 				if err != nil {
 					return err
 				}
-				name = resp.Application.Name
+				name = resp.Project.Name
 			}
 
 			prompt := fmt.Sprintf("Deleting %s is not reversible and removes all of its environments, components and runs.", name)
@@ -65,13 +65,13 @@ skip the prompt.`,
 				return err
 			}
 
-			if _, err := c.Application().DeleteApplication(cmd.Context(), &applicationv1.DeleteApplicationRequest{
-				ApplicationId: id,
+			if _, err := c.Project().DeleteProject(cmd.Context(), &projectv1.DeleteProjectRequest{
+				ProjectId: id,
 			}); err != nil {
 				return err
 			}
 
-			output.Confirmed(cmd.ErrOrStderr(), "application", name, "deleted")
+			output.Confirmed(cmd.ErrOrStderr(), "project", name, "deleted")
 			return nil
 		},
 	}

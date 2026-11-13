@@ -45,8 +45,8 @@ one that is dropped stops serving the environment.`,
   # Remove a label (kubectl-style key-)
   admiral env update billing/staging --label legacy-
 
-  # By name, scoped with --app
-  admiral env update staging --app billing --label tier=staging
+  # By name, scoped with --project
+  admiral env update staging --project billing --label tier=staging
 
   # Move components to another namespace
   admiral env update billing/staging --namespace billing-staging
@@ -95,7 +95,7 @@ one that is dropped stops serving the environment.`,
 			}
 			defer c.Close() //nolint:errcheck
 
-			envID, err := resolve.Environment(cmd.Context(), c.Environment(), c.Application(), app, name)
+			envID, err := resolve.Environment(cmd.Context(), c.Environment(), c.Project(), app, name)
 			if err != nil {
 				return err
 			}
@@ -152,7 +152,7 @@ one that is dropped stops serving the environment.`,
 		},
 	}
 
-	flags.App(cmd, &appName, opts)
+	flags.Project(cmd, &appName, opts)
 	cmd.Flags().StringVar(&newName, "name", "", "new name")
 	cmd.Flags().StringVar(&description, "description", "", "new description")
 	flags.Label(cmd, &labelStrs, "patch labels: key=value to set, key- to remove (repeatable)")

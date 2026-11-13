@@ -10,13 +10,13 @@ import (
 	"go.admiral.io/cli/internal/cmderr"
 	sdkclient "go.admiral.io/sdk/client"
 	agentv1 "go.admiral.io/sdk/proto/admiral/api/agent/v1"
-	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
 	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
 	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
+	projectv1 "go.admiral.io/sdk/proto/admiral/api/project/v1"
 	runv1 "go.admiral.io/sdk/proto/admiral/api/run/v1"
 )
 
-// fakeClient knows one application, shop, with one environment, dev, and
+// fakeClient knows one project, shop, with one environment, dev, and
 // answers ListChangeSets from open.
 type fakeClient struct {
 	sdkclient.AdmiralClient
@@ -26,21 +26,21 @@ type fakeClient struct {
 
 func (f *fakeClient) Run() runv1.RunAPIClient { return f.runs }
 
-func (f *fakeClient) Application() applicationv1.ApplicationAPIClient { return appClient{} }
+func (f *fakeClient) Project() projectv1.ProjectAPIClient             { return appClient{} }
 func (f *fakeClient) Environment() environmentv1.EnvironmentAPIClient { return envClient{} }
 func (f *fakeClient) ChangeSet() changesetv1.ChangeSetAPIClient       { return f.cs }
 
 const (
-	shopID = "app-7f2a1c9d0e3b"
+	shopID = "prj-7f2a1c9d0e3b"
 	devID  = "env-3k9x2m7qpl0a"
 )
 
 type appClient struct {
-	applicationv1.ApplicationAPIClient
+	projectv1.ProjectAPIClient
 }
 
-func (appClient) ListApplications(context.Context, *applicationv1.ListApplicationsRequest, ...grpc.CallOption) (*applicationv1.ListApplicationsResponse, error) {
-	return &applicationv1.ListApplicationsResponse{Applications: []*applicationv1.Application{{Id: shopID, Name: "shop"}}}, nil
+func (appClient) ListProjects(context.Context, *projectv1.ListProjectsRequest, ...grpc.CallOption) (*projectv1.ListProjectsResponse, error) {
+	return &projectv1.ListProjectsResponse{Projects: []*projectv1.Project{{Id: shopID, Name: "shop"}}}, nil
 }
 
 type envClient struct {
@@ -84,7 +84,7 @@ func TestResolveAnIDAsksNothing(t *testing.T) {
 	require.Nil(t, cs.req)
 }
 
-// app/env resolves to the environment's one open changeset, asked for by
+// project/environment resolves to the environment's one open changeset, asked for by
 // status so an applied or closed one never counts.
 func TestResolveTheOneOpenChangeSet(t *testing.T) {
 	id, cs, err := resolveWith(t, "shop/dev", &changesetv1.ChangeSet{Id: csID, Title: "First deploy"})

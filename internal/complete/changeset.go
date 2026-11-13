@@ -36,7 +36,7 @@ func ThenEach(first, rest Func) Func {
 }
 
 // ComponentsOf offers the components of the changeset or environment named by the
-// first positional, an app/env or a cs- ID: those live in its environment
+// first positional, a project/environment or a cs- ID: those live in its environment
 // and those its head revision adds. With dotted set, a component is offered
 // as "api." with no trailing space, so the path is typed next; once a dot
 // is typed nothing more is offered, since value paths are the chart's.
@@ -59,7 +59,7 @@ func changeSetComponents(ctx context.Context, c sdkclient.AdmiralClient, ref str
 	var envID string
 	var added []string
 	if app, env, isPath := strings.Cut(ref, "/"); isPath {
-		id, err := resolve.Environment(ctx, c.Environment(), c.Application(), app, env)
+		id, err := resolve.Environment(ctx, c.Environment(), c.Project(), app, env)
 		if err != nil {
 			return nil, err
 		}
@@ -99,8 +99,8 @@ func changeSetComponents(ctx context.Context, c sdkclient.AdmiralClient, ref str
 }
 
 // Scopes offers what an agent may be granted to: "org", or "app:", "env:"
-// and "group:" with no trailing space, then application names after
-// "app:" and app/env paths after "env:", completed segment by segment as
+// and "group:" with no trailing space, then project names after
+// "app:" and project/environment paths after "env:", completed segment by segment as
 // Envs does.
 func Scopes(opts *client.Options) Func {
 	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -120,8 +120,8 @@ func Scopes(opts *client.Options) Func {
 		var out []string
 		var directive cobra.ShellCompDirective
 		switch kind {
-		case "app":
-			out, directive = Apps(opts)(cmd, args, rest)
+		case "project":
+			out, directive = Projects(opts)(cmd, args, rest)
 		case "env":
 			out, directive = Envs(opts)(cmd, args, rest)
 		default:

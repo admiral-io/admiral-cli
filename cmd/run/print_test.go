@@ -259,7 +259,7 @@ func TestRefusalSaysWhatUnblocksIt(t *testing.T) {
 	held := status.Error(codes.FailedPrecondition, "change set "+csID+"'s partial apply holds the environment; it is applied again, edited or reverted first")
 	assert.Equal(t, "To finish it, run: admiral changeset plan "+csID+", then apply it\n"+
 		"To undo it, run: admiral changeset revert "+csID+"\n"+
-		"As break-glass, a tenant admin accepts what landed: admiral run accept <run> --reason ...",
+		"As break-glass, an organization admin accepts what landed: admiral run accept <run> --reason ...",
 		cmderr.Hint(Refusal(held, "admiral changeset", "cs-other0000000")))
 
 	scope := status.Error(codes.PermissionDenied, "missing scope run:write")
@@ -272,7 +272,7 @@ func TestPartialOutcomeNamesApplyAgainRevertAndAccept(t *testing.T) {
 	err := Outcome(&runv1.Run{Id: testRunID, ChangeSetId: csID, Status: runv1.Run_STATUS_PARTIAL})
 	assert.Equal(t, "To finish it, run: admiral changeset plan "+csID+", then apply it\n"+
 		"To undo it, run: admiral changeset revert "+csID+"\n"+
-		"As break-glass, a tenant admin accepts what landed: admiral run accept "+testRunID+" --reason ...",
+		"As break-glass, an organization admin accepts what landed: admiral run accept "+testRunID+" --reason ...",
 		cmderr.Hint(err))
 }
 
@@ -284,7 +284,7 @@ func TestUnknownOutcomeSaysToPlanFirst(t *testing.T) {
 	assert.Contains(t, err.Error(), "unknown")
 	assert.Equal(t, "To see what landed and finish it, run: admiral changeset plan "+csID+", then apply it\n"+
 		"To undo it, run: admiral changeset revert "+csID+"\n"+
-		"As break-glass, a tenant admin accepts what landed: admiral run accept "+testRunID+" --reason ...",
+		"As break-glass, an organization admin accepts what landed: admiral run accept "+testRunID+" --reason ...",
 		cmderr.Hint(err))
 }
 

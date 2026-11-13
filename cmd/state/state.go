@@ -11,9 +11,9 @@ import (
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/resolve"
 	sdkclient "go.admiral.io/sdk/client"
-	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
 	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
-	tenantv1 "go.admiral.io/sdk/proto/admiral/api/tenant/v1"
+	organizationv1 "go.admiral.io/sdk/proto/admiral/api/organization/v1"
+	projectv1 "go.admiral.io/sdk/proto/admiral/api/project/v1"
 )
 
 type StateCmd struct {
@@ -34,7 +34,7 @@ no backend set. Terraform reads and writes the current one; these commands
 list the versions and download one, for a rollback with
 'terraform state push -force' or to see what changed.
 
-'versions' names a component by its environment (app/env) and its name;
+'versions' names a component by its environment (project/environment) and its name;
 'download' takes a version id from it.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -49,14 +49,14 @@ list the versions and download one, for a rollback with
 }
 
 // workspace is the organization and workspace name a component's state is
-// served under, `<application>_<environment>_<component>`, the names its
+// served under, `<project>_<environment>_<component>`, the names its
 // cloud block uses.
 func workspace(ctx context.Context, c sdkclient.AdmiralClient, cmd *cobra.Command, target, component string) (string, string, error) {
 	appScope, name, err := flags.EnvTarget(cmd, "", target)
 	if err != nil {
 		return "", "", err
 	}
-	envID, err := resolve.Environment(ctx, c.Environment(), c.Application(), appScope, name)
+	envID, err := resolve.Environment(ctx, c.Environment(), c.Project(), appScope, name)
 	if err != nil {
 		return "", "", err
 	}
@@ -64,15 +64,15 @@ func workspace(ctx context.Context, c sdkclient.AdmiralClient, cmd *cobra.Comman
 	if err != nil {
 		return "", "", err
 	}
-	app, err := c.Application().GetApplication(ctx, &applicationv1.GetApplicationRequest{ApplicationId: env.GetEnvironment().GetApplicationId()})
+	app, err := c.Project().GetProject(ctx, &projectv1.GetProjectRequest{ProjectId: env.GetEnvironment().GetProjectId()})
 	if err != nil {
 		return "", "", err
 	}
-	tenant, err := c.Tenant().GetTenant(ctx, &tenantv1.GetTenantRequest{})
+	organization, err := c.Organization().GetOrganization(ctx, &organizationv1.GetOrganizationRequest{})
 	if err != nil {
 		return "", "", err
 	}
-	return tenant.GetTenant().GetSlug(), app.GetApplication().GetName() + "_" + env.GetEnvironment().GetName() + "_" + component, nil
+	return organization.GetOrganization().GetSlug(), app.GetProject().GetName() + "_" + env.GetEnvironment().GetName() + "_" + component, nil
 }
 
 // asStruct lets the printer render a plain value like an API object.

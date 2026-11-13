@@ -1,5 +1,5 @@
 // Package complete provides shell-completion functions that offer server
-// resource names, so `admiral app get bil<TAB>` fills in `billing-api` the
+// resource names, so `admiral project get bil<TAB>` fills in `billing-api` the
 // way kubectl completes deployment names. Every positional or flag that
 // resolves a name (see package resolve) registers one of these.
 //
@@ -19,9 +19,9 @@ import (
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/resolve"
 	sdkclient "go.admiral.io/sdk/client"
-	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
 	credentialv1 "go.admiral.io/sdk/proto/admiral/api/credential/v1"
 	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
+	projectv1 "go.admiral.io/sdk/proto/admiral/api/project/v1"
 	registryv1 "go.admiral.io/sdk/proto/admiral/api/registry/v1"
 	sourcev1 "go.admiral.io/sdk/proto/admiral/api/source/v1"
 )
@@ -96,20 +96,20 @@ func Static(values ...string) Func {
 	}
 }
 
-// Apps offers application names.
-func Apps(opts *client.Options) Func {
+// Apps offers project names.
+func Projects(opts *client.Options) Func {
 	return func(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return withClient(cmd, opts, toComplete, func(ctx context.Context, c sdkclient.AdmiralClient) ([]Candidate, error) {
 			var out []Candidate
 			err := paged(func(token string) (string, error) {
-				resp, err := c.Application().ListApplications(ctx, &applicationv1.ListApplicationsRequest{
+				resp, err := c.Project().ListProjects(ctx, &projectv1.ListProjectsRequest{
 					PageSize:  pageSize,
 					PageToken: token,
 				})
 				if err != nil {
 					return "", err
 				}
-				for _, a := range resp.Applications {
+				for _, a := range resp.Projects {
 					out = append(out, Candidate{Name: a.Name, Description: a.Description})
 				}
 				return resp.NextPageToken, nil
@@ -120,16 +120,16 @@ func Apps(opts *client.Options) Func {
 }
 
 // Envs offers environment names for a positional or --env, in both forms
-// of style guide §1.2. A bare prefix completes inside the --app already on
-// the line. With no --app it offers application prefixes ("shop/", no
+// of style guide §1.2. A bare prefix completes inside the --project already on
+// the line. With no --project it offers project prefixes ("shop/", no
 // trailing space) so the path can be typed segment by segment, and a
 // prefix that already contains "/" completes the environment inside that
-// application as "shop/prod".
+// project as "shop/prod".
 func Envs(opts *client.Options) Func {
 	return func(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		app, _, isPath := strings.Cut(toComplete, "/")
 		if !isPath {
-			app = flagValue(cmd, "app")
+			app = flagValue(cmd, "project")
 			if app == "" {
 				return appPrefixes(cmd, opts, toComplete)
 			}
@@ -151,12 +151,12 @@ func Envs(opts *client.Options) Func {
 	}
 }
 
-// NewEnv offers the application prefix of a new environment's path
+// NewEnv offers the project prefix of a new environment's path
 // ("shop/") and nothing after the slash, since the name does not exist
-// yet. With --app on the line there is nothing to offer.
+// yet. With --project on the line there is nothing to offer.
 func NewEnv(opts *client.Options) Func {
 	return func(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		if strings.Contains(toComplete, "/") || flagValue(cmd, "app") != "" {
+		if strings.Contains(toComplete, "/") || flagValue(cmd, "project") != "" {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
 		return appPrefixes(cmd, opts, toComplete)
@@ -267,10 +267,10 @@ func components(ctx context.Context, c sdkclient.AdmiralClient) ([]Candidate, er
 	return out, err
 }
 
-// appPrefixes offers application names with a trailing slash and tells
+// appPrefixes offers project names with a trailing slash and tells
 // the shell not to add a space, so the next Tab completes the environment.
 func appPrefixes(cmd *cobra.Command, opts *client.Options, toComplete string) ([]string, cobra.ShellCompDirective) {
-	out, directive := Apps(opts)(cmd, nil, toComplete)
+	out, directive := Projects(opts)(cmd, nil, toComplete)
 	return withSuffix(out, "/"), noSpace(directive)
 }
 
@@ -298,16 +298,16 @@ func noSpace(directive cobra.ShellCompDirective) cobra.ShellCompDirective {
 
 // envsIn lists the environments of app (a name or ID).
 func envsIn(ctx context.Context, c sdkclient.AdmiralClient, app string) ([]Candidate, error) {
-	appID, err := resolve.App(ctx, c.Application(), app)
+	appID, err := resolve.Project(ctx, c.Project(), app)
 	if err != nil {
 		return nil, err
 	}
 	var out []Candidate
 	err = paged(func(token string) (string, error) {
 		resp, err := c.Environment().ListEnvironments(ctx, &environmentv1.ListEnvironmentsRequest{
-			ApplicationId: &appID,
-			PageSize:      pageSize,
-			PageToken:     token,
+			ProjectId: &appID,
+			PageSize:  pageSize,
+			PageToken: token,
 		})
 		if err != nil {
 			return "", err
@@ -322,7 +322,7 @@ func envsIn(ctx context.Context, c sdkclient.AdmiralClient, app string) ([]Candi
 
 // flagValue returns the named flag's value on cmd, or "" when the flag is
 // not defined. During completion cobra has already parsed the line, so
-// this is the --app the user typed before pressing Tab.
+// this is the --project the user typed before pressing Tab.
 func flagValue(cmd *cobra.Command, name string) string {
 	f := cmd.Flags().Lookup(name)
 	if f == nil {

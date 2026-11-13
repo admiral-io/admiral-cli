@@ -63,7 +63,7 @@ A key missing from the file is removed, so its default applies.`,
 					return err
 				}
 				defer c.Close() //nolint:errcheck
-				// An app/env is only known to be the file's changeset once
+				// A project/environment is only known to be the file's changeset once
 				// it resolves; an ID was compared before signing in.
 				if csID != fromCS {
 					return cmderr.Usage("%s was downloaded from changeset %s, not %s (%s)", valuesPath, fromCS, csID, ref)

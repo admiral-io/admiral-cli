@@ -22,7 +22,7 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 
 	credstore "go.admiral.io/cli/internal/credentials"
-	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
+	projectv1 "go.admiral.io/sdk/proto/admiral/api/project/v1"
 )
 
 func TestTransportMode(t *testing.T) {
@@ -69,7 +69,7 @@ func startTLSServer(t *testing.T, api *fakeAPI) {
 	t.Helper()
 	lis := bufconn.Listen(1 << 20)
 	srv := grpc.NewServer(grpc.Creds(selfSignedTLS(t)))
-	applicationv1.RegisterApplicationAPIServer(srv, api)
+	projectv1.RegisterProjectAPIServer(srv, api)
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(srv.Stop)
 
@@ -107,7 +107,7 @@ func TestCreateClient_TransportModes(t *testing.T) {
 				c, err := CreateClient(context.Background(), opts)
 				require.NoError(t, err)
 				defer c.Close() //nolint:errcheck
-				_, err = c.Application().ListApplications(context.Background(), &applicationv1.ListApplicationsRequest{})
+				_, err = c.Project().ListProjects(context.Background(), &projectv1.ListProjectsRequest{})
 				require.Equal(t, codes.Unavailable, status.Code(err))
 				require.Contains(t, err.Error(), "certificate")
 				require.Empty(t, api.calls, "no request reaches the server")
@@ -120,7 +120,7 @@ func TestCreateClient_TransportModes(t *testing.T) {
 				c, err := CreateClient(context.Background(), opts)
 				require.NoError(t, err)
 				defer c.Close() //nolint:errcheck
-				_, err = c.Application().ListApplications(context.Background(), &applicationv1.ListApplicationsRequest{})
+				_, err = c.Project().ListProjects(context.Background(), &projectv1.ListProjectsRequest{})
 				require.NoError(t, err)
 				require.Len(t, api.calls, 1)
 			})
@@ -132,7 +132,7 @@ func TestCreateClient_TransportModes(t *testing.T) {
 				c, err := CreateClient(context.Background(), opts)
 				require.NoError(t, err)
 				defer c.Close() //nolint:errcheck
-				_, err = c.Application().ListApplications(context.Background(), &applicationv1.ListApplicationsRequest{})
+				_, err = c.Project().ListProjects(context.Background(), &projectv1.ListProjectsRequest{})
 				require.Error(t, err, "a plaintext client must not silently succeed against TLS")
 				require.Empty(t, api.calls)
 			})

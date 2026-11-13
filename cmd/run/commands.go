@@ -98,10 +98,10 @@ func newListCmd(opts *client.Options) *cobra.Command {
 		paging    flags.PagingOptions
 	)
 	cmd := &cobra.Command{
-		Use:               "list [app/env]",
+		Use:               "list [project/environment]",
 		ValidArgsFunction: complete.First(complete.Envs(opts)),
 		Short:             "List runs, newest first",
-		Long: `List runs, newest first: an environment's when one is named, as app/env,
+		Long: `List runs, newest first: an environment's when one is named, as project/environment,
 or every run you can see.`,
 		Example: `  admiral run list checkout/prod
   admiral run list --changeset cs-7f2a1c9d0e3b`,
@@ -122,7 +122,7 @@ or every run you can see.`,
 				if err != nil {
 					return err
 				}
-				id, err := resolve.Environment(cmd.Context(), c.Environment(), c.Application(), app, name)
+				id, err := resolve.Environment(cmd.Context(), c.Environment(), c.Project(), app, name)
 				if err != nil {
 					return err
 				}
@@ -156,12 +156,41 @@ or every run you can see.`,
 }
 
 func newGetCmd(opts *client.Options) *cobra.Command {
-	w := waitOptions{follow: true}
 	cmd := &cobra.Command{
 		Use:   "get <run>",
-		Short: "Get a run: its plan, approvals and apply",
-		Long: `Get a run. With --wait, poll until it settles: planned and waiting for
-people, or ended. Exits 1 when it failed, applied partway or was superseded.`,
+		Short: "Get a run",
+		Long: `Print the one-line summary of a run. Use 'describe' for its plan, approvals
+and apply, and '-o json' for the raw record.`,
+		Args: flags.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			id, err := runID(args[0])
+			if err != nil {
+				return err
+			}
+			c, err := client.CreateClient(cmd.Context(), opts)
+			if err != nil {
+				return err
+			}
+			defer c.Close() //nolint:errcheck // best-effort cleanup
+			r, err := getRun(cmd.Context(), c.Run(), id)
+			if err != nil {
+				return err
+			}
+			p := output.NewPrinter(cmd, opts.OutputFormat)
+			return p.PrintOne(r, r.GetId(), runTable.Render(p, r))
+		},
+	}
+	return cmd
+}
+
+func newDescribeCmd(opts *client.Options) *cobra.Command {
+	w := waitOptions{follow: true}
+	cmd := &cobra.Command{
+		Use:   "describe <run>",
+		Short: "Show everything about a run: its plan, approvals and apply",
+		Long: `Show everything about a run. With --wait, poll until it settles: planned and
+waiting for people, or ended. Exits 1 when it failed, applied partway or was
+superseded.`,
 		Args: flags.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := runID(args[0])
@@ -269,7 +298,7 @@ environment is released, with the components that applied recorded as live
 and the rest as they were.
 
 This is break-glass, for when nothing can be applied: the target is gone, or
-someone repaired it by hand. It takes a tenant admin. Otherwise finish the
+someone repaired it by hand. It takes an organization admin. Otherwise finish the
 changeset: plan and apply it again, edit it, or revert it.
 
 The command asks first; --yes skips the question.`,

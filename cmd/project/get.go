@@ -1,4 +1,4 @@
-package app
+package project
 
 import (
 	"github.com/spf13/cobra"
@@ -8,26 +8,26 @@ import (
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
 	"go.admiral.io/cli/internal/resolve"
-	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
+	projectv1 "go.admiral.io/sdk/proto/admiral/api/project/v1"
 )
 
 func newGetCmd(opts *client.Options) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "get <name>",
-		Short: "Get an application",
-		Long: `Print the one-line summary of an application. Use 'describe' for the full
+		Short: "Get a project",
+		Long: `Print the one-line summary of a project. Use 'describe' for the full
 view and '-o json' for the raw record.`,
-		Example: `  # Get an application by name
-  admiral app get billing-api
+		Example: `  # Get a project by name
+  admiral project get billing-api
 
-  # Get an application by ID
-  admiral app get app-7q2k9m4x8p1c
+  # Get a project by ID
+  admiral project get prj-7q2k9m4x8p1c
 
   # Raw record as JSON
-  admiral app get billing-api -o json`,
+  admiral project get billing-api -o json`,
 		Args:              flags.ExactArgs(1),
-		ValidArgsFunction: complete.First(complete.Apps(opts)),
+		ValidArgsFunction: complete.First(complete.Projects(opts)),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
@@ -35,20 +35,20 @@ view and '-o json' for the raw record.`,
 			}
 			defer c.Close() //nolint:errcheck // best-effort cleanup
 
-			id, err := resolve.App(cmd.Context(), c.Application(), args[0])
+			id, err := resolve.Project(cmd.Context(), c.Project(), args[0])
 			if err != nil {
 				return err
 			}
 
-			resp, err := c.Application().GetApplication(cmd.Context(), &applicationv1.GetApplicationRequest{
-				ApplicationId: id,
+			resp, err := c.Project().GetProject(cmd.Context(), &projectv1.GetProjectRequest{
+				ProjectId: id,
 			})
 			if err != nil {
 				return err
 			}
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
-			return p.PrintOne(resp.Application, resp.Application.Name, appTable.Render(p, resp.Application))
+			return p.PrintOne(resp.Project, resp.Project.Name, projectTable.Render(p, resp.Project))
 		},
 	}
 

@@ -15,13 +15,13 @@ import (
 
 	agentcmd "go.admiral.io/cli/cmd/agent"
 	apikeycmd "go.admiral.io/cli/cmd/apikey"
-	appcmd "go.admiral.io/cli/cmd/app"
 	authcmd "go.admiral.io/cli/cmd/auth"
 	changesetcmd "go.admiral.io/cli/cmd/changeset"
 	componentcmd "go.admiral.io/cli/cmd/component"
 	configcmd "go.admiral.io/cli/cmd/config"
 	credentialcmd "go.admiral.io/cli/cmd/credential"
 	envcmd "go.admiral.io/cli/cmd/env"
+	projectcmd "go.admiral.io/cli/cmd/project"
 	runcmd "go.admiral.io/cli/cmd/run"
 	statecmd "go.admiral.io/cli/cmd/state"
 	internalauth "go.admiral.io/cli/internal/auth"
@@ -258,7 +258,7 @@ Documentation: https://admiral.io/docs`,
 	cmd.PersistentFlags().BoolVar(&root.noInput, "no-input", false, "never prompt; fail instead (also ADMIRAL_NO_INPUT=1)")
 
 	cmd.AddCommand(
-		appcmd.NewAppCmd(&clientOpts).Cmd,
+		projectcmd.NewAppCmd(&clientOpts).Cmd,
 		envcmd.NewEnvCmd(&clientOpts).Cmd,
 		changesetcmd.NewChangeSetCmd(&clientOpts).Cmd,
 		runcmd.NewRunCmd(&clientOpts).Cmd,

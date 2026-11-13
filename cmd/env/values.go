@@ -48,7 +48,7 @@ component's values can be carried to another environment.`,
 			}
 			defer c.Close() //nolint:errcheck
 
-			envID, err := resolve.Environment(cmd.Context(), c.Environment(), c.Application(), appScope, name)
+			envID, err := resolve.Environment(cmd.Context(), c.Environment(), c.Project(), appScope, name)
 			if err != nil {
 				return err
 			}
@@ -86,7 +86,7 @@ component's values can be carried to another environment.`,
 		},
 	}
 
-	flags.App(cmd, &appName, opts)
+	flags.Project(cmd, &appName, opts)
 	cmd.Flags().BoolVar(&effective, "effective", false, "print the whole tree the component receives, defaults included")
 	// Hidden until the platform builds the effective tree; it refuses the flag today.
 	_ = cmd.Flags().MarkHidden("effective")

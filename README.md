@@ -5,11 +5,11 @@
 [![CodeQL](https://github.com/admiral-io/admiral-cli/actions/workflows/codeql.yaml/badge.svg)](https://github.com/admiral-io/admiral-cli/actions/workflows/codeql.yaml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/admiral-io/admiral-cli/blob/master/LICENSE)
 
-The official command-line interface for [Admiral](https://admiral.io/?utm_source=github&utm_medium=referral&utm_campaign=admiral-cli), a control plane for coordinating infrastructure and application delivery across environments.
+The official command-line interface for [Admiral](https://admiral.io/?utm_source=github&utm_medium=referral&utm_campaign=admiral-cli), a control plane for coordinating infrastructure and project delivery across environments.
 
 Admiral orchestrates the tools you already use, Terraform or OpenTofu, Helm and Kubernetes manifests, and keeps the dependency graph across them so changes happen in the right order. Your modules, charts and manifests stay in their standard formats, so you keep them if you stop using Admiral.
 
-The CLI gives you direct access to the Admiral API from your terminal or CI/CD pipelines. This release covers authentication, applications, environments, and the component registry; more of the platform lands in each release.
+The CLI gives you direct access to the Admiral API from your terminal or CI/CD pipelines. This release covers authentication, projects, environments, and the component registry; more of the platform lands in each release.
 
 ## Installation
 
@@ -45,7 +45,7 @@ Sign in:
 admiral auth login
 
 # Same, but limit the session to read-only scopes (e.g. on a shared machine)
-admiral auth login --scope app:read,env:read
+admiral auth login --scope project:read,env:read
 
 # Over SSH? Print the sign-in URL instead of launching a browser
 admiral auth login --no-browser
@@ -94,19 +94,19 @@ Available keys: `server`, `output`, `insecure`, `plaintext`
 
 ### Usage
 
-Applications and environments share the same verbs: `list`, `get`,
+Projects and environments share the same verbs: `list`, `get`,
 `describe`, `create`, `update`, `delete`. Commands take the resource name or
-ID. An environment is addressed by its path, `app/env`, or by name with
-`--app` for the scope — never both at once. The component registry has its
+ID. An environment is addressed by its path, `project/environment`, or by name with
+`--project` for the scope — never both at once. The component registry has its
 own verbs, below.
 
 ```bash
-# Applications
-admiral app list
-admiral app create billing-api --description "Handles billing" --label team=platform
-admiral app describe billing-api
+# Projects
+admiral project list
+admiral project create billing-api --description "Handles billing" --label team=platform
+admiral project describe billing-api
 
-# Environments of an application
+# Environments of a project
 admiral env create billing-api/staging
 admiral env list billing-api
 admiral env describe billing-api/staging
@@ -118,7 +118,7 @@ admiral component list
 admiral component get cloud-sql
 
 # Machine-readable output for scripts
-admiral app list -o json
+admiral project list -o json
 admiral env list billing-api -o name
 
 # Skip confirmation prompts in automation
@@ -142,7 +142,7 @@ has the rest, including the rules for adding a command.
 
 ## Admiral
 
-[Admiral](https://admiral.io/?utm_source=github&utm_medium=referral&utm_campaign=admiral-cli) is a control plane for coordinating infrastructure and application delivery across environments. This repository is one of its
+[Admiral](https://admiral.io/?utm_source=github&utm_medium=referral&utm_campaign=admiral-cli) is a control plane for coordinating infrastructure and project delivery across environments. This repository is one of its
 [open-source tools](https://github.com/admiral-io).
 
 - [Documentation](https://admiral.io/docs?utm_source=github&utm_medium=referral&utm_campaign=admiral-cli)

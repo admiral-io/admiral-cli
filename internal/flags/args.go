@@ -63,7 +63,7 @@ func helpHint(cmd *cobra.Command) string {
 
 // Group marks cmd as one that only groups subcommands. Cobra skips Args on
 // a command that has no Run, so a parent with NoArgs still answers
-// `admiral app bogus` with its help text and exit 0. Group gives the
+// `admiral project bogus` with its help text and exit 0. Group gives the
 // command a run that prints help and an Args that rejects an unknown
 // subcommand as a usage error (exit 2), the same contract as a bad flag.
 func Group(cmd *cobra.Command) {

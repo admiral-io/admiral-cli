@@ -162,7 +162,7 @@ func (r *Result) StdoutNotContains(s string) *Result {
 
 // StderrContains asserts the given substring appears in stderr. Some
 // commands write informational messages to stderr on success
-// (kubectl-style "No applications found."), so this says nothing about
+// (kubectl-style "No projects found."), so this says nothing about
 // the exit code either way.
 func (r *Result) StderrContains(s string) *Result {
 	r.t.Helper()

@@ -22,7 +22,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "list <app>/<env>",
+		Use:   "list <project>/<environment>",
 		Short: "List an environment's changesets",
 		Example: `  admiral changeset list shop/prod
 
@@ -39,8 +39,8 @@ func newListCmd(opts *client.Options) *cobra.Command {
 			// Checked before the client is built: dialing first would report
 			// a missing credential for what is a missing argument.
 			if app == "" && !resolve.IsID("env", env) {
-				return cmderr.UsageHint("Give the environment as app/env: 'admiral changeset list shop/prod'.",
-					"no application specified")
+				return cmderr.UsageHint("Give the environment as project/environment: 'admiral changeset list shop/prod'.",
+					"no project specified")
 			}
 
 			c, err := client.CreateClient(cmd.Context(), opts)
@@ -49,7 +49,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 			}
 			defer c.Close() //nolint:errcheck
 
-			envID, err := resolve.Environment(cmd.Context(), c.Environment(), c.Application(), app, env)
+			envID, err := resolve.Environment(cmd.Context(), c.Environment(), c.Project(), app, env)
 			if err != nil {
 				return err
 			}

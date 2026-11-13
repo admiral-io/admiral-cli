@@ -19,7 +19,7 @@ the scenarios that need a server skip unless `ADMIRAL_SERVER` and
 Follow these rules when you add a command or change what one prints:
 
 - stdout is the answer, stderr is everything else (prompts, hints,
-  "No applications found.", next-page tokens).
+  "No projects found.", next-page tokens).
 - Usage mistakes exit 2 with a one-line hint; a missing sign-in exits 4;
   Ctrl-C exits 130; anything else that failed exits 1. Route usage errors
   through `cmderr.Usage` and positional checks through `internal/flags`.

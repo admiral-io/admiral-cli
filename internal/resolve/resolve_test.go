@@ -9,20 +9,20 @@ import (
 	"google.golang.org/grpc"
 
 	"go.admiral.io/cli/internal/cmderr"
-	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
 	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
+	projectv1 "go.admiral.io/sdk/proto/admiral/api/project/v1"
 )
 
 type appClient struct {
-	applicationv1.ApplicationAPIClient
-	apps   []*applicationv1.Application
+	projectv1.ProjectAPIClient
+	apps   []*projectv1.Project
 	filter string
 	err    error
 }
 
-func (m *appClient) ListApplications(_ context.Context, req *applicationv1.ListApplicationsRequest, _ ...grpc.CallOption) (*applicationv1.ListApplicationsResponse, error) {
+func (m *appClient) ListProjects(_ context.Context, req *projectv1.ListProjectsRequest, _ ...grpc.CallOption) (*projectv1.ListProjectsResponse, error) {
 	m.filter = req.Filter
-	return &applicationv1.ListApplicationsResponse{Applications: m.apps}, m.err
+	return &projectv1.ListProjectsResponse{Projects: m.apps}, m.err
 }
 
 type envClient struct {
@@ -33,58 +33,58 @@ type envClient struct {
 }
 
 func (m *envClient) ListEnvironments(_ context.Context, req *environmentv1.ListEnvironmentsRequest, _ ...grpc.CallOption) (*environmentv1.ListEnvironmentsResponse, error) {
-	m.app, m.filter = req.GetApplicationId(), req.Filter
+	m.app, m.filter = req.GetProjectId(), req.Filter
 	return &environmentv1.ListEnvironmentsResponse{Environments: m.envs}, nil
 }
 
 const (
-	appID = "app-7q2k9m4x8p1c"
+	appID = "prj-7q2k9m4x8p1c"
 	envID = "env-3h8w1n6r0t5z"
 )
 
 func TestIsID(t *testing.T) {
-	require.True(t, IsID("app", appID))
+	require.True(t, IsID("prj", appID))
 	require.False(t, IsID("env", appID), "another kind's id is a name")
-	require.False(t, IsID("app", "shop"))
-	require.False(t, IsID("app", "app-7Q2K9M4X8P1C"))
-	require.False(t, IsID("app", appID+"x"))
+	require.False(t, IsID("prj", "shop"))
+	require.False(t, IsID("prj", "app-7Q2K9M4X8P1C"))
+	require.False(t, IsID("prj", appID+"x"))
 }
 
 func TestApp_IDSkipsLookup(t *testing.T) {
 	c := &appClient{err: errors.New("must not be called")}
-	id, err := App(context.Background(), c, appID)
+	id, err := Project(context.Background(), c, appID)
 	require.NoError(t, err)
 	require.Equal(t, appID, id)
 }
 
 func TestApp_Empty(t *testing.T) {
-	_, err := App(context.Background(), &appClient{}, "")
-	require.EqualError(t, err, "no application specified")
+	_, err := Project(context.Background(), &appClient{}, "")
+	require.EqualError(t, err, "no project specified")
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
-	require.Equal(t, "Pass --app.", cmderr.Hint(err))
+	require.Equal(t, "Pass --project.", cmderr.Hint(err))
 }
 
 func TestApp_ByName(t *testing.T) {
-	c := &appClient{apps: []*applicationv1.Application{{Id: "id-1", Name: "shop"}, {Id: "id-2", Name: "shop-old"}}}
-	id, err := App(context.Background(), c, "shop")
+	c := &appClient{apps: []*projectv1.Project{{Id: "id-1", Name: "shop"}, {Id: "id-2", Name: "shop-old"}}}
+	id, err := Project(context.Background(), c, "shop")
 	require.NoError(t, err)
 	require.Equal(t, "id-1", id, "client-side re-check ignores prefix matches the server may return")
 	require.Equal(t, "field['name'] = 'shop'", c.filter)
 }
 
 func TestApp_NotFound(t *testing.T) {
-	_, err := App(context.Background(), &appClient{}, "nope")
-	require.EqualError(t, err, `application "nope" not found`)
-	require.Equal(t, "To see applications, run: admiral app list", cmderr.Hint(err))
+	_, err := Project(context.Background(), &appClient{}, "nope")
+	require.EqualError(t, err, `project "nope" not found`)
+	require.Equal(t, "To see projects, run: admiral project list", cmderr.Hint(err))
 	require.Equal(t, cmderr.ExitError, cmderr.Code(err))
 	var nf *NotFoundError
 	require.ErrorAs(t, err, &nf)
 }
 
 func TestApp_Ambiguous(t *testing.T) {
-	c := &appClient{apps: []*applicationv1.Application{{Id: "id-1", Name: "shop"}, {Id: "id-2", Name: "shop"}}}
-	_, err := App(context.Background(), c, "shop")
-	require.EqualError(t, err, `2 applications are named "shop"`)
+	c := &appClient{apps: []*projectv1.Project{{Id: "id-1", Name: "shop"}, {Id: "id-2", Name: "shop"}}}
+	_, err := Project(context.Background(), c, "shop")
+	require.EqualError(t, err, `2 projects are named "shop"`)
 	require.Equal(t, "Pass an ID instead: id-1, id-2", cmderr.Hint(err))
 }
 
@@ -96,14 +96,14 @@ func TestEnvironment_IDNeedsNoApp(t *testing.T) {
 
 func TestEnvironment_NameNeedsApp(t *testing.T) {
 	_, err := Environment(context.Background(), &envClient{}, &appClient{}, "", "prod")
-	require.EqualError(t, err, "no application specified")
+	require.EqualError(t, err, "no project specified")
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
-	require.Equal(t, "Pass --app or give the environment as app/env.", cmderr.Hint(err))
+	require.Equal(t, "Pass --project or give the environment as project/environment.", cmderr.Hint(err))
 }
 
 func TestEnvironment_ScopedLookup(t *testing.T) {
-	apps := &appClient{apps: []*applicationv1.Application{{Id: "app-1", Name: "shop"}}}
-	envs := &envClient{envs: []*environmentv1.Environment{{Id: "env-1", Name: "prod", ApplicationId: "app-1"}}}
+	apps := &appClient{apps: []*projectv1.Project{{Id: "app-1", Name: "shop"}}}
+	envs := &envClient{envs: []*environmentv1.Environment{{Id: "env-1", Name: "prod", ProjectId: "app-1"}}}
 	id, err := Environment(context.Background(), envs, apps, "shop", "prod")
 	require.NoError(t, err)
 	require.Equal(t, "env-1", id)
@@ -111,6 +111,6 @@ func TestEnvironment_ScopedLookup(t *testing.T) {
 	require.Equal(t, "field['name'] = 'prod'", envs.filter)
 
 	_, err = Environment(context.Background(), &envClient{}, apps, "shop", "prd")
-	require.EqualError(t, err, `environment "prd" not found in application "shop"`)
-	require.Equal(t, "To see environments, run: admiral env list --app shop", cmderr.Hint(err))
+	require.EqualError(t, err, `environment "prd" not found in project "shop"`)
+	require.Equal(t, "To see environments, run: admiral env list --project shop", cmderr.Hint(err))
 }

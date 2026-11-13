@@ -1,5 +1,7 @@
 buf.build/gen/go/admiral/common/protocolbuffers/go v1.36.12-20261111034115-8b31320cbc3b.2 h1:0V54MvtIkn8uOBcczoCMj+welWeYPu8AipXLc9pQ3uQ=
 buf.build/gen/go/admiral/common/protocolbuffers/go v1.36.12-20261111034115-8b31320cbc3b.2/go.mod h1:qxx21t7fnyvzCaJ8ea2YbDCY5CKPtqZ+glY4zQt7AtQ=
+buf.build/gen/go/admiral/common/protocolbuffers/go v1.36.12-20261112181314-1938699b45ef.2 h1:YWm22SOoJbkVOuRn5JdmHMG/DMGw4UMMKDu3jX7i6K0=
+buf.build/gen/go/admiral/common/protocolbuffers/go v1.36.12-20261112181314-1938699b45ef.2/go.mod h1:qxx21t7fnyvzCaJ8ea2YbDCY5CKPtqZ+glY4zQt7AtQ=
 buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.2 h1:NbnlmV26O7oZ1iM5tsCI+GEx+3ZSdrhvnKQ/eWSrLiY=
 buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.2/go.mod h1:TCt1lluMFnctISJXvkIQ4x3ABrPuUKCWKyjKdkJNBpw=
 dario.cat/mergo v1.0.2 h1:85+piFYR1tMbRrLcDwR18y4UKJ3aH1Tbzi24VRW1TK8=
@@ -149,6 +151,8 @@ go.admiral.io/bundle v1.1.0 h1:DhzVVxjmX9tIWtdcmQWklNd1b/+lVUR/GRlwrz/Ja+8=
 go.admiral.io/bundle v1.1.0/go.mod h1:YA+9hWNmR/fBm9eeoG3lmq41j7TXx2vyWt+CCaCAWes=
 go.admiral.io/sdk v1.58.0 h1:69VFmpKwkVzOkPeafGCqBfw/rwEs6mdfSA324+m5OXY=
 go.admiral.io/sdk v1.58.0/go.mod h1:D6naKKJOXXVe4wMv27mzZLnvfYrNmcjXfNxYh6Zu6O4=
+go.admiral.io/sdk v1.59.0 h1:j5D5XPTNaSIFb1dfj8RR9ZuqrbagciR7MCHLMzbNJCk=
+go.admiral.io/sdk v1.59.0/go.mod h1:UsckIuyRmfcHyFuhnluHUdlzkcFWqrGQIoXrDk0EyDU=
 go.yaml.in/yaml/v3 v3.0.4/go.mod h1:DhzuOOF2ATzADvBadXxruRBLzYTpT36CKvDb3+aBEFg=
 go.yaml.in/yaml/v3 v3.0.5 h1:N6y/pJk8buWs9NY5ERU2HSMfm+IuD/OtfdAnq6kESPw=
 go.yaml.in/yaml/v3 v3.0.5/go.mod h1:HVTZu1O7/Vkt2N+BFy8Zza+lnLsABggaTM2ZpNIGuKg=

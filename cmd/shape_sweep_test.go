@@ -68,17 +68,17 @@ func sweepArgs(files map[string]string) map[string][]string {
 		"agent describe":       {"agent", "describe", "x"},
 		"agent enrollment-key": {"agent", "enrollment-key", "x"},
 		"agent get":            {"agent", "get", "x"},
-		"agent grant":          {"agent", "grant", "x", "app:x"},
+		"agent grant":          {"agent", "grant", "x", "project:x"},
 		"agent list":           {"agent", "list"},
 		"agent revoke":         {"agent", "revoke", "x", "org"},
 		"agent update":         {"agent", "update", "x", "--name", "y"},
 
-		"app create":   {"app", "create", "x"},
-		"app delete":   {"app", "delete", "x", "--yes"},
-		"app describe": {"app", "describe", "x"},
-		"app get":      {"app", "get", "x"},
-		"app list":     {"app", "list"},
-		"app update":   {"app", "update", "x", "--description", "y"},
+		"project create":   {"project", "create", "x"},
+		"project delete":   {"project", "delete", "x", "--yes"},
+		"project describe": {"project", "describe", "x"},
+		"project get":      {"project", "get", "x"},
+		"project list":     {"project", "list"},
+		"project update":   {"project", "update", "x", "--description", "y"},
 
 		"auth status": {"auth", "status"},
 
@@ -133,14 +133,15 @@ func sweepArgs(files map[string]string) map[string][]string {
 		"env update":   {"env", "update", "x/x", "--description", "y"},
 		"env values":   {"env", "values", "x/x", "x"},
 
-		"run accept":  {"run", "accept", run, "--reason", "r", "--yes"},
-		"run apply":   {"run", "apply", run, "--wait=false"},
-		"run approve": {"run", "approve", run},
-		"run cancel":  {"run", "cancel", run},
-		"run diff":    {"run", "diff", run},
-		"run get":     {"run", "get", run},
-		"run list":    {"run", "list", "x/x"},
-		"run logs":    {"run", "logs", run},
+		"run accept":   {"run", "accept", run, "--reason", "r", "--yes"},
+		"run apply":    {"run", "apply", run, "--wait=false"},
+		"run approve":  {"run", "approve", run},
+		"run cancel":   {"run", "cancel", run},
+		"run diff":     {"run", "diff", run},
+		"run describe": {"run", "describe", run},
+		"run get":      {"run", "get", run},
+		"run list":     {"run", "list", "x/x"},
+		"run logs":     {"run", "logs", run},
 	}
 }
 

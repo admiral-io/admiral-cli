@@ -22,8 +22,8 @@ func newGetCmd(opts *client.Options) *cobra.Command {
 		Example: `  # By path
   admiral env get billing/staging
 
-  # By name, scoped with --app
-  admiral env get staging --app billing
+  # By name, scoped with --project
+  admiral env get staging --project billing
 
   # By ID
   admiral env get env-3k9x2m7qpl0a`,
@@ -41,7 +41,7 @@ func newGetCmd(opts *client.Options) *cobra.Command {
 			}
 			defer c.Close() //nolint:errcheck
 
-			envID, err := resolve.Environment(cmd.Context(), c.Environment(), c.Application(), app, name)
+			envID, err := resolve.Environment(cmd.Context(), c.Environment(), c.Project(), app, name)
 			if err != nil {
 				return err
 			}
@@ -57,7 +57,7 @@ func newGetCmd(opts *client.Options) *cobra.Command {
 		},
 	}
 
-	flags.App(cmd, &appName, opts)
+	flags.Project(cmd, &appName, opts)
 
 	return cmd
 }

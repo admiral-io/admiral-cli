@@ -22,7 +22,7 @@ import (
 
 	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/credentials"
-	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
+	projectv1 "go.admiral.io/sdk/proto/admiral/api/project/v1"
 )
 
 // recordedCall is what the fake server saw for one RPC.
@@ -32,10 +32,10 @@ type recordedCall struct {
 	hasDeadline bool
 }
 
-// fakeAPI serves ApplicationAPI in-process and returns scripted errors in
+// fakeAPI serves ProjectAPI in-process and returns scripted errors in
 // order, then succeeds. It records every call.
 type fakeAPI struct {
-	applicationv1.UnimplementedApplicationAPIServer
+	projectv1.UnimplementedProjectAPIServer
 	mu     sync.Mutex
 	script map[string][]error // per method, consumed one per call
 	calls  []recordedCall
@@ -60,18 +60,18 @@ func (f *fakeAPI) record(ctx context.Context, method string) error {
 	return nil
 }
 
-func (f *fakeAPI) ListApplications(ctx context.Context, _ *applicationv1.ListApplicationsRequest) (*applicationv1.ListApplicationsResponse, error) {
-	if err := f.record(ctx, "ListApplications"); err != nil {
+func (f *fakeAPI) ListProjects(ctx context.Context, _ *projectv1.ListProjectsRequest) (*projectv1.ListProjectsResponse, error) {
+	if err := f.record(ctx, "ListProjects"); err != nil {
 		return nil, err
 	}
-	return &applicationv1.ListApplicationsResponse{}, nil
+	return &projectv1.ListProjectsResponse{}, nil
 }
 
-func (f *fakeAPI) CreateApplication(ctx context.Context, _ *applicationv1.CreateApplicationRequest) (*applicationv1.CreateApplicationResponse, error) {
-	if err := f.record(ctx, "CreateApplication"); err != nil {
+func (f *fakeAPI) CreateProject(ctx context.Context, _ *projectv1.CreateProjectRequest) (*projectv1.CreateProjectResponse, error) {
+	if err := f.record(ctx, "CreateProject"); err != nil {
 		return nil, err
 	}
-	return &applicationv1.CreateApplicationResponse{}, nil
+	return &projectv1.CreateProjectResponse{}, nil
 }
 
 // startServer runs fakeAPI on a bufconn listener and points CreateClient at it.
@@ -79,7 +79,7 @@ func startServer(t *testing.T, api *fakeAPI) {
 	t.Helper()
 	lis := bufconn.Listen(1 << 20)
 	srv := grpc.NewServer()
-	applicationv1.RegisterApplicationAPIServer(srv, api)
+	projectv1.RegisterProjectAPIServer(srv, api)
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(srv.Stop)
 
@@ -116,7 +116,7 @@ func sessionOpts(t *testing.T, tokenURL string) *Options {
 
 func TestCreateClient_SessionRefreshOn401(t *testing.T) {
 	api := &fakeAPI{script: map[string][]error{
-		"ListApplications": {status.Error(codes.Unauthenticated, "token expired")},
+		"ListProjects": {status.Error(codes.Unauthenticated, "token expired")},
 	}}
 	startServer(t, api)
 	refresh := refreshServer(t, "jwt-2")
@@ -126,7 +126,7 @@ func TestCreateClient_SessionRefreshOn401(t *testing.T) {
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
-	_, err = c.Application().ListApplications(context.Background(), &applicationv1.ListApplicationsRequest{})
+	_, err = c.Project().ListProjects(context.Background(), &projectv1.ListProjectsRequest{})
 	require.NoError(t, err, "one 401 is recovered by refreshing")
 
 	require.Len(t, api.calls, 2)
@@ -137,7 +137,7 @@ func TestCreateClient_SessionRefreshOn401(t *testing.T) {
 	}
 
 	// Later calls on the same client use the refreshed token too.
-	_, err = c.Application().ListApplications(context.Background(), &applicationv1.ListApplicationsRequest{})
+	_, err = c.Project().ListProjects(context.Background(), &projectv1.ListProjectsRequest{})
 	require.NoError(t, err)
 	require.Equal(t, []string{"Bearer jwt-2"}, api.calls[2].authz)
 
@@ -149,7 +149,7 @@ func TestCreateClient_SessionRefreshOn401(t *testing.T) {
 
 func TestCreateClient_SessionRefreshOnlyOnce(t *testing.T) {
 	api := &fakeAPI{script: map[string][]error{
-		"ListApplications": {status.Error(codes.Unauthenticated, "no"), status.Error(codes.Unauthenticated, "still no")},
+		"ListProjects": {status.Error(codes.Unauthenticated, "no"), status.Error(codes.Unauthenticated, "still no")},
 	}}
 	startServer(t, api)
 	opts := sessionOpts(t, refreshServer(t, "jwt-2").URL)
@@ -158,7 +158,7 @@ func TestCreateClient_SessionRefreshOnlyOnce(t *testing.T) {
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
-	_, err = c.Application().ListApplications(context.Background(), &applicationv1.ListApplicationsRequest{})
+	_, err = c.Project().ListProjects(context.Background(), &projectv1.ListProjectsRequest{})
 	require.Equal(t, codes.Unauthenticated, status.Code(err), "a second 401 is returned, not retried again")
 	require.Len(t, api.calls, 2)
 }
@@ -173,7 +173,7 @@ func TestCreateClient_APIKeyUsesTokenScheme(t *testing.T) {
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
-	_, err = c.Application().ListApplications(context.Background(), &applicationv1.ListApplicationsRequest{})
+	_, err = c.Project().ListProjects(context.Background(), &projectv1.ListProjectsRequest{})
 	require.NoError(t, err)
 	require.Equal(t, []string{"Token " + testToken}, api.calls[0].authz)
 	require.True(t, api.calls[0].hasDeadline)
@@ -185,8 +185,8 @@ func TestCreateClient_TransientRetryReadsOnly(t *testing.T) {
 	t.Cleanup(func() { retryBackoff = prev })
 
 	api := &fakeAPI{script: map[string][]error{
-		"ListApplications":  {status.Error(codes.Unavailable, "blip")},
-		"CreateApplication": {status.Error(codes.Unavailable, "blip")},
+		"ListProjects":  {status.Error(codes.Unavailable, "blip")},
+		"CreateProject": {status.Error(codes.Unavailable, "blip")},
 	}}
 	startServer(t, api)
 	t.Setenv(credentials.EnvAPIKey, testToken)
@@ -196,18 +196,18 @@ func TestCreateClient_TransientRetryReadsOnly(t *testing.T) {
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
-	_, err = c.Application().ListApplications(context.Background(), &applicationv1.ListApplicationsRequest{})
+	_, err = c.Project().ListProjects(context.Background(), &projectv1.ListProjectsRequest{})
 	require.NoError(t, err, "a read recovers from one Unavailable")
 
-	_, err = c.Application().CreateApplication(context.Background(), &applicationv1.CreateApplicationRequest{Application: &applicationv1.Application{Name: "x"}})
+	_, err = c.Project().CreateProject(context.Background(), &projectv1.CreateProjectRequest{Project: &projectv1.Project{Name: "x"}})
 	require.Equal(t, codes.Unavailable, status.Code(err), "a mutation is never retried")
 
 	var lists, creates int
 	for _, call := range api.calls {
 		switch call.method {
-		case "ListApplications":
+		case "ListProjects":
 			lists++
-		case "CreateApplication":
+		case "CreateProject":
 			creates++
 		}
 	}
@@ -225,7 +225,7 @@ func TestCreateClient_TimeoutOptionIsApplied(t *testing.T) {
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
-	_, err = c.Application().ListApplications(context.Background(), &applicationv1.ListApplicationsRequest{})
+	_, err = c.Project().ListProjects(context.Background(), &projectv1.ListProjectsRequest{})
 	require.NoError(t, err)
 	require.True(t, api.calls[0].hasDeadline, "the configured timeout reaches the server as a deadline")
 }
@@ -255,13 +255,13 @@ func TestCreateClient_VerboseLogsEveryAttemptOnBothPaths(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			buf.Reset()
-			api := &fakeAPI{script: map[string][]error{"ListApplications": {status.Error(codes.Unavailable, "blip")}}}
+			api := &fakeAPI{script: map[string][]error{"ListProjects": {status.Error(codes.Unavailable, "blip")}}}
 			startServer(t, api)
 			c, err := CreateClient(context.Background(), mk(t))
 			require.NoError(t, err)
 			defer c.Close() //nolint:errcheck
 
-			_, err = c.Application().ListApplications(context.Background(), &applicationv1.ListApplicationsRequest{})
+			_, err = c.Project().ListProjects(context.Background(), &projectv1.ListProjectsRequest{})
 			require.NoError(t, err)
 
 			out := buf.String()
@@ -270,7 +270,7 @@ func TestCreateClient_VerboseLogsEveryAttemptOnBothPaths(t *testing.T) {
 			require.Equal(t, 2, strings.Count(out, "msg=rpc"), "one line per attempt: %s", out)
 			require.Contains(t, out, "code=Unavailable")
 			require.Contains(t, out, "code=OK")
-			require.Contains(t, out, "ListApplications")
+			require.Contains(t, out, "ListProjects")
 		})
 	}
 }
@@ -279,8 +279,8 @@ func TestCreateClient_VerboseLogsEveryAttemptOnBothPaths(t *testing.T) {
 // API's logs; an error about the request itself does not need it.
 func TestAServerFaultNamesItsRequest(t *testing.T) {
 	api := &fakeAPI{requestID: "3f6c1d2e-req", script: map[string][]error{
-		"ListApplications":  {status.Error(codes.Internal, "internal error")},
-		"CreateApplication": {status.Error(codes.AlreadyExists, "application web already exists")},
+		"ListProjects":  {status.Error(codes.Internal, "internal error")},
+		"CreateProject": {status.Error(codes.AlreadyExists, "project web already exists")},
 	}}
 	startServer(t, api)
 
@@ -288,10 +288,10 @@ func TestAServerFaultNamesItsRequest(t *testing.T) {
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
-	_, err = c.Application().ListApplications(context.Background(), &applicationv1.ListApplicationsRequest{})
+	_, err = c.Project().ListProjects(context.Background(), &projectv1.ListProjectsRequest{})
 	require.Equal(t, "internal error (request 3f6c1d2e-req)", cmderr.Format(err))
 	require.Equal(t, codes.Internal, status.Code(err), "the code still reads through the wrapper")
 
-	_, err = c.Application().CreateApplication(context.Background(), &applicationv1.CreateApplicationRequest{})
-	require.Equal(t, "application web already exists", cmderr.Format(err))
+	_, err = c.Project().CreateProject(context.Background(), &projectv1.CreateProjectRequest{})
+	require.Equal(t, "project web already exists", cmderr.Format(err))
 }

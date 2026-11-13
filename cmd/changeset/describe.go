@@ -18,9 +18,9 @@ import (
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
 	sdkclient "go.admiral.io/sdk/client"
-	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
 	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
 	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
+	projectv1 "go.admiral.io/sdk/proto/admiral/api/project/v1"
 	runv1 "go.admiral.io/sdk/proto/admiral/api/run/v1"
 )
 
@@ -90,7 +90,7 @@ describe is a human view. Use 'changeset get -o json' for the raw record and
 
 // csSections holds the reads describe assembles around the changeset.
 type csSections struct {
-	// where is app/env, or the environment's ID when the names are unreadable.
+	// where is project/environment, or the environment's ID when the names are unreadable.
 	where    string
 	diff     *changesetv1.DiffChangeSetResponse
 	diffErr  error
@@ -125,18 +125,18 @@ func changeSetRunsFilter(cs *changesetv1.ChangeSet) (string, error) {
 	return filter.And(env, id), nil
 }
 
-// environmentPath names where the changeset goes as app/env, as the commands
+// environmentPath names where the changeset goes as project/environment, as the commands
 // that take an environment write it.
 func environmentPath(ctx context.Context, c sdkclient.AdmiralClient, cs *changesetv1.ChangeSet) string {
 	env, err := c.Environment().GetEnvironment(ctx, &environmentv1.GetEnvironmentRequest{EnvironmentId: cs.EnvironmentId})
 	if err != nil {
 		return cs.EnvironmentId
 	}
-	app, err := c.Application().GetApplication(ctx, &applicationv1.GetApplicationRequest{ApplicationId: cs.ApplicationId})
+	app, err := c.Project().GetProject(ctx, &projectv1.GetProjectRequest{ProjectId: cs.ProjectId})
 	if err != nil {
 		return cs.EnvironmentId
 	}
-	return app.GetApplication().GetName() + "/" + env.GetEnvironment().GetName()
+	return app.GetProject().GetName() + "/" + env.GetEnvironment().GetName()
 }
 
 func describeChangeSet(cs *changesetv1.ChangeSet, sec csSections) *output.Describe {
@@ -260,7 +260,7 @@ func nextSteps(cs *changesetv1.ChangeSet, latest *runv1.Run, sec csSections) []s
 	case latest.Status == runv1.Run_STATUS_PLANNED:
 		hints = append(hints, "To apply it, run: admiral changeset apply "+cs.Id)
 	case latest.Status == runv1.Run_STATUS_FAILED:
-		hints = append(hints, "To see why the last run failed, run: admiral run get "+latest.Id,
+		hints = append(hints, "To see why the last run failed, run: admiral run describe "+latest.Id,
 			"To plan it again, run: admiral changeset plan "+cs.Id)
 	}
 	return hints

@@ -24,9 +24,9 @@ import (
 	"go.admiral.io/cli/internal/valuesfile"
 	sdkclient "go.admiral.io/sdk/client"
 	agentv1 "go.admiral.io/sdk/proto/admiral/api/agent/v1"
-	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
 	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
 	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
+	projectv1 "go.admiral.io/sdk/proto/admiral/api/project/v1"
 	runv1 "go.admiral.io/sdk/proto/admiral/api/run/v1"
 )
 
@@ -47,8 +47,8 @@ describe is a human view. Use 'env get -o json' for the raw record.`,
 		Example: `  # By path
   admiral env describe shop/prod
 
-  # By name, scoped with --app
-  admiral env describe prod --app shop
+  # By name, scoped with --project
+  admiral env describe prod --project shop
 
   # By ID
   admiral env describe env-3k9x2m7qpl0a`,
@@ -69,7 +69,7 @@ describe is a human view. Use 'env get -o json' for the raw record.`,
 
 			ctx := cmd.Context()
 
-			envID, err := resolve.Environment(ctx, c.Environment(), c.Application(), appScope, name)
+			envID, err := resolve.Environment(ctx, c.Environment(), c.Project(), appScope, name)
 			if err != nil {
 				return err
 			}
@@ -82,13 +82,13 @@ describe is a human view. Use 'env get -o json' for the raw record.`,
 			}
 			e := envResp.Environment
 
-			appResp, err := c.Application().GetApplication(ctx, &applicationv1.GetApplicationRequest{ApplicationId: e.ApplicationId})
+			appResp, err := c.Project().GetProject(ctx, &projectv1.GetProjectRequest{ProjectId: e.ProjectId})
 			if err != nil {
-				return fmt.Errorf("fetching application: %w", err)
+				return fmt.Errorf("fetching project: %w", err)
 			}
-			app := appResp.Application
+			app := appResp.Project
 
-			// The environment and its application are the view; the
+			// The environment and its project are the view; the
 			// sections below are assembled from further reads. A section
 			// whose read fails (missing scope, endpoint not served) is
 			// rendered as unavailable rather than failing the describe.
@@ -153,7 +153,7 @@ describe is a human view. Use 'env get -o json' for the raw record.`,
 		},
 	}
 
-	flags.App(cmd, &appName, opts)
+	flags.Project(cmd, &appName, opts)
 	return cmd
 }
 
@@ -281,11 +281,11 @@ func (s envSections) permissionDenied() bool {
 }
 
 // describeEnv assembles the operator view from the pieces describe fetched.
-func describeEnv(e *environmentv1.Environment, app *applicationv1.Application, sec envSections) *output.Describe {
+func describeEnv(e *environmentv1.Environment, app *projectv1.Project, sec envSections) *output.Describe {
 	comps, openCS, runs := sec.comps, sec.openCS, sec.runs
 	d := output.NewDescribe()
 	d.Field("Name", e.Name)
-	d.Field("Application", app.Name)
+	d.Field("Project", app.Name)
 	d.Field("ID", e.Id)
 	d.Field("Description", e.Description)
 	d.Fields("Labels", output.LabelLines(e.Labels))
