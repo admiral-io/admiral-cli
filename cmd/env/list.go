@@ -21,24 +21,24 @@ func newListCmd(opts *client.Options) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list [app]",
 		Short: "List environments",
-		Long:  `List the environments of an application, named as the argument or with --app.`,
-		Example: `  # Environments of an application
+		Long:  `List the environments of a project, named as the argument or with --project.`,
+		Example: `  # Environments of a project
   admiral env list billing
 
   # Names only, for scripting
   admiral env list billing -o name`,
 		Args:              flags.MaximumNArgs(1),
-		ValidArgsFunction: complete.First(complete.Apps(opts)),
+		ValidArgsFunction: complete.First(complete.Projects(opts)),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			app, err := flags.AppTarget(cmd, appName, args)
+			app, err := flags.ProjectTarget(cmd, appName, args)
 			if err != nil {
 				return err
 			}
 			// Checked before the client is built: dialing first would
 			// report a missing credential for what is a missing argument.
 			if app == "" {
-				return cmderr.UsageHint("Name the application: 'admiral env list billing'.",
-					"no application specified")
+				return cmderr.UsageHint("Name the project: 'admiral env list billing'.",
+					"no project specified")
 			}
 
 			c, err := client.CreateClient(cmd.Context(), opts)
@@ -47,16 +47,16 @@ func newListCmd(opts *client.Options) *cobra.Command {
 			}
 			defer c.Close() //nolint:errcheck
 
-			resolvedAppID, err := resolve.App(cmd.Context(), c.Application(), app)
+			resolvedAppID, err := resolve.Project(cmd.Context(), c.Project(), app)
 			if err != nil {
 				return err
 			}
 
 			envs, next, err := flags.Pages(paging, func(token string) ([]*environmentv1.Environment, string, error) {
 				resp, err := c.Environment().ListEnvironments(cmd.Context(), &environmentv1.ListEnvironmentsRequest{
-					ApplicationId: &resolvedAppID,
-					PageSize:      paging.PageSize,
-					PageToken:     token,
+					ProjectId: &resolvedAppID,
+					PageSize:  paging.PageSize,
+					PageToken: token,
 				})
 				if err != nil {
 					return nil, "", err
@@ -77,7 +77,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 		},
 	}
 
-	flags.App(cmd, &appName, opts)
+	flags.Project(cmd, &appName, opts)
 	flags.Paging(cmd, &paging)
 
 	return cmd

@@ -59,7 +59,7 @@ func TestWaitStopsOnAnUnenrolledAgent(t *testing.T) {
 	assert.Equal(t, "run "+testRunID+" is queued: agent agt-prod has never enrolled", err.Error())
 	assert.Equal(t, cmderr.ExitError, cmderr.Code(err))
 	assert.Contains(t, cmderr.Hint(err), "admiral agent enrollment-key agt-prod")
-	assert.Contains(t, cmderr.Hint(err), "admiral run get "+testRunID+" --wait")
+	assert.Contains(t, cmderr.Hint(err), "admiral run describe "+testRunID+" --wait")
 }
 
 // A poll the server fails ends the wait, not the apply: the error says the
@@ -74,7 +74,7 @@ func TestABrokenWaitSaysTheRunContinues(t *testing.T) {
 	err = WaitError(err, start)
 	assert.Equal(t, "lost track of run "+testRunID+" while it was applying: internal error (request 3f6c1d2e-req)", cmderr.Format(err))
 	assert.Equal(t, cmderr.ExitError, cmderr.Code(err))
-	assert.Equal(t, "The run continues on the server. To check on it, run: admiral run get "+testRunID+" --wait", cmderr.Hint(err))
+	assert.Equal(t, "The run continues on the server. To check on it, run: admiral run describe "+testRunID+" --wait", cmderr.Hint(err))
 }
 
 // Following a run waits through its agent's install.

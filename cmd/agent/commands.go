@@ -134,12 +134,12 @@ subject it signs in with from then on.
 The agent is installed with Helm into its own namespace, admiral-system,
 never one it deploys into. The command prints the install.
 
-The tenant's first agent is granted to the whole organization unless
+The organization's first agent is granted to the whole organization unless
 --grant says otherwise; later ones serve nobody until granted.`,
 		Example: `  admiral agent create dev --kind kubernetes
 
-  # Granted to one application only, the checkout application
-  admiral agent create prod --kind kubernetes --grant app:checkout`,
+  # Granted to one project only, the checkout project
+  admiral agent create prod --kind kubernetes --grant project:checkout`,
 		Args: flags.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := client.CreateClient(cmd.Context(), opts)
@@ -159,7 +159,7 @@ The tenant's first agent is granted to the whole organization unless
 		},
 	}
 	flags.Enum(cmd, &kind, "kind", "", "what the agent deploys", "kubernetes", "infra")
-	cmd.Flags().StringArrayVar(&grants, "grant", nil, "grant use to org, app:<name>, env:<app/env> or group:<id> (repeatable)")
+	cmd.Flags().StringArrayVar(&grants, "grant", nil, "grant use to org, project:<name>, env:<project/environment> or group:<id> (repeatable)")
 	complete.Flag(cmd, "grant", complete.Scopes(opts))
 	_ = cmd.MarkFlagRequired("kind")
 	return cmd
@@ -274,17 +274,17 @@ account, say). It replaces any key issued before.`,
 
 func newGrantCmd(opts *client.Options) *cobra.Command {
 	return &cobra.Command{
-		Use:               "grant <agent> <org|app:NAME|env:APP/ENV|group:ID>",
+		Use:               "grant <agent> <org|project:NAME|env:PROJECT/ENVIRONMENT|group:ID>",
 		ValidArgsFunction: complete.Positions(nil, complete.Scopes(opts)),
-		Short:             "Let the organization, an application, an environment or a team use an agent",
+		Short:             "Let the organization, a project, an environment or a team use an agent",
 		Long: `Grant use of an agent: every environment of the target may be assigned
-it. The target is org, an application (app:NAME), one environment
-(env:APP/ENV) or a group (group:ID). 'admiral agent get' lists the grants.`,
+it. The target is org, a project (project:NAME), one environment
+(env:PROJECT/ENVIRONMENT) or a group (group:ID). 'admiral agent get' lists the grants.`,
 		Example: `  # Every environment in the organization may use the agent named dev
   admiral agent grant dev org
 
-  # Only the checkout application's environments may use the agent named prod
-  admiral agent grant prod app:checkout
+  # Only the checkout project's environments may use the agent named prod
+  admiral agent grant prod project:checkout
 
   # Only checkout's staging environment
   admiral agent grant prod env:checkout/staging`,
@@ -314,7 +314,7 @@ it. The target is org, an application (app:NAME), one environment
 
 func newRevokeCmd(opts *client.Options) *cobra.Command {
 	return &cobra.Command{
-		Use:               "revoke <agent> <org|app:NAME|env:APP/ENV|group:ID>",
+		Use:               "revoke <agent> <org|project:NAME|env:PROJECT/ENVIRONMENT|group:ID>",
 		ValidArgsFunction: complete.Positions(nil, complete.Scopes(opts)),
 		Short:             "Withdraw a grant",
 		Long: `Withdraw the grant to a target. Environments that were assigned the agent
@@ -344,7 +344,7 @@ again or they change it.`,
 	}
 }
 
-// parseGrant reads org, app:<name or id>, env:<app/env or id> or
+// parseGrant reads org, project:<name or id>, env:<project/environment or id> or
 // group:<grp- id>.
 func parseGrant(cmd *cobra.Command, c sdkclient.AdmiralClient, target string) (*agentv1.AgentGrant, error) {
 	g := &agentv1.AgentGrant{}
@@ -353,18 +353,18 @@ func parseGrant(cmd *cobra.Command, c sdkclient.AdmiralClient, target string) (*
 	switch kind {
 	case "org":
 		g.Target = &agentv1.AgentGrant_Organization_{Organization: &agentv1.AgentGrant_Organization{}}
-	case "app":
-		id, err := resolve.App(ctx, c.Application(), ref)
+	case "project":
+		id, err := resolve.Project(ctx, c.Project(), ref)
 		if err != nil {
 			return nil, err
 		}
-		g.Target = &agentv1.AgentGrant_ApplicationId{ApplicationId: id}
+		g.Target = &agentv1.AgentGrant_ProjectId{ProjectId: id}
 	case "env":
 		app, env, err := flags.EnvTarget(cmd, "", ref)
 		if err != nil {
 			return nil, err
 		}
-		id, err := resolve.Environment(ctx, c.Environment(), c.Application(), app, env)
+		id, err := resolve.Environment(ctx, c.Environment(), c.Project(), app, env)
 		if err != nil {
 			return nil, err
 		}
@@ -372,7 +372,7 @@ func parseGrant(cmd *cobra.Command, c sdkclient.AdmiralClient, target string) (*
 	case "group":
 		g.Target = &agentv1.AgentGrant_GroupId{GroupId: ref}
 	default:
-		return nil, cmderr.Usage("grant target %q is not org, app:NAME, env:APP/ENV or group:ID", target)
+		return nil, cmderr.Usage("grant target %q is not org, project:NAME, env:PROJECT/ENVIRONMENT or group:ID", target)
 	}
 	return g, nil
 }

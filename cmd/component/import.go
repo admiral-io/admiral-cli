@@ -74,7 +74,7 @@ repository or the directory. --name says otherwise. A chart's version and
 a module's resolved version become tags whether or not named.
 
 Nothing is fetched with ambient credentials. --credential attaches one the
-tenant holds; it is presented only where its type fits the protocol and its
+organization holds; it is presented only where its type fits the protocol and its
 allowed hosts permit, and a fetch that reaches a host none covers fails
 naming the host.
 

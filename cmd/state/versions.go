@@ -13,7 +13,7 @@ import (
 func newVersionsCmd(opts *client.Options) *cobra.Command {
 	var paging flags.PagingOptions
 	cmd := &cobra.Command{
-		Use:   "versions <app/env> <component>",
+		Use:   "versions <project/environment> <component>",
 		Short: "List a component's state versions, newest first",
 		Example: `  admiral state versions shop/prod network
 

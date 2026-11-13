@@ -17,9 +17,9 @@ import (
 	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/filter"
 	apikeyv1 "go.admiral.io/sdk/proto/admiral/api/apikey/v1"
-	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
 	credentialv1 "go.admiral.io/sdk/proto/admiral/api/credential/v1"
 	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
+	projectv1 "go.admiral.io/sdk/proto/admiral/api/project/v1"
 	registryv1 "go.admiral.io/sdk/proto/admiral/api/registry/v1"
 )
 
@@ -34,7 +34,7 @@ func IsID(prefix, s string) bool {
 
 // prefixOf is the id prefix of each kind byName resolves.
 var prefixOf = map[string]string{
-	"application": "app",
+	"project":     "prj",
 	"environment": "env",
 	"credential":  "cred",
 	"API key":     "key",
@@ -45,9 +45,9 @@ var prefixOf = map[string]string{
 type NotFoundError struct {
 	Kind  string // "environment"
 	Name  string // what the user typed
-	Scope string // `in application "shop"`, or ""
+	Scope string // `in project "shop"`, or ""
 	// ListCommand is the admiral command that lists the candidates, used
-	// for the hint: "env list --app shop".
+	// for the hint: "env list --project shop".
 	ListCommand string
 }
 
@@ -82,45 +82,45 @@ func (e *AmbiguousError) Hint() string {
 	return "Pass an ID instead: " + strings.Join(e.IDs, ", ")
 }
 
-// App resolves an application name or ID.
-func App(ctx context.Context, c applicationv1.ApplicationAPIClient, nameOrID string) (string, error) {
+// App resolves a project name or ID.
+func Project(ctx context.Context, c projectv1.ProjectAPIClient, nameOrID string) (string, error) {
 	if nameOrID == "" {
-		return "", cmderr.UsageHint("Pass --app.", "no application specified")
+		return "", cmderr.UsageHint("Pass --project.", "no project specified")
 	}
-	return byName(ctx, "application", nameOrID, "", "app list", "",
-		func(ctx context.Context, f string) ([]*applicationv1.Application, error) {
-			resp, err := c.ListApplications(ctx, &applicationv1.ListApplicationsRequest{Filter: f})
+	return byName(ctx, "project", nameOrID, "", "project list", "",
+		func(ctx context.Context, f string) ([]*projectv1.Project, error) {
+			resp, err := c.ListProjects(ctx, &projectv1.ListProjectsRequest{Filter: f})
 			if err != nil {
 				return nil, err
 			}
-			return resp.Applications, nil
+			return resp.Projects, nil
 		},
-		func(a *applicationv1.Application) string { return a.Name },
-		func(a *applicationv1.Application) string { return a.Id },
+		func(a *projectv1.Project) string { return a.Name },
+		func(a *projectv1.Project) string { return a.Id },
 	)
 }
 
 // Environment resolves an environment name or ID. An ID needs no
-// application; a name is looked up inside app (itself a name or ID). The
-// caller has already split an app/env path with flags.EnvTarget.
-func Environment(ctx context.Context, envs environmentv1.EnvironmentAPIClient, apps applicationv1.ApplicationAPIClient, app, nameOrID string) (string, error) {
+// project; a name is looked up inside app (itself a name or ID). The
+// caller has already split a project/environment path with flags.EnvTarget.
+func Environment(ctx context.Context, envs environmentv1.EnvironmentAPIClient, apps projectv1.ProjectAPIClient, app, nameOrID string) (string, error) {
 	if IsID("env", nameOrID) {
 		return nameOrID, nil
 	}
 	if nameOrID == "" {
-		return "", cmderr.UsageHint("Pass --env as a name or app/env.", "no environment specified")
+		return "", cmderr.UsageHint("Pass --env as a name or project/environment.", "no environment specified")
 	}
 	if app == "" {
-		return "", cmderr.UsageHint("Pass --app or give the environment as app/env.", "no application specified")
+		return "", cmderr.UsageHint("Pass --project or give the environment as project/environment.", "no project specified")
 	}
-	appID, err := App(ctx, apps, app)
+	appID, err := Project(ctx, apps, app)
 	if err != nil {
 		return "", err
 	}
 	return byName(ctx, "environment", nameOrID,
-		fmt.Sprintf("in application %q", app), "env list --app "+app, "",
+		fmt.Sprintf("in project %q", app), "env list --project "+app, "",
 		func(ctx context.Context, f string) ([]*environmentv1.Environment, error) {
-			resp, err := envs.ListEnvironments(ctx, &environmentv1.ListEnvironmentsRequest{ApplicationId: &appID, Filter: f})
+			resp, err := envs.ListEnvironments(ctx, &environmentv1.ListEnvironmentsRequest{ProjectId: &appID, Filter: f})
 			if err != nil {
 				return nil, err
 			}

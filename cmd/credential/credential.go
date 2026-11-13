@@ -21,7 +21,7 @@ func NewCredentialCmd(opts *client.Options) *CredentialCmd {
 		Short: "Manage credentials for importing private artifacts",
 		Long: `Manage credentials for importing private artifacts.
 
-A credential is a secret Admiral holds for the tenant and presents on its
+A credential is a secret Admiral holds for the organization and presents on its
 behalf: an SSH key for a git host, a username and password for a chart or
 container registry, a bearer token for an HTTPS host, or a GitHub App that
 is exchanged for an installation token per pull. It is never resolved by

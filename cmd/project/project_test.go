@@ -1,4 +1,4 @@
-package app
+package project
 
 import (
 	"bytes"
@@ -56,7 +56,7 @@ func TestPositionalUsageErrors(t *testing.T) {
 // command proceeds to client creation.
 func TestIDPositionalIsAccepted(t *testing.T) {
 	for _, verb := range []string{"get", "delete", "update"} {
-		args := []string{verb, "app-7q2k9m4x8p1c"}
+		args := []string{verb, "prj-7q2k9m4x8p1c"}
 		switch verb {
 		case "update":
 			args = append(args, "--description", "x")

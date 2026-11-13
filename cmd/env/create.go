@@ -30,8 +30,8 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
   # Create with a description and labels
   admiral env create billing/prod --description "US East production" --label tier=1
 
-  # By name, scoped with --app
-  admiral env create staging --app billing
+  # By name, scoped with --project
+  admiral env create staging --project billing
 
   # Deploy through an agent, into a namespace of your choosing
   admiral env create billing/prod --agent prod --namespace billing
@@ -63,7 +63,7 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 			}
 			defer c.Close() //nolint:errcheck
 
-			resolvedAppID, err := resolve.App(cmd.Context(), c.Application(), app)
+			resolvedAppID, err := resolve.Project(cmd.Context(), c.Project(), app)
 			if err != nil {
 				return err
 			}
@@ -78,7 +78,7 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 			if _, err := track.apply(cmd, e); err != nil {
 				return err
 			}
-			req := &environmentv1.CreateEnvironmentRequest{ApplicationId: resolvedAppID, Environment: e}
+			req := &environmentv1.CreateEnvironmentRequest{ProjectId: resolvedAppID, Environment: e}
 
 			resp, err := c.Environment().CreateEnvironment(cmd.Context(), req)
 			if err != nil {
@@ -90,11 +90,11 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 		},
 	}
 
-	flags.App(cmd, &appName, opts)
+	flags.Project(cmd, &appName, opts)
 	cmd.Flags().StringVar(&description, "description", "", "environment description")
 	flags.Label(cmd, &labelStrs, "label to attach (key=value, repeatable)")
 	target.register(cmd, "agent to deploy through, by name or agt- id (repeatable)",
-		"the Kubernetes namespace components render into unless they name one (needs one --agent; default <app>-<env>)")
+		"the Kubernetes namespace components render into unless they name one (needs one --agent; default <project>-<env>)")
 	infra.register(cmd)
 	track.register(cmd)
 

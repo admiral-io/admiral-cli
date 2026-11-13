@@ -12,7 +12,7 @@ import (
 func TestDescribe_Layout(t *testing.T) {
 	d := NewDescribe()
 	d.Field("Name", "prod")
-	d.Field("Application", "shop")
+	d.Field("Project", "shop")
 	d.Field("Description", "")
 	d.Fields("Labels", []string{"tier=1", "team=commerce"})
 	d.Section("Components", func(b *Block) {
@@ -27,7 +27,7 @@ func TestDescribe_Layout(t *testing.T) {
 	var buf bytes.Buffer
 	require.NoError(t, d.Render(&buf))
 	want := `Name:         prod
-Application:  shop
+Project:      shop
 Description:  <none>
 Labels:       tier=1
               team=commerce
@@ -82,10 +82,10 @@ To see the active credential and its scopes, run: admiral auth status
 
 func TestPrintDescribe_RejectsMachineFormats(t *testing.T) {
 	var out bytes.Buffer
-	err := testPrinter(FormatJSON, &out).PrintDescribe(NewDescribe(), "admiral env get prod --app shop")
+	err := testPrinter(FormatJSON, &out).PrintDescribe(NewDescribe(), "admiral env get prod --project shop")
 	require.EqualError(t, err, "describe has no -o json output")
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
-	require.Equal(t, "For machine-readable output, run: admiral env get prod --app shop -o json", cmderr.Hint(err))
+	require.Equal(t, "For machine-readable output, run: admiral env get prod --project shop -o json", cmderr.Hint(err))
 
 	d := NewDescribe()
 	d.Field("Name", "x")

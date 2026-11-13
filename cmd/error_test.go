@@ -51,8 +51,8 @@ func TestFormatError_EmptyDescFallsBackToCodeWords(t *testing.T) {
 
 func TestFormatError_PermissionDenied(t *testing.T) {
 	require.Equal(t, "permission denied", formatError(status.Error(codes.PermissionDenied, "")))
-	require.Equal(t, `permission denied: missing required scope "app:read"`,
-		formatError(status.Error(codes.PermissionDenied, `missing required scope "app:read"`)))
+	require.Equal(t, `permission denied: missing required scope "project:read"`,
+		formatError(status.Error(codes.PermissionDenied, `missing required scope "project:read"`)))
 	require.Equal(t, "To see the active credential and its scopes, run: admiral auth status",
 		errorHint(status.Error(codes.PermissionDenied, "")))
 	require.Equal(t, 1, exitCode(status.Error(codes.PermissionDenied, "")))

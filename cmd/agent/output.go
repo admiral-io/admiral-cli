@@ -31,8 +31,8 @@ func grantTarget(g *agentv1.AgentGrant) string {
 		return "org"
 	case g.GetGroupId() != "":
 		return "group:" + g.GetGroupId()
-	case g.GetApplicationId() != "":
-		return "app:" + g.GetApplicationId()
+	case g.GetProjectId() != "":
+		return "app:" + g.GetProjectId()
 	default:
 		return "env:" + g.GetEnvironmentId()
 	}

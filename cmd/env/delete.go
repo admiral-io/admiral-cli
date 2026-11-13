@@ -24,8 +24,8 @@ func newDeleteCmd(opts *client.Options) *cobra.Command {
 		Example: `  # By path
   admiral env delete billing/staging
 
-  # By name, scoped with --app
-  admiral env delete staging --app billing
+  # By name, scoped with --project
+  admiral env delete staging --project billing
 
   # By ID
   admiral env delete env-3k9x2m7qpl0a
@@ -55,7 +55,7 @@ func newDeleteCmd(opts *client.Options) *cobra.Command {
 			if app != "" {
 				display = app + "/" + name
 			}
-			envID, err := resolve.Environment(cmd.Context(), c.Environment(), c.Application(), app, name)
+			envID, err := resolve.Environment(cmd.Context(), c.Environment(), c.Project(), app, name)
 			if err != nil {
 				return err
 			}
@@ -75,7 +75,7 @@ func newDeleteCmd(opts *client.Options) *cobra.Command {
 		},
 	}
 
-	flags.App(cmd, &appName, opts)
+	flags.Project(cmd, &appName, opts)
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip the confirmation prompt")
 
 	return cmd

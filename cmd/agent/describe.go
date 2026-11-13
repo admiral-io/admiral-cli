@@ -14,8 +14,8 @@ import (
 	"go.admiral.io/cli/internal/resolve"
 	sdkclient "go.admiral.io/sdk/client"
 	agentv1 "go.admiral.io/sdk/proto/admiral/api/agent/v1"
-	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
 	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
+	projectv1 "go.admiral.io/sdk/proto/admiral/api/project/v1"
 	serviceaccountv1 "go.admiral.io/sdk/proto/admiral/api/serviceaccount/v1"
 )
 
@@ -115,7 +115,7 @@ func addServiceAccount(ctx context.Context, d *output.Describe, c sdkclient.Admi
 	return denied, nil
 }
 
-// addGrants lists who may use the agent, applications and environments by
+// addGrants lists who may use the agent, projects and environments by
 // name. It reports whether the read was denied.
 func addGrants(ctx context.Context, d *output.Describe, c sdkclient.AdmiralClient, a *agentv1.Agent) (bool, error) {
 	resp, err := c.Agent().ListAgentGrants(ctx, &agentv1.ListAgentGrantsRequest{AgentId: a.GetId()})
@@ -138,18 +138,18 @@ func addGrants(ctx context.Context, d *output.Describe, c sdkclient.AdmiralClien
 // place of ids where they can be read.
 func grantName(ctx context.Context, c sdkclient.AdmiralClient, g *agentv1.AgentGrant) string {
 	switch {
-	case g.GetApplicationId() != "":
-		if resp, err := c.Application().GetApplication(ctx, &applicationv1.GetApplicationRequest{ApplicationId: g.GetApplicationId()}); err == nil {
-			return "app:" + resp.GetApplication().GetName()
+	case g.GetProjectId() != "":
+		if resp, err := c.Project().GetProject(ctx, &projectv1.GetProjectRequest{ProjectId: g.GetProjectId()}); err == nil {
+			return "app:" + resp.GetProject().GetName()
 		}
 	case g.GetEnvironmentId() != "":
 		env, err := c.Environment().GetEnvironment(ctx, &environmentv1.GetEnvironmentRequest{EnvironmentId: g.GetEnvironmentId()})
 		if err != nil {
 			break
 		}
-		app, err := c.Application().GetApplication(ctx, &applicationv1.GetApplicationRequest{ApplicationId: env.GetEnvironment().GetApplicationId()})
+		app, err := c.Project().GetProject(ctx, &projectv1.GetProjectRequest{ProjectId: env.GetEnvironment().GetProjectId()})
 		if err == nil {
-			return "env:" + app.GetApplication().GetName() + "/" + env.GetEnvironment().GetName()
+			return "env:" + app.GetProject().GetName() + "/" + env.GetEnvironment().GetName()
 		}
 	}
 	return grantTarget(g)

@@ -16,7 +16,7 @@ import (
 	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
 )
 
-// changeSetRef is a changeset as typed: its ID, or app/env for that
+// changeSetRef is a changeset as typed: its ID, or project/environment for that
 // environment's one open changeset.
 type changeSetRef struct {
 	id       string
@@ -34,12 +34,12 @@ func (r changeSetRef) String() string {
 func parseChangeSet(s string) (changeSetRef, error) {
 	if app, env, isPath := strings.Cut(s, "/"); isPath {
 		if app == "" || env == "" || strings.Contains(env, "/") {
-			return changeSetRef{}, cmderr.Usage("invalid environment %q: expected app/env", s)
+			return changeSetRef{}, cmderr.Usage("invalid environment %q: expected project/environment", s)
 		}
 		return changeSetRef{app: app, env: env}, nil
 	}
 	if !changeSetIDPattern.MatchString(s) {
-		return changeSetRef{}, cmderr.UsageHint("Name a changeset by its ID (cs- and twelve characters) or by its environment as app/env.",
+		return changeSetRef{}, cmderr.UsageHint("Name a changeset by its ID (cs- and twelve characters) or by its environment as project/environment.",
 			"invalid changeset %q", s)
 	}
 	return changeSetRef{id: s}, nil
@@ -52,7 +52,7 @@ func (r changeSetRef) resolve(ctx context.Context, c sdkclient.AdmiralClient) (s
 	if r.id != "" {
 		return r.id, nil
 	}
-	envID, err := resolve.Environment(ctx, c.Environment(), c.Application(), r.app, r.env)
+	envID, err := resolve.Environment(ctx, c.Environment(), c.Project(), r.app, r.env)
 	if err != nil {
 		return "", err
 	}

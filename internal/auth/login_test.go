@@ -215,19 +215,19 @@ func TestLogin_NarrowedScopes(t *testing.T) {
 	res, err := Login(context.Background(), LoginOptions{
 		Issuer:      idp.srv.URL,
 		ConfigDir:   dir,
-		Scopes:      []string{"app:read", "env:read"},
+		Scopes:      []string{"project:read", "env:read"},
 		OpenBrowser: followRedirects(t),
 	})
 	require.NoError(t, err)
 
 	// Base scopes are kept and the resource scopes are appended, not swapped in.
-	require.Equal(t, "openid offline_access app:read env:read", idp.authorizeQuery.Get("scope"))
+	require.Equal(t, "openid offline_access project:read env:read", idp.authorizeQuery.Get("scope"))
 
 	// Only resource scopes are reported and stored; identity scopes are noise.
-	require.Equal(t, []string{"app:read", "env:read"}, res.Scopes)
+	require.Equal(t, []string{"project:read", "env:read"}, res.Scopes)
 	sess, err := credentials.Load(dir)
 	require.NoError(t, err)
-	require.Equal(t, []string{"app:read", "env:read"}, sess.Scopes)
+	require.Equal(t, []string{"project:read", "env:read"}, sess.Scopes)
 }
 
 func TestLogin_BrowserUnavailablePrintsURL(t *testing.T) {

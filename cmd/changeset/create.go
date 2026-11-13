@@ -22,7 +22,7 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "create <app>/<env>",
+		Use:   "create <project>/<environment>",
 		Short: "Open a changeset against an environment",
 		Long: `Open a changeset against an environment.
 
@@ -42,8 +42,8 @@ does.`,
 				return err
 			}
 			if app == "" && !resolve.IsID("env", env) {
-				return cmderr.UsageHint("Give the environment as app/env: 'admiral changeset create shop/prod'.",
-					"no application specified")
+				return cmderr.UsageHint("Give the environment as project/environment: 'admiral changeset create shop/prod'.",
+					"no project specified")
 			}
 			es, err := setEdits(sets, setStrings)
 			if err != nil {
@@ -66,7 +66,7 @@ does.`,
 			}
 			defer c.Close() //nolint:errcheck
 
-			envID, err := resolve.Environment(cmd.Context(), c.Environment(), c.Application(), app, env)
+			envID, err := resolve.Environment(cmd.Context(), c.Environment(), c.Project(), app, env)
 			if err != nil {
 				return err
 			}

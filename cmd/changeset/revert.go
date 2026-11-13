@@ -42,7 +42,7 @@ The changeset is named by its ID.`,
 		Args: flags.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !changeSetIDPattern.MatchString(args[0]) {
-				return cmderr.UsageHint("Name the changeset to revert by its ID, as 'admiral changeset list <app>/<env>' shows it.",
+				return cmderr.UsageHint("Name the changeset to revert by its ID, as 'admiral changeset list <project>/<environment>' shows it.",
 					"invalid changeset %q: expected cs-xxxxxxxxxxxx", args[0])
 			}
 			if err := po.check(cmd); err != nil {

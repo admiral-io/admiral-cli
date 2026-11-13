@@ -3,13 +3,13 @@ module go.admiral.io/cli
 go 1.26.8
 
 require (
-	buf.build/gen/go/admiral/common/protocolbuffers/go v1.36.12-20261111034115-8b31320cbc3b.2
+	buf.build/gen/go/admiral/common/protocolbuffers/go v1.36.12-20261112181314-1938699b45ef.2
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/go-jose/go-jose/v4 v4.1.6
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
 	go.admiral.io/bundle v1.1.0
-	go.admiral.io/sdk v1.58.0
+	go.admiral.io/sdk v1.59.0
 	golang.org/x/oauth2 v0.37.0
 	golang.org/x/sync v0.25.0
 	golang.org/x/sys v0.50.0

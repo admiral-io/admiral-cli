@@ -12,8 +12,8 @@ import (
 
 	"go.admiral.io/cli/internal/client"
 	sdkclient "go.admiral.io/sdk/client"
-	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
 	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
+	projectv1 "go.admiral.io/sdk/proto/admiral/api/project/v1"
 	registryv1 "go.admiral.io/sdk/proto/admiral/api/registry/v1"
 )
 
@@ -25,7 +25,7 @@ type fakeClient struct {
 	css  *changeSetClient
 }
 
-func (f *fakeClient) Application() applicationv1.ApplicationAPIClient { return f.apps }
+func (f *fakeClient) Project() projectv1.ProjectAPIClient             { return f.apps }
 func (f *fakeClient) Environment() environmentv1.EnvironmentAPIClient { return f.envs }
 func (f *fakeClient) Registry() registryv1.RegistryAPIClient          { return f.regs }
 func (f *fakeClient) Close() error                                    { return nil }
@@ -52,7 +52,7 @@ func (m *registryClient) GetComponent(_ context.Context, req *registryv1.GetComp
 	return nil, errors.New("not found")
 }
 
-// envClient serves one page of environments and records the application
+// envClient serves one page of environments and records the project
 // it was asked for, so a test can check the scope.
 type envClient struct {
 	environmentv1.EnvironmentAPIClient
@@ -61,18 +61,18 @@ type envClient struct {
 }
 
 func (m *envClient) ListEnvironments(_ context.Context, req *environmentv1.ListEnvironmentsRequest, _ ...grpc.CallOption) (*environmentv1.ListEnvironmentsResponse, error) {
-	m.appID = req.GetApplicationId()
+	m.appID = req.GetProjectId()
 	return &environmentv1.ListEnvironmentsResponse{Environments: m.envs}, nil
 }
 
 type appClient struct {
-	applicationv1.ApplicationAPIClient
-	pages [][]*applicationv1.Application // one entry per page
+	projectv1.ProjectAPIClient
+	pages [][]*projectv1.Project // one entry per page
 	calls int
 	err   error
 }
 
-func (m *appClient) ListApplications(_ context.Context, req *applicationv1.ListApplicationsRequest, _ ...grpc.CallOption) (*applicationv1.ListApplicationsResponse, error) {
+func (m *appClient) ListProjects(_ context.Context, req *projectv1.ListProjectsRequest, _ ...grpc.CallOption) (*projectv1.ListProjectsResponse, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -81,7 +81,7 @@ func (m *appClient) ListApplications(_ context.Context, req *applicationv1.ListA
 		_, _ = fmt.Sscanf(req.PageToken, "p%d", &i)
 	}
 	m.calls++
-	resp := &applicationv1.ListApplicationsResponse{Applications: m.pages[i]}
+	resp := &projectv1.ListProjectsResponse{Projects: m.pages[i]}
 	if i+1 < len(m.pages) {
 		resp.NextPageToken = fmt.Sprintf("p%d", i+1)
 	}
@@ -123,21 +123,21 @@ func registryWithTwo() *registryClient {
 	}}
 }
 
-// scopedCmd is a command with --app registered and, when app is not
+// scopedCmd is a command with --project registered and, when app is not
 // empty, already parsed from the line.
 func scopedCmd(t *testing.T, app string) *cobra.Command {
 	t.Helper()
 	cmd := &cobra.Command{Use: "x"}
-	cmd.Flags().String("app", "", "")
+	cmd.Flags().String("project", "", "")
 	if app != "" {
-		require.NoError(t, cmd.Flags().Set("app", app))
+		require.NoError(t, cmd.Flags().Set("project", app))
 	}
 	return cmd
 }
 
-// shopWithEnvs is one application, shop (id app-1), with two environments.
+// shopWithEnvs is one project, shop (id app-1), with two environments.
 func shopWithEnvs() (*appClient, *envClient) {
-	apps := &appClient{pages: [][]*applicationv1.Application{{
+	apps := &appClient{pages: [][]*projectv1.Project{{
 		{Id: "app-1", Name: "shop", Description: "Storefront"},
 		{Id: "app-2", Name: "shipping"},
 	}}}
@@ -148,8 +148,8 @@ func shopWithEnvs() (*appClient, *envClient) {
 	return apps, envs
 }
 
-func app(name, desc string) *applicationv1.Application {
-	return &applicationv1.Application{Name: name, Description: desc}
+func app(name, desc string) *projectv1.Project {
+	return &projectv1.Project{Name: name, Description: desc}
 }
 
 func TestFilter(t *testing.T) {
@@ -160,16 +160,16 @@ func TestFilter(t *testing.T) {
 }
 
 func TestApps_OffersMatchingNames(t *testing.T) {
-	useClient(t, &appClient{pages: [][]*applicationv1.Application{{app("billing-api", "Billing"), app("shop", "")}}}, nil)
-	got, directive := Apps(&client.Options{})(&cobra.Command{}, nil, "bil")
+	useClient(t, &appClient{pages: [][]*projectv1.Project{{app("billing-api", "Billing"), app("shop", "")}}}, nil)
+	got, directive := Projects(&client.Options{})(&cobra.Command{}, nil, "bil")
 	require.Equal(t, []string{"billing-api\tBilling"}, got)
 	require.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
 }
 
 func TestApps_FollowsPages(t *testing.T) {
-	ac := &appClient{pages: [][]*applicationv1.Application{{app("a", "")}, {app("b", "")}, {app("c", "")}}}
+	ac := &appClient{pages: [][]*projectv1.Project{{app("a", "")}, {app("b", "")}, {app("c", "")}}}
 	useClient(t, ac, nil)
-	got, _ := Apps(&client.Options{})(&cobra.Command{}, nil, "")
+	got, _ := Projects(&client.Options{})(&cobra.Command{}, nil, "")
 	require.Equal(t, []string{"a", "b", "c"}, got)
 	require.Equal(t, 3, ac.calls)
 }
@@ -178,12 +178,12 @@ func TestApps_FollowsPages(t *testing.T) {
 // candidates and no file completion fallback.
 func TestApps_FailuresAreSilent(t *testing.T) {
 	useClient(t, nil, errors.New("not authenticated"))
-	got, directive := Apps(&client.Options{})(&cobra.Command{}, nil, "")
+	got, directive := Projects(&client.Options{})(&cobra.Command{}, nil, "")
 	require.Nil(t, got)
 	require.Equal(t, cobra.ShellCompDirectiveError, directive)
 
 	useClient(t, &appClient{err: errors.New("unavailable")}, nil)
-	got, directive = Apps(&client.Options{})(&cobra.Command{}, nil, "")
+	got, directive = Projects(&client.Options{})(&cobra.Command{}, nil, "")
 	require.Nil(t, got)
 	require.Equal(t, cobra.ShellCompDirectiveError, directive)
 }
@@ -239,7 +239,7 @@ func TestEnvs_PathCompletesSecondSegment(t *testing.T) {
 	require.Equal(t, []string{"shop/prod\tProduction", "shop/staging"}, got)
 }
 
-// A command without an --app flag (changeset copy --env) still completes.
+// A command without an --project flag (changeset copy --env) still completes.
 func TestEnvs_NoAppFlagRegistered(t *testing.T) {
 	apps, envs := shopWithEnvs()
 	useClients(t, apps, envs, nil)
@@ -255,7 +255,7 @@ func TestEnvs_UnknownAppIsSilent(t *testing.T) {
 	require.Equal(t, cobra.ShellCompDirectiveError, directive)
 }
 
-// A new environment's name cannot be completed; only its application can.
+// A new environment's name cannot be completed; only its project can.
 func TestNewEnv_OffersOnlyAppPrefixes(t *testing.T) {
 	apps, envs := shopWithEnvs()
 	useClients(t, apps, envs, nil)

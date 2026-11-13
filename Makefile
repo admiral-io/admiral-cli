@@ -9,7 +9,7 @@ PROJECT_ROOT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 help:
 	@grep -E '^\.PHONY: [a-zA-Z0-9_-]+ .*?# .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = "(: |#)"}; {printf "%-30s %s\n", $$2, $$3}'
 
-.PHONY: all # Build the application.
+.PHONY: all # Build the project.
 all: build
 
 .PHONY: build # Build the binary for the current platform.
@@ -28,7 +28,7 @@ release-snapshot:
 install: build
 	cp ./dist/admiral_$(shell go env GOOS)_$(shell go env GOARCH)*/admiral $(shell go env GOPATH)/bin/admiral
 
-.PHONY: run # Run the application locally.
+.PHONY: run # Run the project locally.
 run: build
 	./dist/admiral_$(shell go env GOOS)_$(shell go env GOARCH)*/admiral
 

@@ -1,4 +1,4 @@
-package app
+package project
 
 import (
 	"strings"
@@ -14,21 +14,21 @@ import (
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/output"
 	"go.admiral.io/cli/internal/resolve"
-	applicationv1 "go.admiral.io/sdk/proto/admiral/api/application/v1"
 	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
 	environmentv1 "go.admiral.io/sdk/proto/admiral/api/environment/v1"
+	projectv1 "go.admiral.io/sdk/proto/admiral/api/project/v1"
 	runv1 "go.admiral.io/sdk/proto/admiral/api/run/v1"
 )
 
 func newDescribeCmd(opts *client.Options) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "describe <name>",
-		Short:             "Show everything about an application",
-		Long:              "Show the application's identity, each environment with what runs there and its last apply, and its most recent runs.\n\ndescribe is a human view. Use 'app get -o json' for the raw record.",
-		Example:           "  # Show an application, its environments, and recent runs\n  admiral app describe billing-api",
+		Short:             "Show everything about a project",
+		Long:              "Show the project's identity, each environment with what runs there and its last apply, and its most recent runs.\n\ndescribe is a human view. Use 'app get -o json' for the raw record.",
+		Example:           "  # Show a project, its environments, and recent runs\n  admiral project describe billing-api",
 		Aliases:           []string{"desc"},
 		Args:              flags.ExactArgs(1),
-		ValidArgsFunction: complete.First(complete.Apps(opts)),
+		ValidArgsFunction: complete.First(complete.Projects(opts)),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
@@ -37,17 +37,17 @@ func newDescribeCmd(opts *client.Options) *cobra.Command {
 			defer c.Close() //nolint:errcheck
 			ctx := cmd.Context()
 
-			id, err := resolve.App(ctx, c.Application(), args[0])
+			id, err := resolve.Project(ctx, c.Project(), args[0])
 			if err != nil {
 				return err
 			}
-			resp, err := c.Application().GetApplication(ctx, &applicationv1.GetApplicationRequest{ApplicationId: id})
+			resp, err := c.Project().GetProject(ctx, &projectv1.GetProjectRequest{ProjectId: id})
 			if err != nil {
 				return err
 			}
-			a := resp.Application
+			a := resp.Project
 
-			envs, envErr := c.Environment().ListEnvironments(ctx, &environmentv1.ListEnvironmentsRequest{ApplicationId: &id, PageSize: 100})
+			envs, envErr := c.Environment().ListEnvironments(ctx, &environmentv1.ListEnvironmentsRequest{ProjectId: &id, PageSize: 100})
 
 			// Runs are listed per environment, so the app's runs are those
 			// of its environments.
@@ -118,7 +118,7 @@ func newDescribeCmd(opts *client.Options) *cobra.Command {
 			}
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
-			return p.PrintDescribe(d, "admiral app get "+a.Name)
+			return p.PrintDescribe(d, "admiral project get "+a.Name)
 		},
 	}
 	return cmd

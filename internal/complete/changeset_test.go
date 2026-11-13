@@ -111,8 +111,8 @@ func TestScopes(t *testing.T) {
 	require.Equal(t, []string{"org"}, got)
 	require.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive, "org takes a space")
 
-	got, _ = f(&cobra.Command{}, nil, "app:sh")
-	require.Equal(t, []string{"app:shop\tStorefront", "app:shipping"}, got)
+	got, _ = f(&cobra.Command{}, nil, "project:sh")
+	require.Equal(t, []string{"project:shop\tStorefront", "project:shipping"}, got)
 
 	got, directive = f(&cobra.Command{}, nil, "env:sho")
 	require.Equal(t, []string{"env:shop/\tStorefront"}, got)

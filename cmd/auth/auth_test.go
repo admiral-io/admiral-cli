@@ -421,7 +421,7 @@ func TestLogin_ScopeFlagValidation(t *testing.T) {
 	require.ErrorContains(t, err, `unknown scope "bogus:read"`)
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 
-	_, err = run(t, opts, validKey+"\n", "login", "--with-token", "--scope", "app:read")
+	_, err = run(t, opts, validKey+"\n", "login", "--with-token", "--scope", "project:read")
 	require.ErrorContains(t, err, "--scope applies to browser sign-in")
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 }
@@ -430,12 +430,12 @@ func TestStatus_ShowsScopes(t *testing.T) {
 	os.Unsetenv(credentials.EnvAPIKey)
 	opts := &client.Options{ConfigDir: t.TempDir(), OutputFormat: output.FormatJSON}
 	require.NoError(t, credentials.Save(opts.ConfigDir, &credentials.Credential{
-		Kind: credentials.KindSession, AccessToken: "jwt", Scopes: []string{"app:read"},
+		Kind: credentials.KindSession, AccessToken: "jwt", Scopes: []string{"project:read"},
 	}))
 
 	stdout, err := run(t, opts, "", "status", "--no-verify")
 	require.NoError(t, err)
 	var got authStatus
 	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
-	require.Equal(t, []string{"app:read"}, got.Scopes)
+	require.Equal(t, []string{"project:read"}, got.Scopes)
 }

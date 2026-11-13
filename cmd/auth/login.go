@@ -59,7 +59,7 @@ If ADMIRAL_API_KEY is set, it takes precedence over whatever is stored.`,
   admiral auth login --no-browser
 
   # Read-only session
-  admiral auth login --scope app:read,env:read,run:read
+  admiral auth login --scope project:read,env:read,run:read
 
   # Store an API key; prompts without echo on a terminal
   admiral auth login --with-token

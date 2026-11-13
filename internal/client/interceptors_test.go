@@ -49,9 +49,9 @@ func TestDeadlineInterceptor_KeepsExistingDeadline(t *testing.T) {
 }
 
 func TestIsReadOnly(t *testing.T) {
-	require.True(t, isReadOnly("/admiral.api.application.v1.ApplicationAPI/GetApplication"))
+	require.True(t, isReadOnly("/admiral.api.project.v1.ProjectAPI/GetProject"))
 	require.True(t, isReadOnly("/admiral.api.run.v1.RunAPI/ListRuns"))
-	require.False(t, isReadOnly("/admiral.api.application.v1.ApplicationAPI/CreateApplication"))
+	require.False(t, isReadOnly("/admiral.api.project.v1.ProjectAPI/CreateProject"))
 	require.False(t, isReadOnly("/admiral.api.run.v1.RunAPI/CancelRun"))
 	require.False(t, isReadOnly("/admiral.api.changeset.v1.ChangeSetAPI/ApplyChangeSet"))
 }

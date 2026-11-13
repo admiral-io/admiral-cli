@@ -141,13 +141,13 @@ func WaitError(err error, r *runv1.Run) error {
 		return &cmderr.Error{
 			Err:  fmt.Errorf("run %s is still %s; it continues on the server", e.last.GetId(), describeStatus(e.last)),
 			Code: cmderr.ExitTimeout,
-			Hint: "To wait again, run: admiral run get " + r.GetId() + " --wait",
+			Hint: "To wait again, run: admiral run describe " + r.GetId() + " --wait",
 		}
 	case errWaitBroken:
 		return &cmderr.Error{
 			Err:  fmt.Errorf("lost track of run %s while it was %s: %w", e.last.GetId(), describeStatus(e.last), e.err),
 			Code: cmderr.ExitError,
-			Hint: "The run continues on the server. To check on it, run: admiral run get " + r.GetId() + " --wait",
+			Hint: "The run continues on the server. To check on it, run: admiral run describe " + r.GetId() + " --wait",
 		}
 	case errNotEnrolled:
 		agent, key := "its agent", "admiral agent enrollment-key <agent>"
@@ -159,7 +159,7 @@ func WaitError(err error, r *runv1.Run) error {
 			Code: cmderr.ExitError,
 			Hint: "Install the agent with its enrollment key; the run starts once it enrolls.\n" +
 				"To issue a new key, run: " + key + "\n" +
-				"To follow the run, run: admiral run get " + r.GetId() + " --wait",
+				"To follow the run, run: admiral run describe " + r.GetId() + " --wait",
 		}
 	}
 	return err
@@ -236,7 +236,7 @@ func acceptHint(runID string) string {
 	if runID == "" {
 		runID = "<run>"
 	}
-	return "As break-glass, a tenant admin accepts what landed: admiral run accept " + runID + " --reason ..."
+	return "As break-glass, an organization admin accepts what landed: admiral run accept " + runID + " --reason ..."
 }
 
 // waitWords says why a queued run waits, for the progress line.

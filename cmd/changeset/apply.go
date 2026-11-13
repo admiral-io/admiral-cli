@@ -180,7 +180,7 @@ func latestPlan(ctx context.Context, c sdkclient.AdmiralClient, csID string) (*c
 		return nil, nil, fmt.Errorf("%s's latest plan (%s) found nothing to change", csID, r.GetId())
 	case runv1.Run_STATUS_PREPARING, runv1.Run_STATUS_QUEUED, runv1.Run_STATUS_PLANNING:
 		return nil, nil, cmderr.WithHint(fmt.Errorf("%s is still planning (%s)", csID, r.GetId()),
-			"Wait for it: 'admiral run get "+r.GetId()+" --wait'.")
+			"Wait for it: 'admiral run describe "+r.GetId()+" --wait'.")
 	case runv1.Run_STATUS_FAILED:
 		return nil, nil, cmderr.WithHint(fmt.Errorf("%s's latest plan failed: %s", csID, r.GetPlan().GetMessage()),
 			"Fix the changeset and plan again: 'admiral changeset plan "+csID+"'.")

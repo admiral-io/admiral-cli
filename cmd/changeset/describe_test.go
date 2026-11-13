@@ -44,7 +44,7 @@ func TestDescribeShowsTheChangeAndTheFailedRun(t *testing.T) {
 	assert.Contains(t, out, "Last Run:     run-7zd93c9p4qer Failed 10h ago")
 	assert.Regexp(t, `admiral-platform\s+update\s+sha256:ced3cf345b3c\s+image.tag: "cea12b5" -> "35bd16b"`, out)
 	assert.Contains(t, out, "\nRuns:\n")
-	assert.Contains(t, out, "To see why the last run failed, run: admiral run get run-7zd93c9p4qer")
+	assert.Contains(t, out, "To see why the last run failed, run: admiral run describe run-7zd93c9p4qer")
 	assert.Contains(t, out, "To see every value, run: admiral changeset diff "+csID)
 	assert.NotContains(t, out, "To apply it")
 }

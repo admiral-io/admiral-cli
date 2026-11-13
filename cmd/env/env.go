@@ -17,10 +17,10 @@ func NewEnvCmd(opts *client.Options) *EnvCmd {
 	cmd := &cobra.Command{
 		Use:   "env",
 		Short: "Manage environments",
-		Long: `Manage deployment environments within an application.
+		Long: `Manage deployment environments within a project.
 
-Commands address an environment by its path, app/env, or by name or ID
-with --app for the scope. A path and --app are never combined.`,
+Commands address an environment by its path, project/environment, or by name or ID
+with --project for the scope. A path and --project are never combined.`,
 		Aliases:       []string{"environment", "environments"},
 		SilenceUsage:  true,
 		SilenceErrors: true,

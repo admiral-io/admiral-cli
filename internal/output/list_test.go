@@ -61,8 +61,8 @@ func TestPrintList_EmptyTableGoesToStderr(t *testing.T) {
 
 	var out, errOut bytes.Buffer
 	p := testPrinterErr(FormatTable, &out, &errOut)
-	require.NoError(t, p.PrintList(List{Kind: "applications"}, nil))
-	require.Equal(t, "No applications found.\n", errOut.String())
+	require.NoError(t, p.PrintList(List{Kind: "projects"}, nil))
+	require.Equal(t, "No projects found.\n", errOut.String())
 }
 
 func TestPrintList_JSONIsBareArray(t *testing.T) {

@@ -8,7 +8,7 @@ import (
 )
 
 // Agent resolves an agent name or agt- id. The server's agent filter has no
-// name, so names are matched against every agent; a tenant has few.
+// name, so names are matched against every agent; an organization has few.
 func Agent(ctx context.Context, c agentv1.AgentAPIClient, nameOrID string) (string, error) {
 	if IsID("agt", nameOrID) {
 		return nameOrID, nil
