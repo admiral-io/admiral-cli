@@ -201,10 +201,42 @@ func Outcome(r *runv1.Run) error {
 			Code: cmderr.ExitError,
 			Hint: UnknownHint(r.GetChangeSetId(), r.GetId()),
 		})
+	case runv1.Run_STATUS_UNHEALTHY:
+		return cmderr.Reported(&cmderr.Error{
+			Err: fmt.Errorf("run %s wrote everything, and %s did not become healthy; the environment is not held",
+				r.GetId(), strings.Join(unhealthy(r), ", ")),
+			Code: cmderr.ExitError,
+			Hint: UnhealthyHint(r),
+		})
 	case runv1.Run_STATUS_SUPERSEDED:
 		return cmderr.Reported(fmt.Errorf("run %s was superseded by a newer plan", r.GetId()))
 	}
 	return nil
+}
+
+// unhealthy names the components of r's apply that did not become healthy.
+func unhealthy(r *runv1.Run) []string {
+	var out []string
+	for _, c := range r.GetApply().GetComponents() {
+		if c.GetStatus() == runv1.ComponentApply_STATUS_UNHEALTHY {
+			out = append(out, c.GetComponent())
+		}
+	}
+	return out
+}
+
+// UnhealthyHint is how to go on from an apply that wrote everything but left
+// a component unhealthy. Nothing is held, so the usual next step is a new
+// changeset with the fix; putting the component back is a revert of it alone.
+func UnhealthyHint(r *runv1.Run) string {
+	hint := "To see why, run: admiral run logs " + r.GetId() + "\n" +
+		"To fix it forward, put the fix in a new changeset"
+	if cs := r.GetChangeSetId(); cs != "" {
+		for _, c := range unhealthy(r) {
+			hint += "\nTo put " + c + " back, run: admiral changeset revert " + cs + " --component " + c
+		}
+	}
+	return hint
 }
 
 // UnknownHint is how to get out of an apply whose outcome is unknown: plan
@@ -220,12 +252,15 @@ func UnknownHint(changeSetID, runID string) string {
 var changeSetIDPattern = regexp.MustCompile(`cs-[0-9a-z]{12}`)
 
 // HoldHint is how to release an environment a partial apply holds: apply
-// the changeset again, or undo it. Accepting what landed is break-glass.
+// the changeset again, change it first, or undo it. Accepting what landed is
+// break-glass.
 func HoldHint(changeSetID, runID string) string {
 	if changeSetID == "" {
 		return acceptHint(runID)
 	}
-	return "To finish it, run: admiral changeset plan " + changeSetID + ", then apply it\n" + undoHint(changeSetID, runID)
+	return "To finish it, run: admiral changeset plan " + changeSetID + ", then apply it\n" +
+		"To change it first, run: admiral changeset set " + changeSetID + " <component>.<path>=<value>, then plan and apply it\n" +
+		undoHint(changeSetID, runID)
 }
 
 func undoHint(changeSetID, runID string) string {

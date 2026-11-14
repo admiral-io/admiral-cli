@@ -258,6 +258,7 @@ func TestRefusalSaysWhatUnblocksIt(t *testing.T) {
 
 	held := status.Error(codes.FailedPrecondition, "change set "+csID+"'s partial apply holds the environment; it is applied again, edited or reverted first")
 	assert.Equal(t, "To finish it, run: admiral changeset plan "+csID+", then apply it\n"+
+		"To change it first, run: admiral changeset set "+csID+" <component>.<path>=<value>, then plan and apply it\n"+
 		"To undo it, run: admiral changeset revert "+csID+"\n"+
 		"As break-glass, an organization admin accepts what landed: admiral run accept <run> --reason ...",
 		cmderr.Hint(Refusal(held, "admiral changeset", "cs-other0000000")))
@@ -266,14 +267,33 @@ func TestRefusalSaysWhatUnblocksIt(t *testing.T) {
 	assert.Empty(t, cmderr.Hint(Refusal(scope, "admiral run", testRunID)), "a real scope refusal keeps the root's scope hint")
 }
 
-// A partial outcome names finishing the changeset first; accepting what
-// landed is break-glass.
-func TestPartialOutcomeNamesApplyAgainRevertAndAccept(t *testing.T) {
+// A partial outcome names the exits in order: apply again, change it first,
+// undo it. Accepting what landed is last, as break-glass.
+func TestPartialOutcomeNamesApplyAgainEditRevertAndAccept(t *testing.T) {
 	err := Outcome(&runv1.Run{Id: testRunID, ChangeSetId: csID, Status: runv1.Run_STATUS_PARTIAL})
 	assert.Equal(t, "To finish it, run: admiral changeset plan "+csID+", then apply it\n"+
+		"To change it first, run: admiral changeset set "+csID+" <component>.<path>=<value>, then plan and apply it\n"+
 		"To undo it, run: admiral changeset revert "+csID+"\n"+
 		"As break-glass, an organization admin accepts what landed: admiral run accept "+testRunID+" --reason ...",
 		cmderr.Hint(err))
+}
+
+// An unhealthy outcome fails the command, names the component, and offers
+// the fix forward and a revert of that component alone. Nothing is held, so
+// accept is never offered.
+func TestUnhealthyOutcomeOffersFixForwardAndRevertingTheComponent(t *testing.T) {
+	err := Outcome(&runv1.Run{Id: testRunID, ChangeSetId: csID, Status: runv1.Run_STATUS_UNHEALTHY,
+		Apply: &runv1.ApplyPhase{Components: []*runv1.ComponentApply{
+			{Component: "db", Status: runv1.ComponentApply_STATUS_SUCCEEDED},
+			{Component: "api", Status: runv1.ComponentApply_STATUS_UNHEALTHY},
+		}}})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "api did not become healthy; the environment is not held")
+	assert.Equal(t, "To see why, run: admiral run logs "+testRunID+"\n"+
+		"To fix it forward, put the fix in a new changeset\n"+
+		"To put api back, run: admiral changeset revert "+csID+" --component api",
+		cmderr.Hint(err))
+	assert.NotContains(t, cmderr.Hint(err), "accept")
 }
 
 // An unknown outcome says to plan first: the plan diffs against what is
