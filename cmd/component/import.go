@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -341,7 +342,7 @@ func parseSource(arg string, f sourceFlags) (*registryv1.ImportSource, error) {
 		}}}, nil
 	}
 	return nil, cmderr.UsageHint(
-		"A chart is oci://... or NAME --repo URL; a module is NAMESPACE/NAME/SYSTEM; a repository ends in .git or is ssh://; an archive ends in .tgz, .zip, ...",
+		"A chart is oci://... or NAME --repo URL; a module is NAMESPACE/NAME/SYSTEM; a repository ends in .git, is ssh://, or is github.com/OWNER/REPO; an archive ends in .tgz, .zip, ...",
 		"cannot tell what %q is", arg)
 }
 
@@ -352,14 +353,32 @@ var scpLike = regexp.MustCompile(`^([^@/:]+@[^:/]+):(.+)$`)
 // dropped, the scp shorthand as ssh://.
 func gitURL(s string) string {
 	s = strings.TrimPrefix(s, "git::")
+	if forgeShorthand(s) {
+		return "https://" + s
+	}
 	if m := scpLike.FindStringSubmatch(s); m != nil {
 		return "ssh://" + m[1] + "/" + strings.TrimLeft(m[2], "/")
 	}
 	return s
 }
 
+// forges are the hosts everyone types as host/owner/repo with no scheme and
+// no .git, as Terraform reads github.com/OWNER/REPO.
+var forges = []string{"github.com", "gitlab.com", "bitbucket.org"}
+
+// forgeShorthand reports whether s is a forge repository written without a
+// scheme: github.com/OWNER/REPO, with or without .git. Without this it read as
+// a three-part registry module address, which then refused --ref.
+func forgeShorthand(s string) bool {
+	if strings.Contains(s, "://") {
+		return false
+	}
+	parts := strings.Split(strings.TrimSuffix(strings.TrimSuffix(s, "/"), ".git"), "/")
+	return len(parts) == 3 && parts[1] != "" && parts[2] != "" && slices.Contains(forges, strings.ToLower(parts[0]))
+}
+
 func isGit(s string) bool {
-	if strings.HasPrefix(s, "git::") || strings.HasPrefix(s, "ssh://") || scpLike.MatchString(s) {
+	if strings.HasPrefix(s, "git::") || strings.HasPrefix(s, "ssh://") || scpLike.MatchString(s) || forgeShorthand(s) {
 		return true
 	}
 	u, err := url.Parse(s)
@@ -371,8 +390,7 @@ func isGit(s string) bool {
 		return true
 	}
 	// The forges everyone types without .git: owner/repo and nothing after.
-	switch strings.ToLower(u.Host) {
-	case "github.com", "gitlab.com", "bitbucket.org":
+	if slices.Contains(forges, strings.ToLower(u.Host)) {
 		return len(strings.Split(strings.Trim(path, "/"), "/")) == 2
 	}
 	return false
