@@ -207,6 +207,9 @@ func printRun(p *output.Printer, r *runv1.Run, title string, diff func(w io.Writ
 	case runv1.Run_STATUS_UNKNOWN:
 		d.Hint("Its apply never reported, so what it changed is unknown.")
 		d.Hint(UnknownHint(r.GetChangeSetId(), r.GetId()))
+	case runv1.Run_STATUS_UNHEALTHY:
+		d.Hint("It wrote everything and nothing is held, but a component did not become healthy.")
+		d.Hint(UnhealthyHint(r))
 	}
 	return p.PrintStatus(r, d)
 }
