@@ -60,6 +60,16 @@ func TestParseSourceReadsTheKindOffTheForm(t *testing.T) {
 		assert.Equal(t, "modules/vpc", git.Path)
 	}
 
+	// The forge shorthand Terraform reads as a repository is one here too: not
+	// a three-part module address that then refuses --ref.
+	for _, short := range []string{"github.com/acme/infra", "github.com/acme/infra.git", "gitlab.com/acme/infra", "bitbucket.org/acme/infra"} {
+		src, err = parseSource(short, sourceFlags{ref: "v2"})
+		require.NoError(t, err, short)
+		require.NotNil(t, src.GetGitTree(), short)
+		assert.Equal(t, "https://"+short, src.GetGitTree().Url)
+		assert.Equal(t, "v2", src.GetGitTree().Ref)
+	}
+
 	src, err = parseSource("git@github.com:admiral-io/admiral-infra.git", sourceFlags{})
 	require.NoError(t, err)
 	assert.Equal(t, "ssh://git@github.com/admiral-io/admiral-infra.git", src.GetGitTree().Url)
