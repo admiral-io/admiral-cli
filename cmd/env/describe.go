@@ -128,13 +128,13 @@ describe is a human view. Use 'env get -o json' for the raw record.`,
 			})
 			if e.LastApply != nil {
 				g.Go(func() error {
-					sec.lastApplyRun = latestRun(gctx, c, e.LastApply.ChangeSetId)
+					sec.lastApplyRun = runOr(gctx, c, e.LastApply.RunId, e.LastApply.ChangeSetId)
 					return nil
 				})
 			}
 			if e.Hold != nil {
 				g.Go(func() error {
-					sec.holdRun = latestRun(gctx, c, e.Hold.ChangeSetId)
+					sec.holdRun = runOr(gctx, c, e.Hold.RunId, e.Hold.ChangeSetId)
 					return nil
 				})
 			}
@@ -457,6 +457,20 @@ func applying(runs []*runv1.Run) *runv1.Run {
 		}
 	}
 	return nil
+}
+
+// runOr reads the run the platform named, or, for a record from before it
+// named one, the changeset's newest run. That one may never have applied,
+// so a hint built from it can point at the wrong run.
+func runOr(ctx context.Context, c sdkclient.AdmiralClient, runID, changeSetID string) *runv1.Run {
+	if runID == "" {
+		return latestRun(ctx, c, changeSetID)
+	}
+	r, err := c.Run().GetRun(ctx, &runv1.GetRunRequest{RunId: runID})
+	if err != nil {
+		return nil
+	}
+	return r.GetRun()
 }
 
 // latestRun is a changeset's newest run, or nil when it has none or cannot
