@@ -22,9 +22,10 @@ func newDeleteCmd(opts *client.Options) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <name>",
 		Short: "Delete a project",
-		Long: `Delete a project and everything in it: its environments, components,
-and runs. You must type the project name to confirm, or pass --yes to
-skip the prompt.`,
+		Long: `Delete a project that has no environments left. Admiral refuses to
+delete one that still has any: delete each first with
+'admiral env delete <project>/<environment>'. You must type the project
+name to confirm, or pass --yes to skip the prompt.`,
 		Example: `  # Delete a project by name (prompts for the name to confirm)
   admiral project delete billing-api
 
@@ -60,7 +61,7 @@ skip the prompt.`,
 				name = resp.Project.Name
 			}
 
-			prompt := fmt.Sprintf("Deleting %s is not reversible and removes all of its environments, components and runs.", name)
+			prompt := fmt.Sprintf("Deleting %s is not reversible.", name)
 			if err := input.ConfirmName(cmd, yes, prompt, name); err != nil {
 				return err
 			}
