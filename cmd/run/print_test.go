@@ -263,6 +263,11 @@ func TestRefusalSaysWhatUnblocksIt(t *testing.T) {
 		"As break-glass, an organization admin accepts what landed: admiral run accept <run> --reason ...",
 		cmderr.Hint(Refusal(held, "admiral changeset", "cs-other0000000")))
 
+	// The platform's own words, from the apply of a changeset whose environment moved.
+	behind := status.Error(codes.FailedPrecondition, "change set "+csID+" is behind: the environment moved since revision 1 was cut (generation 0, now 1); rebase it")
+	assert.Equal(t, "Rebase it onto the environment as it is now, then plan it again: 'admiral changeset rebase "+csID+" --plan'.",
+		cmderr.Hint(Refusal(behind, "admiral run", testRunID)))
+
 	scope := status.Error(codes.PermissionDenied, "missing scope run:write")
 	assert.Empty(t, cmderr.Hint(Refusal(scope, "admiral run", testRunID)), "a real scope refusal keeps the root's scope hint")
 }

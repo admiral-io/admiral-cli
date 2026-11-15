@@ -308,12 +308,16 @@ func describeStatus(r *runv1.Run) string {
 }
 
 // Refusal gives an approve or apply the platform refused a hint that says
-// what would unblock it: approvals, or a partial apply holding the
-// environment. verb and target address the plan, as "admiral changeset" and
+// what would unblock it: approvals, a changeset behind its environment, or
+// a partial apply holding the environment. verb and target address the plan, as "admiral changeset" and
 // a changeset, or "admiral run" and a run.
 func Refusal(err error, verb, target string) error {
 	msg := status.Convert(err).Message()
 	switch {
+	case status.Code(err) == codes.FailedPrecondition && strings.Contains(msg, "is behind"):
+		if cs := changeSetIDPattern.FindString(msg); cs != "" {
+			return cmderr.WithHint(err, "Rebase it onto the environment as it is now, then plan it again: 'admiral changeset rebase "+cs+" --plan'.")
+		}
 	case status.Code(err) == codes.FailedPrecondition && strings.Contains(msg, "holds the environment"):
 		return cmderr.WithHint(err, HoldHint(changeSetIDPattern.FindString(msg), ""))
 	case status.Code(err) == codes.PermissionDenied && strings.Contains(msg, "author"):
