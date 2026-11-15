@@ -10,8 +10,8 @@ import (
 	changesetv1 "go.admiral.io/sdk/proto/admiral/api/changeset/v1"
 )
 
-func valueConflict(comp string, path ...string) *changesetv1.Conflict {
-	return &changesetv1.Conflict{Component: comp, Kind: changesetv1.Conflict_KIND_VALUE, Path: pathSegments(path),
+func valueConflict(path ...string) *changesetv1.Conflict {
+	return &changesetv1.Conflict{Component: "api", Kind: changesetv1.Conflict_KIND_VALUE, Path: pathSegments(path),
 		ChangeSetValueJson: `"1.5"`, EnvironmentValueJson: `"1.4"`, EnvironmentChangeSetId: "cs-aaaaaaaaaaaa"}
 }
 
@@ -19,7 +19,7 @@ func valueConflict(comp string, path ...string) *changesetv1.Conflict {
 // version or a removal by the bare component.
 func TestRebaseResolvesEachConflictByItsFlag(t *testing.T) {
 	conflicts := []*changesetv1.Conflict{
-		valueConflict("api", "image", "tag"),
+		valueConflict("image", "tag"),
 		{Component: "web", Kind: changesetv1.Conflict_KIND_VERSION},
 		{Component: "worker", Kind: changesetv1.Conflict_KIND_REMOVED},
 	}
@@ -39,7 +39,7 @@ func TestRebaseResolvesEachConflictByItsFlag(t *testing.T) {
 // An unresolved conflict is listed with the flags that settle it, before
 // the rebase is sent.
 func TestRebaseListsAConflictLeftOpen(t *testing.T) {
-	_, err := resolveConflicts(csID, []*changesetv1.Conflict{valueConflict("api", "image", "tag")}, nil)
+	_, err := resolveConflicts(csID, []*changesetv1.Conflict{valueConflict("image", "tag")}, nil)
 	requireUsage(t, err, "has 1 conflict(s) with its environment")
 	hint := cmderr.Hint(err)
 	assert.Contains(t, hint, `api.image.tag: changeset "1.5", environment "1.4"`)
@@ -50,13 +50,13 @@ func TestRebaseListsAConflictLeftOpen(t *testing.T) {
 func TestRebaseRefusesAFlagThatNamesNoConflict(t *testing.T) {
 	keeps, err := parseKeeps([]string{"api.replicas"}, nil)
 	require.NoError(t, err)
-	_, err = resolveConflicts(csID, []*changesetv1.Conflict{valueConflict("api", "image", "tag")}, keeps)
+	_, err = resolveConflicts(csID, []*changesetv1.Conflict{valueConflict("image", "tag")}, keeps)
 	requireUsage(t, err, "--keep-changeset api.replicas names no conflict")
 
 	// A bare component is its version, not every value under it.
 	keeps, err = parseKeeps([]string{"api"}, nil)
 	require.NoError(t, err)
-	_, err = resolveConflicts(csID, []*changesetv1.Conflict{valueConflict("api", "image", "tag")}, keeps)
+	_, err = resolveConflicts(csID, []*changesetv1.Conflict{valueConflict("image", "tag")}, keeps)
 	requireUsage(t, err, "--keep-changeset api names no conflict")
 }
 
