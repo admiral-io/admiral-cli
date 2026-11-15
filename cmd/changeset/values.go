@@ -1,6 +1,7 @@
 package changeset
 
 import (
+	"fmt"
 	"io"
 	"strings"
 
@@ -18,6 +19,7 @@ import (
 func newValuesCmd(opts *client.Options) *cobra.Command {
 	var (
 		valuesPath string
+		effective  bool
 		po         planOptions
 	)
 
@@ -31,10 +33,17 @@ A download writes YAML to stdout under a header naming the changeset, the
 component and the revision it was taken at. An upload replaces the
 component's values with the file's and is refused if the changeset has
 moved past that revision, so an edit made meanwhile is never overwritten.
-A key missing from the file is removed, so its default applies.`,
+A key missing from the file is removed, so its default applies.
+
+With --effective it prints the whole tree the component will receive
+instead: its own defaults, the organization's baseline, what the
+environment runs with, then this changeset's edits. Each value is labeled
+with the layer it came from. That file is for reading and cannot be
+uploaded.`,
 		Example: `  admiral changeset values cs-7f2a1c9d0e3b api > api.yaml
   $EDITOR api.yaml
-  admiral changeset values cs-7f2a1c9d0e3b api --values api.yaml`,
+  admiral changeset values cs-7f2a1c9d0e3b api --values api.yaml
+  admiral changeset values cs-7f2a1c9d0e3b api --effective`,
 		Args: flags.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ref, err := parseChangeSet(args[0])
@@ -46,6 +55,10 @@ A key missing from the file is removed, so its default applies.`,
 				return err
 			}
 
+			if effective && valuesPath != "" {
+				return cmderr.UsageHint("Upload the file you downloaded without --effective.",
+					"--effective prints values; it cannot be combined with --values")
+			}
 			if valuesPath != "" {
 				data, err := readValuesFile(cmd, valuesPath)
 				if err != nil {
@@ -85,6 +98,7 @@ A key missing from the file is removed, so its default applies.`,
 			resp, err := c.ChangeSet().GetComponentValues(cmd.Context(), &changesetv1.GetComponentValuesRequest{
 				ChangeSetId: csID,
 				Component:   comp,
+				Effective:   effective,
 			})
 			if err != nil {
 				return err
@@ -95,6 +109,14 @@ A key missing from the file is removed, so its default applies.`,
 			}
 			tree, err := valuesfile.DecodeJSON(resp.TreeJson)
 			if err != nil {
+				return err
+			}
+			if effective {
+				out, err := renderEffective(tree, csID, comp, resp.GetSources())
+				if err != nil {
+					return err
+				}
+				_, err = p.Out().Write(out)
 				return err
 			}
 			out, err := valuesfile.Render(tree, valuesfile.Header{
@@ -112,6 +134,7 @@ A key missing from the file is removed, so its default applies.`,
 	}
 
 	cmd.Flags().StringVar(&valuesPath, "values", "", "upload this file, downloaded earlier, as the component's values")
+	cmd.Flags().BoolVar(&effective, "effective", false, "print every value the component will receive, each labeled with the layer it came from")
 	planFlags(cmd, &po)
 
 	return cmd
@@ -171,4 +194,43 @@ func headerNames(data []byte) (changeSet, component string) {
 		}
 	}
 	return changeSet, component
+}
+
+// layerLabels name each layer as the long help does.
+var layerLabels = map[changesetv1.ValueSource_Origin]string{
+	changesetv1.ValueSource_ORIGIN_COMPONENT_DEFAULT: "component default",
+	changesetv1.ValueSource_ORIGIN_BASELINE:          "baseline",
+	changesetv1.ValueSource_ORIGIN_ENVIRONMENT:       "environment",
+	changesetv1.ValueSource_ORIGIN_CHANGE_SET:        "changeset",
+}
+
+// renderEffective writes the effective tree with each value labeled by its
+// layer. Its header has no revision line, so an upload refuses the file.
+func renderEffective(tree map[string]any, csID, comp string, sources []*changesetv1.ValueSource) ([]byte, error) {
+	labels := map[string]string{}
+	for _, src := range sources {
+		keys := make([]string, 0, len(src.GetPath()))
+		for _, seg := range src.GetPath() {
+			keys = append(keys, seg.GetKey())
+		}
+		l, ok := layerLabels[src.GetOrigin()]
+		if !ok {
+			l = "unknown layer"
+		}
+		labels[strings.Join(keys, valuesfile.PathSep)] = l
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "# changeset: %s\n# component: %s\n", csID, comp)
+	b.WriteString("# The values this component will receive, each labeled with its layer:\n")
+	b.WriteString("# component default, then baseline, environment and changeset over it.\n")
+	if l, ok := labels[""]; ok {
+		fmt.Fprintf(&b, "# Every value comes from: %s\n", l)
+	}
+	b.WriteString("# For reading only. Upload a file downloaded without --effective.\n")
+	body, err := valuesfile.EncodeLabeled(tree, labels)
+	if err != nil {
+		return nil, err
+	}
+	b.Write(body)
+	return []byte(b.String()), nil
 }
