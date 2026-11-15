@@ -49,7 +49,7 @@ func TestEffectiveValuesLabelEachValueWithItsLayer(t *testing.T) {
 	assert.Contains(t, got, "envFrom: [] # component default\n")
 
 	var parsed map[string]any
-	require.NoError(t, yaml.Unmarshal(out, &parsed), "the labelled file is still YAML:\n%s", got)
+	require.NoError(t, yaml.Unmarshal(out, &parsed), "the labeled file is still YAML:\n%s", got)
 	assert.Equal(t, map[string]any{}, parsed["affinity"])
 	assert.Contains(t, got, "# changeset: "+csID+"\n# component: api\n")
 	assert.NotContains(t, got, "# revision:", "an effective file carries no revision, so an upload refuses it")

@@ -37,7 +37,7 @@ A key missing from the file is removed, so its default applies.
 
 With --effective it prints the whole tree the component will receive
 instead: its own defaults, the organization's baseline, what the
-environment runs with, then this changeset's edits. Each value is labelled
+environment runs with, then this changeset's edits. Each value is labeled
 with the layer it came from. That file is for reading and cannot be
 uploaded.`,
 		Example: `  admiral changeset values cs-7f2a1c9d0e3b api > api.yaml
@@ -134,7 +134,7 @@ uploaded.`,
 	}
 
 	cmd.Flags().StringVar(&valuesPath, "values", "", "upload this file, downloaded earlier, as the component's values")
-	cmd.Flags().BoolVar(&effective, "effective", false, "print every value the component will receive, each labelled with the layer it came from")
+	cmd.Flags().BoolVar(&effective, "effective", false, "print every value the component will receive, each labeled with the layer it came from")
 	planFlags(cmd, &po)
 
 	return cmd
@@ -204,7 +204,7 @@ var layerLabels = map[changesetv1.ValueSource_Origin]string{
 	changesetv1.ValueSource_ORIGIN_CHANGE_SET:        "changeset",
 }
 
-// renderEffective writes the effective tree with each value labelled by its
+// renderEffective writes the effective tree with each value labeled by its
 // layer. Its header has no revision line, so an upload refuses the file.
 func renderEffective(tree map[string]any, csID, comp string, sources []*changesetv1.ValueSource) ([]byte, error) {
 	labels := map[string]string{}
@@ -221,7 +221,7 @@ func renderEffective(tree map[string]any, csID, comp string, sources []*changese
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "# changeset: %s\n# component: %s\n", csID, comp)
-	b.WriteString("# The values this component will receive, each labelled with its layer:\n")
+	b.WriteString("# The values this component will receive, each labeled with its layer:\n")
 	b.WriteString("# component default, then baseline, environment and changeset over it.\n")
 	if l, ok := labels[""]; ok {
 		fmt.Fprintf(&b, "# Every value comes from: %s\n", l)
