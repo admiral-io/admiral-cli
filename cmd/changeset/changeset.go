@@ -53,6 +53,7 @@ an environment names none of them and the command lists them instead.`,
 		newApplyCmd(opts),
 		newDiffCmd(opts),
 		newPlanCmd(opts),
+		newRebaseCmd(opts),
 	)
 
 	root.Cmd = cmd

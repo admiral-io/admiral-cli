@@ -164,6 +164,10 @@ func latestPlan(ctx context.Context, c sdkclient.AdmiralClient, csID string) (*c
 		return nil, nil, err
 	}
 	cs := resp.GetChangeSet()
+	if cs.GetBehind() {
+		return nil, nil, cmderr.WithHint(fmt.Errorf("%s is behind: its environment moved since it was planned", csID),
+			"Rebase it, then plan it again: 'admiral changeset rebase "+csID+" --plan'.")
+	}
 	if cs.GetLatestRunId() == "" {
 		return nil, nil, cmderr.WithHint(fmt.Errorf("%s has not been planned", csID),
 			"To plan it, run: admiral changeset plan "+csID)

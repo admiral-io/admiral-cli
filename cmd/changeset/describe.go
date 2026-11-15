@@ -148,7 +148,7 @@ func describeChangeSet(cs *changesetv1.ChangeSet, sec csSections) *output.Descri
 	d.Field("Status", output.FormatEnum(cs.Status))
 	d.Field("Revision", strconv.Itoa(int(cs.HeadRevision)))
 	if cs.Behind {
-		d.Field("Behind", "the environment changed since this revision was made")
+		d.Field("Behind", "the environment changed since this revision was made; rebase it: admiral changeset rebase "+cs.Id)
 	}
 	if cs.RevertsChangeSetId != "" {
 		d.Field("Reverts", cs.RevertsChangeSetId)

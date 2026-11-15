@@ -92,6 +92,7 @@ func sweepArgs(files map[string]string) map[string][]string {
 		"changeset get":      {"changeset", "get", cs},
 		"changeset list":     {"changeset", "list", "x/x"},
 		"changeset plan":     {"changeset", "plan", cs, "--no-wait"},
+		"changeset rebase":   {"changeset", "rebase", cs},
 		"changeset remove":   {"changeset", "remove", cs, "x"},
 		"changeset revert":   {"changeset", "revert", cs},
 		"changeset set":      {"changeset", "set", cs, "x.a=1"},

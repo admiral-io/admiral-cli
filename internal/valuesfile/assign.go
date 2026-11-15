@@ -45,6 +45,19 @@ func ParsePath(s string) (string, []string, error) {
 	return keys[0], keys[1:], nil
 }
 
+// ParseTarget reads `component` or `component.path`, the form a rebase
+// resolution names: a bare component is its version, a path one value.
+func ParseTarget(s string) (string, []string, error) {
+	keys, _, found, err := splitKeys(s, false)
+	if err != nil {
+		return "", nil, err
+	}
+	if found {
+		return "", nil, fmt.Errorf("%q: name a component or component.path, not a value", s)
+	}
+	return keys[0], keys[1:], nil
+}
+
 func splitKeys(s string, stopAtEquals bool) (keys []string, rest string, found bool, err error) {
 	var (
 		cur     strings.Builder
