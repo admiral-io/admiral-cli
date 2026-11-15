@@ -219,6 +219,59 @@ func Encode(tree map[string]any) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
+// EncodeLabeled writes the tree as Encode does, with a comment on each value
+// that labels names. A label's key is the value's path, its keys joined by
+// PathSep; the empty key labels the whole tree, which the caller says.
+func EncodeLabeled(tree map[string]any, labels map[string]string) ([]byte, error) {
+	if len(tree) == 0 {
+		return []byte("{}\n"), nil
+	}
+	node, err := toNode(tree)
+	if err != nil {
+		return nil, err
+	}
+	label(node, nil, labels)
+	var b bytes.Buffer
+	enc := yaml.NewEncoder(&b)
+	enc.SetIndent(2)
+	if err := enc.Encode(node); err != nil {
+		return nil, err
+	}
+	if err := enc.Close(); err != nil {
+		return nil, err
+	}
+	return b.Bytes(), nil
+}
+
+// PathSep joins a path's keys in EncodeLabeled's labels. A key never holds
+// it.
+const PathSep = "\x00"
+
+// label comments each mapping entry whose path labels names: on the value
+// when it is a scalar or empty, on the key otherwise, where yaml writes it.
+func label(n *yaml.Node, at []string, labels map[string]string) {
+	if n.Kind != yaml.MappingNode {
+		return
+	}
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		k, v := n.Content[i], n.Content[i+1]
+		path := append(append([]string(nil), at...), k.Value)
+		if l, ok := labels[strings.Join(path, PathSep)]; ok {
+			switch {
+			case v.Kind == yaml.ScalarNode:
+				v.LineComment = l
+			case len(v.Content) == 0:
+				// An empty map or list stays on the key's line as {} or [].
+				v.Style = yaml.FlowStyle
+				v.LineComment = l
+			default:
+				k.LineComment = l
+			}
+		}
+		label(v, path, labels)
+	}
+}
+
 func toNode(v any) (*yaml.Node, error) {
 	switch t := v.(type) {
 	case nil:
