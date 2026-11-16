@@ -56,7 +56,9 @@ func CreateClient(ctx context.Context, opts *Options) (sdkclient.AdmiralClient, 
 	interceptors := []grpc.UnaryClientInterceptor{deadlineInterceptor(timeout), requestIDInterceptor()}
 
 	if cred.Source == credentials.SourceSession {
-		tok := newBearerToken(cred.Token, mode.plaintext())
+		tok := newBearerToken(cred, mode.plaintext(), func(ctx context.Context) (*credentials.TokenResult, error) {
+			return credentials.ResolveToken(ctx, opts.ConfigDir)
+		})
 		interceptors = append(interceptors,
 			authRetryInterceptor(opts.ConfigDir, tok.set),
 			unavailableRetryInterceptor(),

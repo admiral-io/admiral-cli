@@ -2,12 +2,18 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"sync/atomic"
+	"log/slog"
+	"sync"
+	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/status"
 
+	admcreds "go.admiral.io/cli/internal/credentials"
 	sdkclient "go.admiral.io/sdk/client"
 	agentv1 "go.admiral.io/sdk/proto/admiral/api/agent/v1"
 	apikeyv1 "go.admiral.io/sdk/proto/admiral/api/apikey/v1"
@@ -34,21 +40,52 @@ import (
 // every call. The SDK client attaches a fixed token at dial time, and adding
 // a second credential on retry would send two authorization headers. For
 // sessions the CLI therefore dials its own connection with this credential.
+//
+// It also renews the session before a call once the token is within
+// RefreshWindow of expiry. An access token lives 15 minutes and an apply may
+// be waited on for hours, so a command that polls must refresh as it goes;
+// refreshing only after a 401 left a long wait one rejection from "not
+// signed in" while the run carried on.
 type bearerToken struct {
-	token     atomic.Pointer[string]
+	mu        sync.Mutex
+	token     string
+	expiry    time.Time
 	plaintext bool
+	// renew returns the stored session, refreshing it when it is near
+	// expiry. Nil never renews.
+	renew func(context.Context) (*admcreds.TokenResult, error)
 }
 
-func newBearerToken(tok string, plaintext bool) *bearerToken {
-	b := &bearerToken{plaintext: plaintext}
-	b.token.Store(&tok)
-	return b
+func newBearerToken(tok *admcreds.TokenResult, plaintext bool, renew func(context.Context) (*admcreds.TokenResult, error)) *bearerToken {
+	return &bearerToken{token: tok.Token, expiry: tok.Expiry, plaintext: plaintext, renew: renew}
 }
 
-func (b *bearerToken) set(tok string) { b.token.Store(&tok) }
+func (b *bearerToken) set(tok *admcreds.TokenResult) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.token, b.expiry = tok.Token, tok.Expiry
+}
 
-func (b *bearerToken) GetRequestMetadata(context.Context, ...string) (map[string]string, error) {
-	return map[string]string{"authorization": sdkclient.AuthSchemeBearer.String() + " " + *b.token.Load()}, nil
+// GetRequestMetadata renews a token near expiry before attaching it. A
+// refused refresh ends the call as Unauthenticated, which is what the server
+// would answer. Any other failure, such as the token endpoint being
+// unreachable, sends the current token: it may still be good, and if not the
+// server's 401 gets the retry interceptor's one forced refresh.
+func (b *bearerToken) GetRequestMetadata(ctx context.Context, _ ...string) (map[string]string, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.renew != nil && !b.expiry.IsZero() && time.Until(b.expiry) <= admcreds.RefreshWindow {
+		fresh, err := b.renew(ctx)
+		switch {
+		case err == nil:
+			b.token, b.expiry = fresh.Token, fresh.Expiry
+		case errors.Is(err, admcreds.ErrSessionExpired):
+			return nil, status.Error(codes.Unauthenticated, err.Error())
+		default:
+			slog.Debug("session renewal failed; using the current token", "error", err)
+		}
+	}
+	return map[string]string{"authorization": sdkclient.AuthSchemeBearer.String() + " " + b.token}, nil
 }
 
 func (b *bearerToken) RequireTransportSecurity() bool { return !b.plaintext }
