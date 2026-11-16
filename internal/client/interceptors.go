@@ -120,17 +120,18 @@ func isReadOnly(fullMethod string) bool {
 // first force-refreshing the stored session and installing the new token via
 // setToken so this and every later call carry it. The token looked valid
 // locally but the server rejected it, so a refresh is the only useful
-// recovery. One retry per client lifetime keeps a genuinely revoked session
-// from looping.
-func authRetryInterceptor(configDir string, setToken func(string)) grpc.UnaryClientInterceptor {
-	var retried atomic.Bool
+// recovery. A retry that fails disarms it for the rest of the process, so a
+// genuinely revoked session does not refresh on every poll; one that succeeds
+// re-arms it, so a wait that outlives several sessions can recover each time.
+func authRetryInterceptor(configDir string, setToken func(*credentials.TokenResult)) grpc.UnaryClientInterceptor {
+	var disarmed atomic.Bool
 
 	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		err := invoker(ctx, method, req, reply, cc, opts...)
 		if err == nil || status.Code(err) != codes.Unauthenticated {
 			return err
 		}
-		if !retried.CompareAndSwap(false, true) {
+		if !disarmed.CompareAndSwap(false, true) {
 			return err
 		}
 
@@ -140,7 +141,11 @@ func authRetryInterceptor(configDir string, setToken func(string)) grpc.UnaryCli
 			slog.Debug("session refresh failed", "error", refreshErr)
 			return err
 		}
-		setToken(fresh.Token)
-		return invoker(ctx, method, req, reply, cc, opts...)
+		setToken(fresh)
+		if err := invoker(ctx, method, req, reply, cc, opts...); err != nil {
+			return err
+		}
+		disarmed.Store(false)
+		return nil
 	}
 }

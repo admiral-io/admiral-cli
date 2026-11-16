@@ -42,8 +42,8 @@ const (
 	// credentialsFile is written by `admiral auth login`.
 	credentialsFile = "credentials.json"
 
-	// refreshWindow is how close to expiry a session is refreshed before use.
-	refreshWindow = 30 * time.Second
+	// RefreshWindow is how close to expiry a session is refreshed before use.
+	RefreshWindow = 30 * time.Second
 
 	// refreshTimeout bounds a call to the token endpoint during refresh.
 	refreshTimeout = 10 * time.Second
@@ -94,6 +94,9 @@ type TokenResult struct {
 	Token      string
 	AuthScheme client.AuthScheme
 	Source     Source
+	// Expiry is when a session's access token expires; zero for an API key
+	// and for a session stored without one.
+	Expiry time.Time
 }
 
 // Credential is the on-disk shape of the credentials file. Exactly one kind
@@ -126,7 +129,7 @@ type Credential struct {
 
 // ResolveToken returns the credential to use for API calls. The environment
 // wins over the file. A stored session that is expired or within
-// refreshWindow of expiry is refreshed and persisted before being returned.
+// RefreshWindow of expiry is refreshed and persisted before being returned.
 // ctx bounds the work a credential may need before it is usable: a stored
 // reference runs an external program (`op read`) and a stale session calls
 // the token endpoint, and both stop when ctx does.
@@ -168,8 +171,8 @@ func ResolveToken(ctx context.Context, configDir string) (*TokenResult, error) {
 		if cred.AccessToken == "" {
 			return nil, ErrNotAuthenticated
 		}
-		if cred.Expiry.IsZero() || time.Until(cred.Expiry) > refreshWindow {
-			return &TokenResult{Token: cred.AccessToken, AuthScheme: client.AuthSchemeBearer, Source: SourceSession}, nil
+		if cred.Expiry.IsZero() || time.Until(cred.Expiry) > RefreshWindow {
+			return &TokenResult{Token: cred.AccessToken, AuthScheme: client.AuthSchemeBearer, Source: SourceSession, Expiry: cred.Expiry}, nil
 		}
 		refreshed, err := refreshSession(ctx, configDir, cred)
 		if err != nil {
@@ -182,7 +185,7 @@ func ResolveToken(ctx context.Context, configDir string) (*TokenResult, error) {
 			}
 			return nil, refreshFailure(err)
 		}
-		return &TokenResult{Token: refreshed.AccessToken, AuthScheme: client.AuthSchemeBearer, Source: SourceSession}, nil
+		return &TokenResult{Token: refreshed.AccessToken, AuthScheme: client.AuthSchemeBearer, Source: SourceSession, Expiry: refreshed.Expiry}, nil
 
 	default:
 		return nil, fmt.Errorf("credentials file has unknown kind %q; run 'admiral auth login' again", cred.Kind)
@@ -209,7 +212,7 @@ func ForceRefresh(ctx context.Context, configDir string) (*TokenResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("token refresh failed: %w", err)
 	}
-	return &TokenResult{Token: refreshed.AccessToken, AuthScheme: client.AuthSchemeBearer, Source: SourceSession}, nil
+	return &TokenResult{Token: refreshed.AccessToken, AuthScheme: client.AuthSchemeBearer, Source: SourceSession, Expiry: refreshed.Expiry}, nil
 }
 
 // FilePath returns the location of the credentials file for configDir.

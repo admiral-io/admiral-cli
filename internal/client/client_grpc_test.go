@@ -295,3 +295,69 @@ func TestAServerFaultNamesItsRequest(t *testing.T) {
 	_, err = c.Project().CreateProject(context.Background(), &projectv1.CreateProjectRequest{})
 	require.Equal(t, "project web already exists", cmderr.Format(err))
 }
+
+// expireSoon stores the session in opts so it falls inside RefreshWindow after
+// wait, but not when the client is created.
+func expireSoon(t *testing.T, opts *Options, wait time.Duration) {
+	t.Helper()
+	cred, err := credentials.Load(opts.ConfigDir)
+	require.NoError(t, err)
+	cred.Expiry = time.Now().Add(credentials.RefreshWindow + wait)
+	require.NoError(t, credentials.Save(opts.ConfigDir, cred))
+}
+
+func TestASessionNearExpiryIsRenewedBeforeTheCall(t *testing.T) {
+	api := &fakeAPI{}
+	startServer(t, api)
+	opts := sessionOpts(t, refreshServer(t, "jwt-2").URL)
+	expireSoon(t, opts, time.Second)
+
+	c, err := CreateClient(context.Background(), opts)
+	require.NoError(t, err)
+	defer c.Close() //nolint:errcheck
+
+	time.Sleep(1500 * time.Millisecond) // the session is now inside RefreshWindow
+	_, err = c.Project().ListProjects(context.Background(), &projectv1.ListProjectsRequest{})
+	require.NoError(t, err)
+	require.Len(t, api.calls, 1, "no 401 round trip")
+	require.Equal(t, []string{"Bearer jwt-2"}, api.calls[0].authz, "the call carries the renewed token")
+}
+
+func TestALongWaitRecoversFromEachRejectedToken(t *testing.T) {
+	api := &fakeAPI{script: map[string][]error{
+		"ListProjects": {status.Error(codes.Unauthenticated, "expired"), nil, status.Error(codes.Unauthenticated, "expired again")},
+	}}
+	startServer(t, api)
+	opts := sessionOpts(t, refreshServer(t, "jwt-2").URL)
+
+	c, err := CreateClient(context.Background(), opts)
+	require.NoError(t, err)
+	defer c.Close() //nolint:errcheck
+
+	for i := range 3 {
+		_, err = c.Project().ListProjects(context.Background(), &projectv1.ListProjectsRequest{})
+		require.NoError(t, err, "poll %d", i)
+	}
+}
+
+func TestARefusedRenewalEndsTheCallSignedOut(t *testing.T) {
+	refused := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": "invalid_grant"})
+	}))
+	t.Cleanup(refused.Close)
+	api := &fakeAPI{}
+	startServer(t, api)
+	opts := sessionOpts(t, refused.URL)
+	expireSoon(t, opts, time.Second)
+
+	c, err := CreateClient(context.Background(), opts)
+	require.NoError(t, err)
+	defer c.Close() //nolint:errcheck
+
+	time.Sleep(1500 * time.Millisecond)
+	_, err = c.Project().ListProjects(context.Background(), &projectv1.ListProjectsRequest{})
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+	require.Empty(t, api.calls, "a token the server would refuse is not sent")
+}
