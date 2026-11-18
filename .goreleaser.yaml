@@ -100,8 +100,6 @@ nfpms:
       - deb
       - rpm
       - archlinux
-    dependencies:
-      - git
     deb:
       lintian_overrides:
         - statically-linked-binary
