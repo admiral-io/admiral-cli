@@ -52,10 +52,18 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Write the package signing key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          umask 077
+          printf '%s\n' "$GPG_PRIVATE_KEY" > "$RUNNER_TEMP/package-signing.asc"
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29 # v7.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GO_RELEASER_TOKEN }}
+          GPG_KEY_FILE: ${{ runner.temp }}/package-signing.asc
+          NFPM_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         with:
           distribution: goreleaser
           version: "~> v2"

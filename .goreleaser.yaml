@@ -100,7 +100,14 @@ nfpms:
       - deb
       - rpm
       - archlinux
+    # Signed with packaging/admiral-packages.asc's private key; unsigned when
+    # GPG_KEY_FILE is unset, as in a local snapshot (ENG-803).
+    rpm:
+      signature:
+        key_file: '{{ if index .Env "GPG_KEY_FILE" }}{{ .Env.GPG_KEY_FILE }}{{ end }}'
     deb:
+      signature:
+        key_file: '{{ if index .Env "GPG_KEY_FILE" }}{{ .Env.GPG_KEY_FILE }}{{ end }}'
       lintian_overrides:
         - statically-linked-binary
         - changelog-file-missing-in-native-package
@@ -223,6 +230,8 @@ changelog:
 
 release:
   prerelease: auto
+  extra_files:
+    - glob: packaging/admiral-packages.asc
   footer: |
     **Full Changelog**: https://github.com/admiral-io/admiral-cli/compare/{{ .PreviousTag }}...{{ .Tag }}
 
