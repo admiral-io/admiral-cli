@@ -15,6 +15,7 @@ jobs:
       pull-requests: read
     name: lint
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -29,6 +30,12 @@ jobs:
           # Keep in lockstep with GOLANGCI_LINT_VERSION in tools/golangci-lint.sh.
           version: v2.12.2
           args: --timeout=5m
+      - name: Quality on new code
+        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
+        with:
+          version: v2.12.2
+          args: --config .golangci-quality.yml --timeout=5m
+          only-new-issues: true
       # golangci-lint's misspell linter covers Go sources; this covers the
       # Markdown docs with the same US locale.
       - name: Check spelling in Markdown

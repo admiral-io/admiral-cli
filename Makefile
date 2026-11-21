@@ -1,3 +1,4 @@
+QUALITY_BASE ?= origin/master
 SHELL := /usr/bin/env bash
 .DEFAULT_GOAL := all
 
@@ -43,6 +44,10 @@ test-verbose:
 .PHONY: lint # Lint the code.
 lint:
 	./tools/golangci-lint.sh run --timeout 2m30s
+
+.PHONY: quality # Lint for complexity, size and duplication on the lines changed since QUALITY_BASE.
+quality:
+	./tools/golangci-lint.sh run --config .golangci-quality.yml --new-from-rev=$(QUALITY_BASE) --timeout 5m
 
 .PHONY: lint-fix # Lint and fix the code.
 lint-fix:
