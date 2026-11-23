@@ -10,9 +10,8 @@ import (
 	sourcev1 "go.admiral.io/sdk/proto/admiral/api/source/v1"
 )
 
-// Source resolves a source name or ID to the source. Sources are made in
-// the console, and the CLI lists none, so a miss names the ones that
-// exist instead of a command.
+// Source resolves a source name or ID to the source. A miss names the ones
+// that exist, so a mistyped name is corrected in one step.
 func Source(ctx context.Context, c sourcev1.SourceAPIClient, nameOrID string) (*sourcev1.Source, error) {
 	list := func(ctx context.Context, f string) ([]*sourcev1.Source, error) {
 		resp, err := c.ListSources(ctx, &sourcev1.ListSourcesRequest{Filter: f})

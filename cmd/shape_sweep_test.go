@@ -101,7 +101,7 @@ func sweepArgs(files map[string]string) map[string][]string {
 
 		"component deprecate":    {"component", "deprecate", "x:v1", "--reason", "r", "--yes"},
 		"component get":          {"component", "get", "x"},
-		"component import":       {"component", "import", "x", "--repo", "https://example.com/charts", "--version", "1.0.0"},
+		"component import":       {"component", "import", "x", "--source", "x", "--version", "1.0.0"},
 		"component list":         {"component", "list"},
 		"component publish":      {"component", "publish", files["manifests"], "--name", "x", "--kind", "manifests"},
 		"component restore":      {"component", "restore", "x:v1", "--reason", "r", "--yes"},
@@ -125,6 +125,12 @@ func sweepArgs(files map[string]string) map[string][]string {
 		"credential list":                {"credential", "list"},
 		"credential rotate":              {"credential", "rotate", "x", "--token-stdin"},
 		"credential update":              {"credential", "update", "x", "--description", "y"},
+		"source create":                  {"source", "create", "x", "--helm", "https://example.com/charts"},
+		"source delete":                  {"source", "delete", "x", "--yes"},
+		"source get":                     {"source", "get", "x"},
+		"source list":                    {"source", "list"},
+		"source search":                  {"source", "search", "x", "y"},
+		"source update":                  {"source", "update", "x", "--description", "y"},
 
 		"env create":   {"env", "create", "x/x"},
 		"env delete":   {"env", "delete", "x/x", "--yes"},

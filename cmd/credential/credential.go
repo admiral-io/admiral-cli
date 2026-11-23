@@ -25,8 +25,9 @@ A credential is a secret Admiral holds for the organization and presents on its
 behalf: an SSH key for a git host, a username and password for a chart or
 container registry, a bearer token for an HTTPS host, or a GitHub App that
 is exchanged for an installation token per pull. It is never resolved by
-itself: 'component import --credential NAME' attaches it, and it is presented
-only where its type fits the protocol and its allowed hosts permit.
+itself: a source holds it ('source create --credential NAME'), and it is
+presented only for that source's upstream, where its type fits the
+protocol and its allowed hosts permit.
 
 The secret is written on create and on update, never returned: get and
 list show the record, not the material.

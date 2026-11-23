@@ -23,6 +23,7 @@ import (
 	envcmd "go.admiral.io/cli/cmd/env"
 	projectcmd "go.admiral.io/cli/cmd/project"
 	runcmd "go.admiral.io/cli/cmd/run"
+	sourcecmd "go.admiral.io/cli/cmd/source"
 	statecmd "go.admiral.io/cli/cmd/state"
 	internalauth "go.admiral.io/cli/internal/auth"
 	"go.admiral.io/cli/internal/client"
@@ -264,6 +265,7 @@ Documentation: https://admiral.io/docs`,
 		runcmd.NewRunCmd(&clientOpts).Cmd,
 		componentcmd.NewComponentCmd(&clientOpts).Cmd,
 		credentialcmd.NewCredentialCmd(&clientOpts).Cmd,
+		sourcecmd.NewSourceCmd(&clientOpts).Cmd,
 		statecmd.NewStateCmd(&clientOpts).Cmd,
 		agentcmd.NewAgentCmd(&clientOpts).Cmd,
 		authcmd.NewAuthCmd(&clientOpts).Cmd,
