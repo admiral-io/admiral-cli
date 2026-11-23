@@ -2,11 +2,7 @@ package component
 
 import (
 	"fmt"
-	"net/url"
 	"os"
-	"regexp"
-	"slices"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -16,121 +12,69 @@ import (
 	"go.admiral.io/cli/internal/flags"
 	"go.admiral.io/cli/internal/manifest"
 	"go.admiral.io/cli/internal/output"
-	"go.admiral.io/cli/internal/resolve"
 	"go.admiral.io/cli/internal/valuesfile"
 	registryv1 "go.admiral.io/sdk/proto/admiral/api/registry/v1"
 )
 
 func newImportCmd(opts *client.Options) *cobra.Command {
 	var (
-		from        string
-		repo        string
+		source      string
+		artifact    string
 		version     string
-		ref         string
-		path        string
-		name        string
 		tags        []string
 		description string
 		labelStrs   []string
-		credentials []string
 		baseline    string
 	)
 
 	cmd := &cobra.Command{
-		Use:   "import <source> | --from SOURCE [ARTIFACT]",
-		Short: "Publish a copy of an artifact you do not own",
-		Long: `Publish a copy of an artifact you do not own.
+		Use:   "import <name> --source SOURCE --version VERSION",
+		Short: "Import a copy of an artifact you do not own, through a source",
+		Long: `Import a copy of an artifact you do not own, through one of the organization's
+sources.
 
-The registry fetches the artifact, closes it the way publish does, and
-publishes the result as a version with where it came from recorded as its
-provenance. What is published is a copy: the bytes reviewed, whatever
-upstream does to the tag later. Importing the same thing twice yields the
-same version.
+A source is where an upstream is named once: a Helm repository, an OCI
+registry, a Terraform registry namespace or a git repository, created with
+'admiral source create'. An import fetches one artifact through it, under
+the source's own credential and within what the source allows, closes it
+the way publish does, and publishes the result as a version with where it
+came from recorded as its provenance. What is published is a copy: the
+bytes reviewed, whatever upstream does to the tag later. Importing the same
+thing twice yields the same version.
 
---from imports through one of the organization's sources, under the
-source's own grant and within what it allows; no credential is attached.
-ARTIFACT is what the source lists: a chart in a Helm repository, a module
-under a registry namespace, a name under a container registry, or a
-directory of a git repository (none is the root). --version is exact, as
-the source lists it: a tag or branch of a repository, a version of a
-chart or module, a tag of an image. No keyword, range or constraint is
-taken, so latest is a tag literally named latest. In a terminal, what is
-not given is asked from the list, with nothing pre-selected; without one
-the list is in the refusal. A container registry lists no names, so
-under one ARTIFACT is always given.
+<name> is the component. --artifact is what the source lists, and defaults
+to <name>: a chart in a Helm repository, a module under a registry
+namespace, a name under a container registry. For a git repository it is a
+directory, and empty is the root. --version is exact, as the source lists
+it. In a terminal a missing --version is asked from the list, with nothing
+pre-selected; without one the list is in the refusal.
 
-Without --from, the source says what it is:
-
-  oci://HOST/PATH/CHART            a Helm chart in an OCI registry; --version
-  CHART --repo URL                 a Helm chart in an HTTP repository; --version
-  NAMESPACE/NAME/SYSTEM[//DIR]     a module in a Terraform registry, host-
-                                   qualified for a private one; --version
-  URL ending in .git, ssh://, git@ a git repository (github.com/OWNER/REPO
-                                   needs no .git); --ref names a branch,
-                                   tag or commit, --path one directory of it
-  URL ending in .tgz, .zip, ...    an archive
-
-The component is named after the artifact: the chart, the module, the
-repository or the directory. --name says otherwise. A chart's version and
-a module's resolved version become tags whether or not named.
-
-Nothing is fetched with ambient credentials. --credential attaches one the
-organization holds; it is presented only where its type fits the protocol and its
-allowed hosts permit, and a fetch that reaches a host none covers fails
-naming the host.
+A chart's version and a module's resolved version become tags whether or
+not named.
 
 --baseline-values sets the organization's defaults for the artifact, a
 YAML or JSON object laid over its own defaults (a chart's values.yaml, a
 module's variable defaults) before any environment's values. They are part
 of the version: importing with different baseline values is a new version.`,
-		Example: `  # A chart from a repository, as cert-manager
-  admiral component import cert-manager --repo https://charts.jetstack.io --version v1.16.2
+		Example: `  # cert-manager from a Helm repository source
+  admiral component import cert-manager --source jetstack --version v1.16.2
 
-  # A chart from an OCI registry, as argo-cd
-  admiral component import oci://ghcr.io/argoproj/argo-helm/argo-cd --version 7.7.0
+  # Argo Rollouts; in a terminal, --version is asked from what the source lists
+  admiral component import argo-rollouts --source argo-helm
 
-  # A registry module at an exact version, as cloud-armor
-  admiral component import GoogleCloudPlatform/cloud-armor/google --version 8.1.0
+  # One directory of a repository source, under a name of your own
+  admiral component import vpc --source infra --artifact modules/vpc --version v2.1.0
 
-  # One directory of a private repository, over SSH with a deploy key
-  admiral component import git@github.com:acme/infra.git --ref v2.1.0 --path modules/vpc --credential infra-deploy
-
-  # A private chart, under a name of your own, tagged
-  admiral component import oci://ghcr.io/acme/charts/base --version 1.4.0 --name base-upstream --tag stable --credential github
-
-  # A chart with the organization's defaults laid over its own
-  admiral component import cert-manager --repo https://charts.jetstack.io --version v1.16.2 --baseline-values cert-manager.yaml
-
-  # Through a source, exactly what it lists
-  admiral component import --from jetstack cert-manager --version v1.16.2
-
-  # One directory of a repository source at a tag; in a terminal, --version is asked from the list
-  admiral component import --from infra modules/vpc --version v2.1.0
-  admiral component import --from infra modules/vpc`,
-		Args: func(cmd *cobra.Command, args []string) error {
-			if from == "" && len(args) == 0 {
-				return cmderr.UsageHint("For usage, run: "+cmd.CommandPath()+" --help", "missing argument: import <source>")
-			}
-			return flags.MaximumNArgs(1)(cmd, args)
-		},
+  # With the organization's defaults laid over the chart's own
+  admiral component import cert-manager --source jetstack --version v1.16.2 --baseline-values cert-manager.yaml`,
+		Args: flags.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			labels, err := flags.ParseLabels(labelStrs)
-			if err != nil {
-				return err
-			}
-			if name != "" && !manifest.ValidName(name) {
+			name := args[0]
+			if !manifest.ValidName(name) {
 				return cmderr.Usage("component name %q must be lowercase letters, digits and hyphens", name)
 			}
-			var (
-				src       *registryv1.ImportSource
-				importing string
-			)
-			if from == "" {
-				if src, err = parseSource(args[0], sourceFlags{repo: repo, version: version, ref: ref, path: path}); err != nil {
-					return err
-				}
-				importing = args[0]
-			} else if err := throughSourceOnly(repo, ref, path, credentials); err != nil {
+			labels, err := flags.ParseLabels(labelStrs)
+			if err != nil {
 				return err
 			}
 			var baselineJSON string
@@ -139,6 +83,9 @@ of the version: importing with different baseline values is a new version.`,
 					return err
 				}
 			}
+			if source == "" && version == "" {
+				return cmderr.Usage("--version is required; with --source it can be asked from the source's list")
+			}
 
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
@@ -146,36 +93,28 @@ of the version: importing with different baseline values is a new version.`,
 			}
 			defer c.Close() //nolint:errcheck
 
-			if from != "" {
-				artifact := ""
-				if len(args) == 1 {
-					artifact = args[0]
-				}
-				if src, importing, err = fromSource(cmd, c.Source(), from, artifact, version); err != nil {
-					return err
-				}
-			}
-
-			ids := make([]string, 0, len(credentials))
-			for _, cred := range credentials {
-				id, err := resolve.Credential(cmd.Context(), c.Credential(), cred)
-				if err != nil {
-					return err
-				}
-				ids = append(ids, id)
-			}
-
-			p := output.NewPrinter(cmd, opts.OutputFormat)
-			output.Writef(p.Err(), "Importing %s\n", importing)
-			resp, err := c.Registry().ImportComponent(cmd.Context(), &registryv1.ImportComponentRequest{
+			req := &registryv1.ImportComponentRequest{
 				Name:               name,
-				Source:             src,
-				CredentialIds:      ids,
+				Artifact:           artifact,
+				Version:            version,
 				Tags:               tags,
 				Description:        description,
 				Labels:             labels,
 				BaselineValuesJson: baselineJSON,
-			})
+			}
+			importing := name + " " + version
+			if source != "" {
+				through, err := throughSource(cmd, c.Source(), source, name, artifact, version)
+				if err != nil {
+					return err
+				}
+				req.SourceId, req.Artifact, req.Version = through.sourceID, through.artifact, through.version
+				importing = through.label
+			}
+
+			p := output.NewPrinter(cmd, opts.OutputFormat)
+			output.Writef(p.Err(), "Importing %s\n", importing)
+			resp, err := c.Registry().ImportComponent(cmd.Context(), req)
 			if err != nil {
 				return err
 			}
@@ -185,23 +124,21 @@ of the version: importing with different baseline values is a new version.`,
 			if prov := ver.Provenance; prov != nil {
 				output.Writef(p.Err(), "Imported %s%s\n", prov.Uri, atRef(prov.Ref))
 			}
+			if resp.ResolvedFrom != "" {
+				output.Writef(p.Err(), "Resolved %s to %s\n", resp.ResolvedFrom, ver.Provenance.GetRef())
+			}
 			reportPublished(cmd, p, resp.Component, ver, resp.Unchanged)
 			return p.PrintOne(ver, resp.Component.Name+"@"+ver.Digest, versionTable.Render(p, ver))
 		},
 	}
 
-	cmd.Flags().StringVar(&from, "from", "", "the source to import through, by name or ID; the argument is then the artifact it lists")
-	complete.Flag(cmd, "from", complete.Sources(opts))
-	cmd.Flags().StringVar(&repo, "repo", "", "the Helm repository the chart is in; the source is then the chart's name")
-	cmd.Flags().StringVar(&version, "version", "", "the chart's or module's version; through a source, exactly as it lists it")
-	cmd.Flags().StringVar(&ref, "ref", "", "the branch, tag or commit of a git repository (default: its default branch)")
-	cmd.Flags().StringVar(&path, "path", "", "one directory of a git repository")
-	cmd.Flags().StringVar(&name, "name", "", "component name (default: the artifact's own)")
+	cmd.Flags().StringVar(&source, "source", "", "the source to import through, by name or ID")
+	complete.Flag(cmd, "source", complete.Sources(opts))
+	cmd.Flags().StringVar(&artifact, "artifact", "", "what the source lists, when it is not the component's name; for a git source, a directory")
+	cmd.Flags().StringVar(&version, "version", "", "the version, exactly as the source lists it")
 	cmd.Flags().StringArrayVarP(&tags, "tag", "t", nil, "tag to set on the version (repeatable)")
 	cmd.Flags().StringVar(&description, "description", "", "component description, applied when the component is created")
 	flags.Label(cmd, &labelStrs, "label to attach when the component is created (key=value, repeatable)")
-	cmd.Flags().StringArrayVar(&credentials, "credential", nil, "credential the import may present, by name or ID (repeatable)")
-	complete.Flag(cmd, "credential", complete.Credentials(opts))
 	cmd.Flags().StringVar(&baseline, "baseline-values", "", "file of default values (YAML or JSON object) laid over the artifact's own")
 	_ = cmd.MarkFlagFilename("baseline-values", "yaml", "yml", "json")
 
@@ -226,210 +163,9 @@ func readBaseline(file string) (string, error) {
 	return s, nil
 }
 
-// throughSourceOnly refuses the flags that say where and how to fetch when
-// --from already does: a source's location and grant are its own.
-func throughSourceOnly(repo, ref, path string, credentials []string) error {
-	switch {
-	case repo != "":
-		return cmderr.Usage("--repo names a Helm repository, and --from already says where the chart is")
-	case ref != "":
-		return cmderr.Usage("through a source the tag or branch is --version, not --ref")
-	case path != "":
-		return cmderr.Usage("through a source the directory is the ARTIFACT argument, not --path")
-	case len(credentials) > 0:
-		return cmderr.Usage("a source carries its own grant; --credential does not apply with --from")
-	}
-	return nil
-}
-
 func atRef(ref string) string {
 	if ref == "" {
 		return ""
 	}
 	return " at " + ref
-}
-
-type sourceFlags struct {
-	repo, version, ref, path string
-}
-
-// archiveExtensions are what marks a URL as an archive rather than a
-// repository; the same list the registry unpacks.
-var archiveExtensions = []string{".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tar.xz", ".txz", ".tar.zst", ".tzst", ".zip", ".tar"}
-
-// parseSource reads the kind off the source's form, then checks the flags
-// against it: a flag that belongs to another kind is a usage error rather
-// than silently ignored.
-func parseSource(arg string, f sourceFlags) (*registryv1.ImportSource, error) {
-	arg = strings.TrimSpace(arg)
-	if arg == "" {
-		return nil, cmderr.Usage("source is required")
-	}
-	gitOnly := func(kind string) error {
-		if f.ref != "" || f.path != "" {
-			return cmderr.Usage("--ref and --path apply to a git repository, not %s", kind)
-		}
-		return nil
-	}
-	notRepo := func(kind string) error {
-		if f.repo != "" {
-			return cmderr.Usage("--repo names a Helm repository, and %s is not a chart in one", kind)
-		}
-		return nil
-	}
-
-	switch {
-	case f.repo != "":
-		if strings.Contains(arg, "/") || strings.Contains(arg, ":") {
-			return nil, cmderr.Usage("with --repo the source is the chart's name, not %q", arg)
-		}
-		if f.version == "" {
-			return nil, cmderr.Usage("--version is required for a chart")
-		}
-		if err := gitOnly("a chart"); err != nil {
-			return nil, err
-		}
-		return &registryv1.ImportSource{Source: &registryv1.ImportSource_HelmChart_{HelmChart: &registryv1.ImportSource_HelmChart{
-			Repository: f.repo, Chart: arg, Version: f.version,
-		}}}, nil
-
-	case strings.HasPrefix(arg, "oci://"):
-		if f.version == "" {
-			return nil, cmderr.Usage("--version is required for a chart")
-		}
-		if err := gitOnly("a chart"); err != nil {
-			return nil, err
-		}
-		return &registryv1.ImportSource{Source: &registryv1.ImportSource_OciChart{OciChart: &registryv1.ImportSource_OCIChart{
-			Reference: arg, Version: f.version,
-		}}}, nil
-
-	case isGit(arg):
-		if err := notRepo("a git repository"); err != nil {
-			return nil, err
-		}
-		if f.version != "" {
-			return nil, cmderr.Usage("a git repository is pinned with --ref, not --version")
-		}
-		return &registryv1.ImportSource{Source: &registryv1.ImportSource_GitTree_{GitTree: &registryv1.ImportSource_GitTree{
-			Url: gitURL(arg), Ref: f.ref, Path: f.path,
-		}}}, nil
-
-	case isArchive(arg):
-		if err := notRepo("an archive"); err != nil {
-			return nil, err
-		}
-		if err := gitOnly("an archive"); err != nil {
-			return nil, err
-		}
-		if f.version != "" {
-			return nil, cmderr.Usage("an archive has no --version; it is what the URL names")
-		}
-		return &registryv1.ImportSource{Source: &registryv1.ImportSource_Archive_{Archive: &registryv1.ImportSource_Archive{Url: arg}}}, nil
-
-	case isRegistryModule(arg):
-		if err := notRepo("a registry module"); err != nil {
-			return nil, err
-		}
-		if err := gitOnly("a registry module"); err != nil {
-			return nil, err
-		}
-		if f.version == "" {
-			return nil, cmderr.Usage("--version is required for a registry module, and it is exact: a range is what a source tracks, not what an import takes")
-		}
-		return &registryv1.ImportSource{Source: &registryv1.ImportSource_RegistryModule_{RegistryModule: &registryv1.ImportSource_RegistryModule{
-			Address: arg, Version: f.version,
-		}}}, nil
-	}
-	return nil, cmderr.UsageHint(
-		"A chart is oci://... or NAME --repo URL; a module is NAMESPACE/NAME/SYSTEM; a repository ends in .git, is ssh://, or is github.com/OWNER/REPO; an archive ends in .tgz, .zip, ...",
-		"cannot tell what %q is", arg)
-}
-
-// scpLike is the shorthand GitHub hands out, git@github.com:acme/infra.git.
-var scpLike = regexp.MustCompile(`^([^@/:]+@[^:/]+):(.+)$`)
-
-// gitURL is the source as the URI the API takes: the go-getter prefix
-// dropped, the scp shorthand as ssh://.
-func gitURL(s string) string {
-	s = strings.TrimPrefix(s, "git::")
-	if forgeShorthand(s) {
-		return "https://" + s
-	}
-	if m := scpLike.FindStringSubmatch(s); m != nil {
-		return "ssh://" + m[1] + "/" + strings.TrimLeft(m[2], "/")
-	}
-	return s
-}
-
-// forges are the hosts everyone types as host/owner/repo with no scheme and
-// no .git, as Terraform reads github.com/OWNER/REPO.
-var forges = []string{"github.com", "gitlab.com", "bitbucket.org"}
-
-// forgeShorthand reports whether s is a forge repository written without a
-// scheme: github.com/OWNER/REPO, with or without .git. Without this it read as
-// a three-part registry module address, which then refused --ref.
-func forgeShorthand(s string) bool {
-	if strings.Contains(s, "://") {
-		return false
-	}
-	parts := strings.Split(strings.TrimSuffix(strings.TrimSuffix(s, "/"), ".git"), "/")
-	return len(parts) == 3 && parts[1] != "" && parts[2] != "" && slices.Contains(forges, strings.ToLower(parts[0]))
-}
-
-func isGit(s string) bool {
-	if strings.HasPrefix(s, "git::") || strings.HasPrefix(s, "ssh://") || scpLike.MatchString(s) || forgeShorthand(s) {
-		return true
-	}
-	u, err := url.Parse(s)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
-		return false
-	}
-	path := strings.TrimSuffix(u.Path, "/")
-	if strings.HasSuffix(path, ".git") {
-		return true
-	}
-	// The forges everyone types without .git: owner/repo and nothing after.
-	if slices.Contains(forges, strings.ToLower(u.Host)) {
-		return len(strings.Split(strings.Trim(path, "/"), "/")) == 2
-	}
-	return false
-}
-
-func isArchive(s string) bool {
-	u, err := url.Parse(s)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
-		return false
-	}
-	for _, ext := range archiveExtensions {
-		if strings.HasSuffix(u.Path, ext) {
-			return true
-		}
-	}
-	return false
-}
-
-// isRegistryModule is namespace/name/system, host-qualified or not, with
-// an optional //subdirectory: no scheme, no scp-like colon.
-func isRegistryModule(s string) bool {
-	if strings.Contains(s, "://") || strings.Contains(s, "@") {
-		return false
-	}
-	addr, _, _ := strings.Cut(s, "//")
-	parts := strings.Split(addr, "/")
-	if len(parts) == 4 {
-		if !strings.Contains(parts[0], ".") && !strings.Contains(parts[0], ":") {
-			return false // a host has a dot or a port; four bare parts is nothing
-		}
-		parts = parts[1:]
-	}
-	if len(parts) != 3 {
-		return false
-	}
-	for _, p := range parts {
-		if p == "" || strings.Contains(p, ":") {
-			return false
-		}
-	}
-	return true
 }

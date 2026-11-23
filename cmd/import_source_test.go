@@ -32,15 +32,15 @@ func TestImportThroughASourceNeverGuessesTheVersion(t *testing.T) {
 	srv := admiraltest.Start(t)
 	srv.Respond(readySource(t))
 
-	r := sweepRun(t, srv.Addr(), []string{"component", "import", "--from", "src-000000000001", "cert-manager"})
+	r := sweepRun(t, srv.Addr(), []string{"component", "import", "cert-manager", "--source", "src-000000000001"})
 	require.Error(t, r.err)
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(r.err))
 	require.Contains(t, r.err.Error(), "--version required when not running interactively")
 	require.True(t, strings.HasPrefix(cmderr.Hint(r.err), "Pass --version as one of: "), cmderr.Hint(r.err))
 
-	r = sweepRun(t, srv.Addr(), []string{"component", "import", "--from", "src-000000000001", "cert-manager", "--version", "latest"})
+	r = sweepRun(t, srv.Addr(), []string{"component", "import", "cert-manager", "--source", "src-000000000001", "--version", "1.0.0"})
 	require.NoError(t, r.err, r.stderr)
-	require.Contains(t, r.stderr, "Importing cert-manager latest from")
+	require.Contains(t, r.stderr, " 1.0.0 from ")
 }
 
 func TestImportThroughASourceAsksInATerminal(t *testing.T) {
@@ -49,13 +49,13 @@ func TestImportThroughASourceAsksInATerminal(t *testing.T) {
 	srv := admiraltest.Start(t)
 	srv.Respond(readySource(t))
 
-	r := interactiveRun(t, srv.Addr(), "\n", []string{"component", "import", "--from", "src-000000000001", "cert-manager"})
+	r := interactiveRun(t, srv.Addr(), "\n", []string{"component", "import", "cert-manager", "--source", "src-000000000001"})
 	require.Error(t, r.err)
 	require.Contains(t, r.stderr, "Choose the version [number or name]: ")
 	require.Contains(t, r.stderr, "canceled")
 	require.NotContains(t, r.stderr, "Importing")
 
-	r = interactiveRun(t, srv.Addr(), "1\n", []string{"component", "import", "--from", "src-000000000001", "cert-manager"})
+	r = interactiveRun(t, srv.Addr(), "1\n", []string{"component", "import", "cert-manager", "--source", "src-000000000001"})
 	require.NoError(t, r.err, r.stderr)
-	require.Contains(t, r.stderr, "Importing cert-manager ")
+	require.Contains(t, r.stderr, "Importing ")
 }

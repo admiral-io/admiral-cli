@@ -71,72 +71,67 @@ func scripted(t *testing.T, answers *string) (*cobra.Command, *bytes.Buffer) {
 	return cmd, &errOut
 }
 
-func TestFromSourceTakesWhatIsGivenAsIs(t *testing.T) {
+// What is given is taken as is, and the artifact defaults to the
+// component's name everywhere but a git repository, whose root is empty.
+func TestThroughSourceTakesWhatIsGivenAsIs(t *testing.T) {
 	c := &sourceClient{source: sourceOf(sourcev1.Source_KIND_HELM_REPO, "https://charts.jetstack.io")}
 	cmd, _ := scripted(t, nil)
-	src, importing, err := fromSource(cmd, c, "upstream", "cert-manager", "latest")
+	got, err := throughSource(cmd, c, "upstream", "cert-manager", "", "v1.16.2")
 	require.NoError(t, err)
-	from := src.GetFromSource()
-	require.NotNil(t, from)
-	assert.Equal(t, "src-000000000001", from.SourceId)
-	assert.Equal(t, "cert-manager", from.Artifact)
-	assert.Equal(t, "latest", from.Version, "latest is a tag literally named latest")
-	assert.Equal(t, "cert-manager latest from upstream", importing)
+	assert.Equal(t, "src-000000000001", got.sourceID)
+	assert.Equal(t, "cert-manager", got.artifact, "the artifact defaults to the component's name")
+	assert.Equal(t, "v1.16.2", got.version)
+	assert.Equal(t, "cert-manager v1.16.2 from upstream", got.label)
 	assert.Empty(t, c.asked, "nothing is listed when everything is given")
 
+	got, err = throughSource(cmd, c, "upstream", "certs", "cert-manager", "v1.16.2")
+	require.NoError(t, err)
+	assert.Equal(t, "cert-manager", got.artifact, "--artifact wins over the name")
+
 	c = &sourceClient{source: sourceOf(sourcev1.Source_KIND_GIT, "https://github.com/acme/infra")}
-	src, importing, err = fromSource(cmd, c, "upstream", "/modules/vpc/", "v2.1.0")
+	got, err = throughSource(cmd, c, "upstream", "vpc", "/modules/vpc/", "v2.1.0")
 	require.NoError(t, err)
-	assert.Equal(t, "modules/vpc", src.GetFromSource().Artifact)
-	assert.Equal(t, "modules/vpc v2.1.0 from upstream", importing)
-	src, importing, err = fromSource(cmd, c, "upstream", "", "v2.1.0")
+	assert.Equal(t, "modules/vpc", got.artifact)
+	assert.Equal(t, "modules/vpc v2.1.0 from upstream", got.label)
+	got, err = throughSource(cmd, c, "upstream", "infra", "", "v2.1.0")
 	require.NoError(t, err)
-	assert.Equal(t, "", src.GetFromSource().Artifact, "a git repository's root is the empty path")
-	assert.Equal(t, "https://github.com/acme/infra v2.1.0 from upstream", importing)
+	assert.Equal(t, "", got.artifact, "a git repository's root is the empty path, not the component's name")
+	assert.Equal(t, "https://github.com/acme/infra v2.1.0 from upstream", got.label)
 }
 
-func TestFromSourceRefusesWhatItCannotAsk(t *testing.T) {
+func TestThroughSourceRefusesWhatItCannotUse(t *testing.T) {
 	cmd, _ := scripted(t, nil)
 
 	needs := sourceOf(sourcev1.Source_KIND_HELM_REPO, "https://charts.jetstack.io")
 	needs.Status, needs.StatusReason = sourcev1.Source_STATUS_NEEDS_ATTENTION, "the credential no longer reaches it"
-	_, _, err := fromSource(cmd, &sourceClient{source: needs}, "upstream", "cert-manager", "v1")
+	_, err := throughSource(cmd, &sourceClient{source: needs}, "upstream", "cert-manager", "", "v1")
 	require.EqualError(t, err, "source upstream needs attention: the credential no longer reaches it")
 	assert.Equal(t, cmderr.ExitError, cmderr.Code(err))
 
-	oci := &sourceClient{source: sourceOf(sourcev1.Source_KIND_OCI_REGISTRY, "oci://ghcr.io/argoproj/argo-helm")}
-	_, _, err = fromSource(cmd, oci, "upstream", "", "7.7.0")
-	require.ErrorContains(t, err, "name the artifact under oci://ghcr.io/argoproj/argo-helm")
-	assert.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
-
-	_, _, err = fromSource(cmd, &sourceClient{source: sourceOf(sourcev1.Source_KIND_UNSPECIFIED, "x")}, "upstream", "a", "1")
+	_, err = throughSource(cmd, &sourceClient{source: sourceOf(sourcev1.Source_KIND_UNSPECIFIED, "x")}, "upstream", "a", "", "1")
 	require.ErrorContains(t, err, "cannot import from")
 
 	miss := &sourceClient{source: sourceOf(sourcev1.Source_KIND_GIT, "x")}
-	_, _, err = fromSource(cmd, miss, "other", "", "v1")
+	_, err = throughSource(cmd, miss, "other", "infra", "", "v1")
 	require.EqualError(t, err, `source "other" not found`)
 	assert.Equal(t, "Sources: upstream", cmderr.Hint(err))
 }
 
-func TestFromSourceWithoutATerminalListsInsteadOfAsking(t *testing.T) {
+// The version is never guessed: without a terminal the refusal lists what
+// the source offers; in one, the list is asked with nothing pre-selected,
+// and an empty answer imports nothing.
+func TestThroughSourceNeverGuessesTheVersion(t *testing.T) {
 	cmd, _ := scripted(t, nil)
 	helm := &sourceClient{
-		source:    sourceOf(sourcev1.Source_KIND_HELM_REPO, "https://charts.jetstack.io"),
-		artifacts: []*sourcev1.SourceArtifact{{Name: "cert-manager", LatestVersion: "v1.16.2"}, {Name: "trust-manager"}},
-		versions:  []*sourcev1.SourceVersion{{Name: "v1.16.2"}, {Name: "v1.16.1"}},
+		source:   sourceOf(sourcev1.Source_KIND_HELM_REPO, "https://charts.jetstack.io"),
+		versions: []*sourcev1.SourceVersion{{Name: "v1.16.2"}, {Name: "v1.16.1"}},
 	}
-	_, _, err := fromSource(cmd, helm, "upstream", "", "")
-	require.EqualError(t, err, "ARTIFACT required when not running interactively")
-	assert.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
-	assert.Equal(t, "Pass ARTIFACT as one of: cert-manager, trust-manager", cmderr.Hint(err))
-
-	_, _, err = fromSource(cmd, helm, "upstream", "cert-manager", "")
+	_, err := throughSource(cmd, helm, "upstream", "cert-manager", "", "")
 	require.EqualError(t, err, "--version required when not running interactively")
+	assert.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 	assert.Equal(t, "Pass --version as one of: v1.16.2, v1.16.1", cmderr.Hint(err))
 	assert.Equal(t, []string{"cert-manager"}, helm.asked)
-}
 
-func TestFromSourceInATerminalAsksAndNeverPreselects(t *testing.T) {
 	git := &sourceClient{
 		source: sourceOf(sourcev1.Source_KIND_GIT, "https://github.com/acme/infra"),
 		versions: []*sourcev1.SourceVersion{
@@ -146,27 +141,14 @@ func TestFromSourceInATerminalAsksAndNeverPreselects(t *testing.T) {
 	}
 	answers := "main\n"
 	cmd, errOut := scripted(t, &answers)
-	src, _, err := fromSource(cmd, git, "upstream", "modules/vpc", "")
+	got, err := throughSource(cmd, git, "upstream", "vpc", "modules/vpc", "")
 	require.NoError(t, err)
-	assert.Equal(t, "main", src.GetFromSource().Version)
+	assert.Equal(t, "main", got.version)
 	assert.Contains(t, errOut.String(), "  1. v2.1.0  (version 0123456)\n  2. main  (branch fedcba9)\n")
 	assert.Equal(t, []string{""}, git.asked, "a repository's versions do not depend on the path")
 
 	answers = "\n"
 	cmd, _ = scripted(t, &answers)
-	_, _, err = fromSource(cmd, git, "upstream", "modules/vpc", "")
+	_, err = throughSource(cmd, git, "upstream", "vpc", "modules/vpc", "")
 	require.ErrorContains(t, err, "canceled")
-
-	helm := &sourceClient{
-		source:    sourceOf(sourcev1.Source_KIND_TERRAFORM_REGISTRY, "registry.opentofu.org/terraform-aws-modules"),
-		artifacts: []*sourcev1.SourceArtifact{{Name: "vpc/aws"}, {Name: "eks/aws"}},
-		versions:  []*sourcev1.SourceVersion{{Name: "5.1.0"}},
-	}
-	answers = "2\n1\n"
-	cmd, _ = scripted(t, &answers)
-	src, importing, err := fromSource(cmd, helm, "upstream", "", "")
-	require.NoError(t, err)
-	assert.Equal(t, "eks/aws", src.GetFromSource().Artifact)
-	assert.Equal(t, "5.1.0", src.GetFromSource().Version)
-	assert.Equal(t, "eks/aws 5.1.0 from upstream", importing)
 }

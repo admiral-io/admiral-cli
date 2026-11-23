@@ -10,51 +10,45 @@ import (
 	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/input"
 	"go.admiral.io/cli/internal/resolve"
-	registryv1 "go.admiral.io/sdk/proto/admiral/api/registry/v1"
 	sourcev1 "go.admiral.io/sdk/proto/admiral/api/source/v1"
 )
 
-// fromSource builds an import through one of the organization's sources:
-// the artifact as the source lists it, at a version spelled exactly as the
-// source lists that. What is not given is asked for in a terminal, from
-// the list, with nothing pre-selected; without a terminal the list is in
-// the refusal. The version is never guessed, so a branch is imported only
-// when someone picked it over the tags listed with it, and `latest` is a
-// tag literally named latest.
-func fromSource(cmd *cobra.Command, c sourcev1.SourceAPIClient, from, artifact, version string) (*registryv1.ImportSource, string, error) {
+// through is an import through one of the organization's sources, as the
+// request carries it.
+type through struct {
+	sourceID, artifact, version string
+	label                       string
+}
+
+// throughSource resolves the source and fills what the import leaves out:
+// the artifact defaults to the component's name, except in a git
+// repository, where empty is the root. A missing version is asked for in a
+// terminal, from the source's list, with nothing pre-selected; without a
+// terminal the list is in the refusal. The version is never guessed, so a
+// branch is imported only when someone picked it over the tags listed with
+// it.
+func throughSource(cmd *cobra.Command, c sourcev1.SourceAPIClient, nameOrID, name, artifact, version string) (through, error) {
 	ctx := cmd.Context()
-	src, err := resolve.Source(ctx, c, from)
+	src, err := resolve.Source(ctx, c, nameOrID)
 	if err != nil {
-		return nil, "", err
+		return through{}, err
 	}
 	if src.Status != sourcev1.Source_STATUS_READY {
-		return nil, "", cmderr.WithHint(
+		return through{}, cmderr.WithHint(
 			fmt.Errorf("source %s needs attention: %s", src.Name, src.StatusReason),
-			"Fix the source under Sources in the console, then import again.")
+			"Run 'admiral source get "+src.Name+"' to see why, then import again.")
 	}
 
 	artifact = strings.Trim(strings.TrimSpace(artifact), "/")
 	switch src.Kind {
 	case sourcev1.Source_KIND_GIT:
 		// A path in the repository; empty is the root.
-	case sourcev1.Source_KIND_OCI_REGISTRY:
+	case sourcev1.Source_KIND_HELM_REPO, sourcev1.Source_KIND_OCI_REGISTRY, sourcev1.Source_KIND_TERRAFORM_REGISTRY:
 		if artifact == "" {
-			return nil, "", cmderr.Usage("a container registry lists nothing: name the artifact under %s", src.Location)
-		}
-	case sourcev1.Source_KIND_HELM_REPO, sourcev1.Source_KIND_TERRAFORM_REGISTRY:
-		if artifact == "" {
-			options, err := artifactsOf(ctx, c, src)
-			if err != nil {
-				return nil, "", err
-			}
-			picked, err := input.Choose(cmd, "ARTIFACT", "artifact", options)
-			if err != nil {
-				return nil, "", err
-			}
-			artifact = picked.Name
+			artifact = name
 		}
 	default:
-		return nil, "", fmt.Errorf("source %s is of a kind this command cannot import from", src.Name)
+		return through{}, fmt.Errorf("source %s is of a kind this command cannot import from", src.Name)
 	}
 
 	if version == "" {
@@ -66,11 +60,11 @@ func fromSource(cmd *cobra.Command, c sourcev1.SourceAPIClient, from, artifact, 
 		}
 		options, err := versionsOf(ctx, c, src, versionsArtifact)
 		if err != nil {
-			return nil, "", err
+			return through{}, err
 		}
 		picked, err := input.Choose(cmd, "--version", "version", options)
 		if err != nil {
-			return nil, "", err
+			return through{}, err
 		}
 		version = picked.Name
 	}
@@ -79,35 +73,10 @@ func fromSource(cmd *cobra.Command, c sourcev1.SourceAPIClient, from, artifact, 
 	if what == "" {
 		what = src.Location
 	}
-	return &registryv1.ImportSource{Source: &registryv1.ImportSource_FromSource_{FromSource: &registryv1.ImportSource_FromSource{
-		SourceId: src.Id, Artifact: artifact, Version: version,
-	}}}, fmt.Sprintf("%s %s from %s", what, version, src.Name), nil
-}
-
-// artifactsOf is what the source offers within what it allows, as the
-// platform's cache serves it.
-func artifactsOf(ctx context.Context, c sourcev1.SourceAPIClient, src *sourcev1.Source) ([]input.Option, error) {
-	var out []input.Option
-	token := ""
-	for {
-		resp, err := c.ListSourceArtifacts(ctx, &sourcev1.ListSourceArtifactsRequest{
-			SourceId: src.Id, PageSize: 200, PageToken: token,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("listing what %s offers: %w", src.Name, err)
-		}
-		for _, a := range resp.Artifacts {
-			detail := a.Description
-			if a.LatestVersion != "" {
-				detail = "latest " + a.LatestVersion
-			}
-			out = append(out, input.Option{Name: a.Name, Detail: detail})
-		}
-		if resp.NextPageToken == "" {
-			return out, nil
-		}
-		token = resp.NextPageToken
-	}
+	return through{
+		sourceID: src.Id, artifact: artifact, version: version,
+		label: fmt.Sprintf("%s %s from %s", what, version, src.Name),
+	}, nil
 }
 
 // versionsOf is what the source lists for the artifact, in the order the
