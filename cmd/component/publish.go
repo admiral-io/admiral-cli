@@ -220,7 +220,7 @@ func publishOne(cmd *cobra.Command, p *output.Printer, c sdkclient.AdmiralClient
 		Bundle: req.packed.Bytes,
 	})
 	if err != nil {
-		return nil, err
+		return nil, withMoveHint(err, req.name)
 	}
 	reportPublished(cmd, p, resp.Component, resp.Version, resp.Unchanged)
 	return resp, nil

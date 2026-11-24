@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
@@ -82,7 +84,7 @@ console, where the repository is picked from the installation's list.`,
 
 			resp, err := c.Source().CreateSource(cmd.Context(), &sourcev1.CreateSourceRequest{Source: src})
 			if err != nil {
-				return err
+				return createRefused(err, integration != "")
 			}
 			p := output.NewPrinter(cmd, opts.OutputFormat)
 			return p.PrintOne(resp.Source, resp.Source.Name, sourceTable.Render(p, resp.Source))
@@ -126,4 +128,15 @@ func locationOf(cmd *cobra.Command, locations map[string]*string) (sourcev1.Sour
 		return 0, "", cmderr.Usage("%s needs a location", given[0])
 	}
 	return kind, where, nil
+}
+
+// createRefused explains a refused create. The API answers a caller who may
+// not create sources with NotFound, so as not to confirm what exists. An
+// integration is passed by ID unchecked, so its NotFound is left alone.
+func createRefused(err error, namedIntegration bool) error {
+	if namedIntegration || status.Code(err) != codes.NotFound {
+		return err
+	}
+	return cmderr.WithHint(err, "Creating a source needs permission in this organization. "+
+		"An organization admin can create it, or grant you source creation.")
 }
