@@ -3,8 +3,11 @@ package component
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"go.admiral.io/cli/internal/client"
 	"go.admiral.io/cli/internal/cmderr"
@@ -129,6 +132,16 @@ func originTo(cmd *cobra.Command, c sourcev1.SourceAPIClient, name, source, arti
 	return &registryv1.ComponentOrigin{Kind: &registryv1.ComponentOrigin_Source{Source: &registryv1.SourceOrigin{
 		SourceId: src.Id, Artifact: artifact,
 	}}}, names, nil
+}
+
+// withMoveHint adds the command that moves a component's origin to the
+// server's refusal of a version that does not come from it.
+func withMoveHint(err error, name string) error {
+	if status.Code(err) != codes.FailedPrecondition || !strings.Contains(status.Convert(err).Message(), "SetComponentOrigin") {
+		return err
+	}
+	return cmderr.WithHint(err, fmt.Sprintf(
+		"An organization admin moves it with 'admiral component set-origin %s --source SOURCE', or '--published' for publishing by hand.", name))
 }
 
 // originLabel is an origin as a table cell: the source by name where it is

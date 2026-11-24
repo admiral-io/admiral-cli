@@ -132,7 +132,7 @@ A new version imported without --baseline-values keeps the previous one's.`,
 			output.Writef(p.Err(), "Importing %s\n", through.label)
 			resp, err := c.Registry().ImportComponent(cmd.Context(), req)
 			if err != nil {
-				return err
+				return withMoveHint(err, name)
 			}
 			ver := resp.Version
 			// The source's own digest is in the version's provenance; the

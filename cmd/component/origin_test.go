@@ -95,3 +95,13 @@ func TestSetOriginRefusesLocallyWhatItCan(t *testing.T) {
 		})
 	}
 }
+
+func TestWithMoveHintNamesTheCommand(t *testing.T) {
+	refused := status.Error(codes.FailedPrecondition, "cert-manager is published by hand; publish a new version, or ask an organization admin to move its origin with SetComponentOrigin")
+	got := withMoveHint(refused, "cert-manager")
+	assert.Contains(t, cmderr.Hint(got), "admiral component set-origin cert-manager --source SOURCE")
+	assert.Equal(t, codes.FailedPrecondition, status.Code(got), "the server's refusal is kept")
+
+	other := status.Error(codes.FailedPrecondition, "source jetstack needs attention: unreachable")
+	assert.Empty(t, cmderr.Hint(withMoveHint(other, "cert-manager")), "only an origin refusal gets the hint")
+}

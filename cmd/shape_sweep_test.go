@@ -100,6 +100,7 @@ func sweepArgs(files map[string]string) map[string][]string {
 		"changeset values":   {"changeset", "values", cs, "x"},
 
 		"component deprecate":    {"component", "deprecate", "x:v1", "--reason", "r", "--yes"},
+		"component describe":     {"component", "describe", "x"},
 		"component get":          {"component", "get", "x"},
 		"component import":       {"component", "import", "x", "--source", "x", "--version", "1.0.0"},
 		"component list":         {"component", "list"},
