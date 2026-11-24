@@ -6,10 +6,13 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"go.admiral.io/cli/internal/cmderr"
 	"go.admiral.io/cli/internal/input"
 	"go.admiral.io/cli/internal/resolve"
+	registryv1 "go.admiral.io/sdk/proto/admiral/api/registry/v1"
 	sourcev1 "go.admiral.io/sdk/proto/admiral/api/source/v1"
 )
 
@@ -39,16 +42,9 @@ func throughSource(cmd *cobra.Command, c sourcev1.SourceAPIClient, nameOrID, nam
 			"Run 'admiral source get "+src.Name+"' to see why, then import again.")
 	}
 
-	artifact = strings.Trim(strings.TrimSpace(artifact), "/")
-	switch src.Kind {
-	case sourcev1.Source_KIND_GIT:
-		// A path in the repository; empty is the root.
-	case sourcev1.Source_KIND_HELM_REPO, sourcev1.Source_KIND_OCI_REGISTRY, sourcev1.Source_KIND_TERRAFORM_REGISTRY:
-		if artifact == "" {
-			artifact = name
-		}
-	default:
-		return through{}, fmt.Errorf("source %s is of a kind this command cannot import from", src.Name)
+	artifact, err = artifactIn(src, name, artifact)
+	if err != nil {
+		return through{}, err
 	}
 
 	if version == "" {
@@ -77,6 +73,49 @@ func throughSource(cmd *cobra.Command, c sourcev1.SourceAPIClient, nameOrID, nam
 		sourceID: src.Id, artifact: artifact, version: version,
 		label: fmt.Sprintf("%s %s from %s", what, version, src.Name),
 	}, nil
+}
+
+// artifactIn is the artifact as the request carries it: what was given,
+// or the component's name everywhere but a git repository, whose root is
+// empty.
+func artifactIn(src *sourcev1.Source, name, artifact string) (string, error) {
+	artifact = strings.Trim(strings.TrimSpace(artifact), "/")
+	switch src.Kind {
+	case sourcev1.Source_KIND_GIT:
+		return artifact, nil
+	case sourcev1.Source_KIND_HELM_REPO, sourcev1.Source_KIND_OCI_REGISTRY, sourcev1.Source_KIND_TERRAFORM_REGISTRY:
+		if artifact == "" {
+			return name, nil
+		}
+		return artifact, nil
+	default:
+		return "", fmt.Errorf("source %s is of a kind this command cannot import from", src.Name)
+	}
+}
+
+// originOf is the source and artifact a bump goes through, the ones the
+// component's origin names. A name that is not a component yet needs
+// --source, and a component published by hand is bumped by publishing.
+func originOf(ctx context.Context, c registryv1.RegistryAPIClient, name string) (sourceID, artifact string, err error) {
+	resp, err := c.GetComponent(ctx, &registryv1.GetComponentRequest{Component: name})
+	if status.Code(err) == codes.NotFound {
+		return "", "", cmderr.Usage("%s is not a component yet; name the source to import it from with --source", name)
+	}
+	if err != nil {
+		return "", "", fmt.Errorf("looking up component %q: %w", name, err)
+	}
+	moveHint := "An organization admin can move it with 'admiral component set-origin " + name + " --source SOURCE'."
+	switch o := resp.Component.GetOrigin().GetKind().(type) {
+	case *registryv1.ComponentOrigin_Source:
+		return o.Source.SourceId, o.Source.Artifact, nil
+	case *registryv1.ComponentOrigin_Published:
+		return "", "", cmderr.WithHint(
+			fmt.Errorf("%s is published by hand, so it is not imported through a source", name),
+			"Publish its next version with 'admiral component publish'. "+moveHint)
+	default:
+		return "", "", cmderr.WithHint(fmt.Errorf("%s has no origin yet", name),
+			"Name the source with --source. "+moveHint)
+	}
 }
 
 // versionsOf is what the source lists for the artifact, in the order the

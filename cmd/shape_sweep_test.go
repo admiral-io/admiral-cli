@@ -105,6 +105,7 @@ func sweepArgs(files map[string]string) map[string][]string {
 		"component list":         {"component", "list"},
 		"component publish":      {"component", "publish", files["manifests"], "--name", "x", "--kind", "manifests"},
 		"component restore":      {"component", "restore", "x:v1", "--reason", "r", "--yes"},
+		"component set-origin":   {"component", "set-origin", "x", "--source", "x", "--yes"},
 		"component revoke":       {"component", "revoke", "x:v1", "--reason", "r", "--yes"},
 		"component tag":          {"component", "tag", "x:v2", "--digest", "sha256:" + strings.Repeat("ab", 32)},
 		"component untag":        {"component", "untag", "x:v1", "--yes"},

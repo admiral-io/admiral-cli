@@ -13,7 +13,7 @@ import (
 func newGetCmd(opts *client.Options) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get <name>",
-		Short: "Get a component and its tags",
+		Short: "Get a component, its tags and where its versions come from",
 		Example: `  admiral component get cloud-sql
   admiral component get cmp-7q2k9m4x8p1c
 
@@ -33,7 +33,8 @@ func newGetCmd(opts *client.Options) *cobra.Command {
 				return err
 			}
 			p := output.NewPrinter(cmd, opts.OutputFormat)
-			return p.PrintOne(resp.Component, resp.Component.Name, componentTable.Render(p, resp.Component))
+			names := sourceNames(cmd, c.Source(), resp.Component)
+			return p.PrintOne(resp.Component, resp.Component.Name, componentTableWith(names).Render(p, resp.Component))
 		},
 	}
 

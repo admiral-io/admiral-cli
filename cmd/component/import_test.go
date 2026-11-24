@@ -23,11 +23,7 @@ func TestImportRefusesLocallyWhatItCan(t *testing.T) {
 	assert.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
 
 	_, err = run(t, "import")
-	require.EqualError(t, err, "missing argument: import <name> --source SOURCE --version VERSION")
-
-	_, err = run(t, "import", "cert-manager")
-	require.ErrorContains(t, err, "--version is required")
-	assert.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
+	require.EqualError(t, err, "missing argument: import <name> --version VERSION [--source SOURCE]")
 
 	bad := filepath.Join(t.TempDir(), "baseline.yaml")
 	require.NoError(t, os.WriteFile(bad, []byte("- a\n- b\n"), 0o644))
