@@ -9,16 +9,22 @@ import (
 )
 
 // componentTable is the narrow row shared by list, get and the echo after
-// publish.
-var componentTable = output.Table[*registryv1.Component]{
-	{Header: "NAME", Cell: func(c *registryv1.Component) string { return c.Name }},
-	{Header: "TAGS", Cell: func(c *registryv1.Component) string { return formatTags(c.Tags) }},
-	{Header: "STATUS", Cell: func(c *registryv1.Component) string { return output.FormatEnumKebab(c.Status) }},
-	{Header: "DESCRIPTION", Truncate: 40, Cell: func(c *registryv1.Component) string { return c.Description }},
-	{Header: "LABELS", Cell: func(c *registryv1.Component) string { return output.FormatLabels(c.Labels) }},
-	{Header: "AGE", Cell: func(c *registryv1.Component) string { return output.FormatAge(c.CreatedAt) }},
-	{Header: "ID", Wide: true, Cell: func(c *registryv1.Component) string { return c.Id }},
-	{Header: "CREATED-BY", Wide: true, Cell: func(c *registryv1.Component) string { return output.FormatActor(c.CreatedBy) }},
+// publish, with origins shown by source ID.
+var componentTable = componentTableWith(nil)
+
+// componentTableWith shows each origin's source by the name names gives it.
+func componentTableWith(names map[string]string) output.Table[*registryv1.Component] {
+	return output.Table[*registryv1.Component]{
+		{Header: "NAME", Cell: func(c *registryv1.Component) string { return c.Name }},
+		{Header: "TAGS", Cell: func(c *registryv1.Component) string { return formatTags(c.Tags) }},
+		{Header: "ORIGIN", Cell: func(c *registryv1.Component) string { return originLabel(c.Origin, names) }},
+		{Header: "STATUS", Cell: func(c *registryv1.Component) string { return output.FormatEnumKebab(c.Status) }},
+		{Header: "DESCRIPTION", Truncate: 40, Cell: func(c *registryv1.Component) string { return c.Description }},
+		{Header: "LABELS", Cell: func(c *registryv1.Component) string { return output.FormatLabels(c.Labels) }},
+		{Header: "AGE", Cell: func(c *registryv1.Component) string { return output.FormatAge(c.CreatedAt) }},
+		{Header: "ID", Wide: true, Cell: func(c *registryv1.Component) string { return c.Id }},
+		{Header: "CREATED-BY", Wide: true, Cell: func(c *registryv1.Component) string { return output.FormatActor(c.CreatedBy) }},
+	}
 }
 
 // versionTable is what a publish answers with.

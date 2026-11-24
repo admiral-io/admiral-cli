@@ -38,6 +38,7 @@ func TestPositionalUsageErrors(t *testing.T) {
 		{[]string{"deprecate", "--reason", "x"}, "missing argument: deprecate <name>[:<tag>|@<digest>] --reason <text>"},
 		{[]string{"revoke", "--reason", "x"}, "missing argument: revoke <name>:<tag>|<name>@<digest> --reason <text>"},
 		{[]string{"untag"}, "missing argument: untag <name>:<tag>"},
+		{[]string{"set-origin", "--published"}, "missing argument: set-origin <name> (--source SOURCE [--artifact ARTIFACT] | --published)"},
 		{[]string{"version", "list"}, "missing argument: list <name>"},
 		{[]string{"version", "get"}, "missing argument: get <name>:<tag> | <name>@<digest|id>"},
 	}

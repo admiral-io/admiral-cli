@@ -28,7 +28,7 @@ func newImportCmd(opts *client.Options) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "import <name> --source SOURCE --version VERSION",
+		Use:   "import <name> --version VERSION [--source SOURCE]",
 		Short: "Import a copy of an artifact you do not own, through a source",
 		Long: `Import a copy of an artifact you do not own, through one of the organization's
 sources.
@@ -42,12 +42,19 @@ came from recorded as its provenance. What is published is a copy: the
 bytes reviewed, whatever upstream does to the tag later. Importing the same
 thing twice yields the same version.
 
-<name> is the component. --artifact is what the source lists, and defaults
-to <name>: a chart in a Helm repository, a module under a registry
-namespace, a name under a container registry. For a git repository it is a
-directory, and empty is the root. --version is exact, as the source lists
-it. In a terminal a missing --version is asked from the list, with nothing
-pre-selected; without one the list is in the refusal.
+<name> is the component. --source is needed when the import creates it;
+after that the component remembers its source and artifact, and a new
+version is imported with only --version. --artifact is what the source
+lists, and defaults to <name>: a chart in a Helm repository, a module under
+a registry namespace, a name under a container registry. For a git
+repository it is a directory, and empty is the root.
+
+--version is an exact version as the source lists it, latest, or a semver
+range such as ^2, ~2.39 or ">=2.39 <3". latest and a range are resolved
+once, against what the upstream lists now, and the exact version is what
+is imported and printed. latest skips pre-releases. In a terminal a missing
+--version is asked from the list, with nothing pre-selected; without one
+the list is in the refusal.
 
 A chart's version and a module's resolved version become tags whether or
 not named.
@@ -55,12 +62,19 @@ not named.
 --baseline-values sets the organization's defaults for the artifact, a
 YAML or JSON object laid over its own defaults (a chart's values.yaml, a
 module's variable defaults) before any environment's values. They are part
-of the version: importing with different baseline values is a new version.`,
+of the version: importing with different baseline values is a new version.
+A new version imported without --baseline-values keeps the previous one's.`,
 		Example: `  # cert-manager from a Helm repository source
   admiral component import cert-manager --source jetstack --version v1.16.2
 
   # Argo Rollouts; in a terminal, --version is asked from what the source lists
   admiral component import argo-rollouts --source argo-helm
+
+  # A range, resolved to the newest 2.39 patch the source lists
+  admiral component import argo-rollouts --source argo-helm --version '~2.39'
+
+  # The next version of a component imported before, through its own source
+  admiral component import argo-rollouts --version '^2'
 
   # One directory of a repository source, under a name of your own
   admiral component import vpc --source infra --artifact modules/vpc --version v2.1.0
@@ -83,10 +97,6 @@ of the version: importing with different baseline values is a new version.`,
 					return err
 				}
 			}
-			if source == "" && version == "" {
-				return cmderr.Usage("--version is required; with --source it can be asked from the source's list")
-			}
-
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
 				return err
@@ -102,18 +112,24 @@ of the version: importing with different baseline values is a new version.`,
 				Labels:             labels,
 				BaselineValuesJson: baselineJSON,
 			}
-			importing := name + " " + version
-			if source != "" {
-				through, err := throughSource(cmd, c.Source(), source, name, artifact, version)
+			if source == "" {
+				originSource, originArtifact, err := originOf(cmd.Context(), c.Registry(), name)
 				if err != nil {
 					return err
 				}
-				req.SourceId, req.Artifact, req.Version = through.sourceID, through.artifact, through.version
-				importing = through.label
+				source = originSource
+				if artifact == "" {
+					artifact = originArtifact
+				}
 			}
+			through, err := throughSource(cmd, c.Source(), source, name, artifact, version)
+			if err != nil {
+				return err
+			}
+			req.SourceId, req.Artifact, req.Version = through.sourceID, through.artifact, through.version
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
-			output.Writef(p.Err(), "Importing %s\n", importing)
+			output.Writef(p.Err(), "Importing %s\n", through.label)
 			resp, err := c.Registry().ImportComponent(cmd.Context(), req)
 			if err != nil {
 				return err
@@ -132,10 +148,10 @@ of the version: importing with different baseline values is a new version.`,
 		},
 	}
 
-	cmd.Flags().StringVar(&source, "source", "", "the source to import through, by name or ID")
+	cmd.Flags().StringVar(&source, "source", "", "the source to import through, by name or ID; a new version of an imported component uses its own")
 	complete.Flag(cmd, "source", complete.Sources(opts))
 	cmd.Flags().StringVar(&artifact, "artifact", "", "what the source lists, when it is not the component's name; for a git source, a directory")
-	cmd.Flags().StringVar(&version, "version", "", "the version, exactly as the source lists it")
+	cmd.Flags().StringVar(&version, "version", "", "the version: exact as the source lists it, latest, or a semver range")
 	cmd.Flags().StringArrayVarP(&tags, "tag", "t", nil, "tag to set on the version (repeatable)")
 	cmd.Flags().StringVar(&description, "description", "", "component description, applied when the component is created")
 	flags.Label(cmd, &labelStrs, "label to attach when the component is created (key=value, repeatable)")

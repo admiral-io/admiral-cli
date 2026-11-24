@@ -46,6 +46,7 @@ or NAME@ID (cloud-sql@ver-7q2k9m4x8p1c).`,
 		newStatusCmd(opts, revokeVerb),
 		newStatusCmd(opts, restoreVerb),
 		newVersionCmd(opts),
+		newSetOriginCmd(opts),
 	)
 
 	root.Cmd = cmd

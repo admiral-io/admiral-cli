@@ -60,7 +60,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 				Items:         output.Messages(comps),
 				Name:          func(i int) string { return comps[i].Name },
 				NextPageToken: next,
-			}, componentTable.Render(p, comps...))
+			}, componentTableWith(sourceNames(cmd, c.Source(), comps...)).Render(p, comps...))
 		},
 	}
 
