@@ -35,6 +35,7 @@ func CheckKey(key string) error {
 	if IsValidKey(key) {
 		return nil
 	}
+
 	return cmderr.Usage("unknown config key %q (valid keys: %s)", key, strings.Join(ValidKeys, ", "))
 }
 

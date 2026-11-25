@@ -35,10 +35,12 @@ const (
 func run(t *testing.T, args ...string) error {
 	t.Helper()
 	os.Unsetenv(credentials.EnvAPIKey)
+
 	root := NewAgentCmd(&client.Options{ConfigDir: t.TempDir()})
 	root.Cmd.SetOut(&bytes.Buffer{})
 	root.Cmd.SetErr(&bytes.Buffer{})
 	root.Cmd.SetArgs(args)
+
 	return root.Cmd.Execute()
 }
 
@@ -72,9 +74,11 @@ func (m *saClient) GetServiceAccount(_ context.Context, req *serviceaccountv1.Ge
 	if m.err != nil {
 		return nil, m.err
 	}
+
 	if req.GetServiceAccountId() != m.sa.GetId() {
 		return nil, assert.AnError
 	}
+
 	return &serviceaccountv1.GetServiceAccountResponse{ServiceAccount: m.sa}, nil
 }
 
@@ -106,16 +110,20 @@ func TestProviderCommandIsGone(t *testing.T) {
 
 func create(t *testing.T, kind agentv1.Agent_Kind, expires time.Time) (string, *agentClient) {
 	t.Helper()
+
 	agents := &agentClient{resp: &agentv1.CreateAgentResponse{
 		Agent:         &agentv1.Agent{Id: agentID, Name: "dev", Kind: kind, ServiceAccountId: saID, Health: agentv1.Agent_HEALTH_NEW},
 		EnrollmentKey: &agentv1.EnrollmentKey{Secret: keyText, ExpiresAt: timestamppb.New(expires)},
 	}}
 	cmd := &cobra.Command{}
 	cmd.SetContext(context.Background())
+
 	var out bytes.Buffer
 	cmd.SetOut(&out)
+
 	req := &agentv1.CreateAgentRequest{Agent: &agentv1.Agent{Name: "dev", Kind: kind}}
 	require.NoError(t, createAgent(cmd, &fakeClient{agents: agents}, output.FormatTable, req))
+
 	return out.String(), agents
 }
 
@@ -136,6 +144,7 @@ func TestCreatePrintsTheKeyAndTheInstall(t *testing.T) {
 	assert.Contains(t, out, "--set admiral.serviceAccountId="+saID+" \\\n")
 	assert.Contains(t, out, "--set enrollment.existingSecret=admiral-k8s-agent-dev-enrollment\n")
 	assert.NotContains(t, out, "enrollment.key", "the key never goes into release values")
+
 	for _, never := range []string{"serviceAccount.name", "admiral.server", "image.tag", "--version"} {
 		assert.NotContains(t, out, never)
 	}
@@ -157,19 +166,25 @@ func TestCreateInfraPrintsItsOwnChart(t *testing.T) {
 
 func describeErr(sas *saClient) (string, error) {
 	var w bytes.Buffer
+
 	a := &agentv1.Agent{Id: agentID, ServiceAccountId: saID}
+
 	d := output.NewDescribe()
 	if _, err := addServiceAccount(context.Background(), d, &fakeClient{sas: sas}, a); err != nil {
 		return "", err
 	}
+
 	err := d.Render(&w)
+
 	return w.String(), err
 }
 
 func describe(t *testing.T, sa *serviceaccountv1.ServiceAccount) string {
 	t.Helper()
+
 	out, err := describeErr(&saClient{sa: sa})
 	require.NoError(t, err)
+
 	return out
 }
 

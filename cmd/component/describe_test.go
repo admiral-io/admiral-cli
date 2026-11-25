@@ -21,6 +21,7 @@ func listed(names ...string) []*sourcev1.SourceVersion {
 	for _, n := range names {
 		out = append(out, &sourcev1.SourceVersion{Name: n, Kind: sourcev1.SourceVersion_KIND_VERSION})
 	}
+
 	return out
 }
 
@@ -29,6 +30,7 @@ func listed(names ...string) []*sourcev1.SourceVersion {
 // never count, and the upstream's own spelling is kept.
 func TestNewerUpstream(t *testing.T) {
 	branch := &sourcev1.SourceVersion{Name: "main", Kind: sourcev1.SourceVersion_KIND_BRANCH}
+
 	testCases := []struct {
 		name     string
 		upstream []*sourcev1.SourceVersion
@@ -81,8 +83,10 @@ func TestVersionName(t *testing.T) {
 
 func render(t *testing.T, comp *registryv1.Component, sec componentSections) string {
 	t.Helper()
+
 	var out bytes.Buffer
 	require.NoError(t, describeComponent(comp, sec).Render(&out))
+
 	return out.String()
 }
 

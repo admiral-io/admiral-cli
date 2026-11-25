@@ -18,8 +18,10 @@ const runID = "run-m89nt2241g09"
 
 func latestWith(t *testing.T, cs *changesetv1.ChangeSet, r *runv1.Run) (*runv1.Run, error) {
 	t.Helper()
+
 	c := &fakeClient{cs: &changeSetClient{got: cs}, runs: &runClient{run: r}}
 	_, got, err := latestPlan(context.Background(), c, csID)
+
 	return got, err
 }
 
@@ -50,6 +52,7 @@ func TestLatestPlanRefusesWhatIsNotWaitingOnAPlan(t *testing.T) {
 		_, err := latestWith(t, &changesetv1.ChangeSet{Id: csID, LatestRunId: runID},
 			&runv1.Run{Id: runID, Status: tc.status})
 		require.ErrorContains(t, err, tc.want, tc.status.String())
+
 		if tc.hint != "" {
 			require.Contains(t, cmderr.Hint(err), tc.hint, tc.status.String())
 		}
@@ -67,7 +70,9 @@ func TestShowPlan(t *testing.T) {
 		Before: structpb.NewStructValue(&structpb.Struct{Fields: map[string]*structpb.Value{"replicas": structpb.NewNumberValue(1)}}),
 		After:  structpb.NewStructValue(&structpb.Struct{Fields: map[string]*structpb.Value{"replicas": structpb.NewNumberValue(2)}}),
 	}}}}}
+
 	var w bytes.Buffer
+
 	err := showPlan(context.Background(), &w, c,
 		&changesetv1.ChangeSet{Id: csID, Title: "First deploy"}, &runv1.Run{Id: runID}, false)
 	require.NoError(t, err)
@@ -97,6 +102,7 @@ func TestApproveAndApplyCheckBeforeTheNetwork(t *testing.T) {
 			requireAccepted(t, err, verb, ref)
 		}
 	}
+
 	_, err := run(t, "apply", csID, "--yes", "--wait-timeout", "0s")
 	requireUsage(t, err, "--wait-timeout must be positive")
 }

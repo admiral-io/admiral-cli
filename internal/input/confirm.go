@@ -25,12 +25,15 @@ func Confirm(cmd *cobra.Command, yes bool, prompt string) error {
 	if err := RequireInteractiveOrYes(cmd, yes); err != nil || yes {
 		return err
 	}
+
 	ios := iostreams.FromCommand(cmd)
 	fmt.Fprintf(ios.Err, "%s? [y/N] ", prompt)
+
 	reply, err := readLine(ios)
 	if err != nil {
 		return fmt.Errorf("read confirmation: %w", err)
 	}
+
 	switch strings.ToLower(reply) {
 	case "y", "yes":
 		return nil
@@ -48,19 +51,24 @@ func ConfirmName(cmd *cobra.Command, yes bool, warning, name string) error {
 	if err := RequireInteractiveOrYes(cmd, yes); err != nil || yes {
 		return err
 	}
+
 	ios := iostreams.FromCommand(cmd)
 	if warning != "" {
 		fmt.Fprintln(ios.Err, warning)
 	}
+
 	fmt.Fprintf(ios.Err, "Type %s to confirm: ", name)
+
 	reply, err := readLine(ios)
 	if err != nil {
 		return fmt.Errorf("read confirmation: %w", err)
 	}
+
 	if reply != name {
 		fmt.Fprintln(ios.Err, "canceled")
 		return ErrCanceled
 	}
+
 	return nil
 }
 
@@ -73,6 +81,7 @@ func RequireInteractiveOrYes(cmd *cobra.Command, yes bool) error {
 	if yes || iostreams.FromCommand(cmd).Interactive() {
 		return nil
 	}
+
 	return cmderr.Usage("--yes required when not running interactively")
 }
 
@@ -83,5 +92,6 @@ func readLine(ios *iostreams.Streams) (string, error) {
 	if err != nil && err != io.EOF {
 		return "", err
 	}
+
 	return strings.TrimSpace(line), nil
 }

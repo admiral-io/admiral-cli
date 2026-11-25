@@ -79,6 +79,7 @@ func TestParseScalar_LikeHelm(t *testing.T) {
 			assert.Equal(t, tc.want, got)
 		})
 	}
+
 	_, err := ParseScalar(".inf")
 	assert.ErrorContains(t, err, "is not a number JSON can hold")
 }

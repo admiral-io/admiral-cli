@@ -17,6 +17,7 @@ var versionTable = output.Table[*client.StateVersion]{
 		if v.Forced {
 			return "yes"
 		}
+
 		return ""
 	}},
 	{Header: "AGE", Cell: func(v *client.StateVersion) string { return output.FormatAge(timestamppb.New(v.CreatedAt)) }},
@@ -32,6 +33,7 @@ func writer(v *client.StateVersion) string {
 	case v.CreatedBy.Type == "jobs":
 		return v.CreatedBy.ID + " (attempt " + strconv.Itoa(int(v.CreatedBy.Attempt)) + ")"
 	}
+
 	return v.CreatedBy.ID
 }
 
@@ -41,10 +43,12 @@ func size(n int64) string {
 	if n < unit {
 		return strconv.FormatInt(n, 10) + " B"
 	}
+
 	div, exp := int64(unit), 0
 	for m := n / unit; m >= unit; m /= unit {
 		div *= unit
 		exp++
 	}
+
 	return strconv.FormatFloat(float64(n)/float64(div), 'f', 1, 64) + " " + string("KMGT"[exp]) + "iB"
 }

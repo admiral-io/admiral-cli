@@ -29,5 +29,6 @@ Commands take a run ID (run-xxxxxxxxxxxx).`,
 
 	cmd.AddCommand(newListCmd(opts), newGetCmd(opts), newDescribeCmd(opts), newApproveCmd(opts), newApplyCmd(opts),
 		newAcceptCmd(opts), newCancelCmd(opts), newDiffCmd(opts), newLogsCmd(opts))
+
 	return &RunCmd{Cmd: cmd}
 }

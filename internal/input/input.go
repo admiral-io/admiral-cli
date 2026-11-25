@@ -27,6 +27,7 @@ func ReaderIsTerminal(r io.Reader) (fd uintptr, ok bool) {
 	if !has {
 		return 0, false
 	}
+
 	return f.Fd(), IsTerminal(f.Fd())
 }
 
@@ -38,21 +39,26 @@ func PromptLine(cmd *cobra.Command, label string, sensitive bool) (string, error
 	if !ios.Interactive() {
 		return "", cmderr.Usage("cannot prompt for %s when not running interactively", label)
 	}
+
 	fmt.Fprintf(ios.Err, "Enter %s: ", label)
 	// Echo can only be turned off on a real terminal; a forced-interactive
 	// test session reads its answer cooked like any other line.
 	if fd, ok := ReaderIsTerminal(ios.In); ok && sensitive {
 		line, err := readSecret(ios.In, int(fd))
 		fmt.Fprintln(ios.Err)
+
 		if err != nil {
 			return "", fmt.Errorf("read %s: %w", label, err)
 		}
+
 		return requireNonEmpty(line)
 	}
+
 	line, err := readLine(ios)
 	if err != nil {
 		return "", fmt.Errorf("read %s: %w", label, err)
 	}
+
 	return requireNonEmpty(line)
 }
 
@@ -72,14 +78,18 @@ func Secret(cmd *cobra.Command, label string, fromStdin bool) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("read %s from stdin: %w", label, err)
 		}
+
 		return strings.TrimRight(string(b), "\r\n"), nil
 	}
+
 	if ios.Interactive() {
 		return PromptLine(cmd, label, true)
 	}
+
 	if fromStdin {
 		return "", cmderr.Usage("cannot prompt for %s when not running interactively; pipe it on stdin", label)
 	}
+
 	return "", cmderr.Usage("--%s-stdin required when not running interactively", label)
 }
 
@@ -88,6 +98,7 @@ func requireNonEmpty(s string) (string, error) {
 	if v == "" {
 		return "", fmt.Errorf("value cannot be empty")
 	}
+
 	return v, nil
 }
 
@@ -103,6 +114,7 @@ func readSecret(in io.Reader, fd int) (string, error) {
 		return "", err
 	}
 	defer term.Restore(fd, state) //nolint:errcheck // best effort; the shell resets on exit anyway
+
 	return readRawLine(in)
 }
 
@@ -124,8 +136,11 @@ const (
 // it behind, and an escape sequence (an arrow key: ESC [ A) is swallowed
 // rather than typed into the secret as "[A".
 func readRawLine(in io.Reader) (string, error) {
-	var line []byte
-	var b [1]byte
+	var (
+		line []byte
+		b    [1]byte
+	)
+
 	next := func() (byte, error) {
 		_, err := in.Read(b[:])
 		return b[0], err
@@ -136,8 +151,10 @@ func readRawLine(in io.Reader) (string, error) {
 			if err == io.EOF && len(line) > 0 {
 				return string(line), nil
 			}
+
 			return "", err
 		}
+
 		switch {
 		case c == '\r' || c == '\n':
 			return string(line), nil
@@ -179,13 +196,16 @@ func skipEscapeSequence(next func() (byte, error)) error {
 		if err == nil && c == 'O' {
 			_, err = next()
 		}
+
 		return ignoringEOF(err)
 	}
+
 	for {
 		c, err := next()
 		if err != nil {
 			return ignoringEOF(err)
 		}
+
 		if c >= 0x40 && c <= 0x7e {
 			return nil
 		}
@@ -196,5 +216,6 @@ func ignoringEOF(err error) error {
 	if err == io.EOF {
 		return nil
 	}
+
 	return err
 }

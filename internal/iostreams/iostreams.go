@@ -73,6 +73,7 @@ func FromCommand(cmd *cobra.Command) *Streams {
 			return s
 		}
 	}
+
 	return New(cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr(), os.Getenv)
 }
 
@@ -104,6 +105,7 @@ func New(in io.Reader, out, err io.Writer, getenv func(string) string) *Streams 
 		} else {
 			s.forcedWidth = 80
 		}
+
 		s.outTTY = true
 		s.errTTY = true
 	}
@@ -122,6 +124,7 @@ func New(in io.Reader, out, err io.Writer, getenv func(string) string) *Streams 
 	}
 
 	s.colorEnabled = colorAllowed(getenv, s.outTTY)
+
 	return s
 }
 
@@ -144,6 +147,7 @@ func (s *Streams) LineReader() *bufio.Reader {
 	if s.lines == nil {
 		s.lines = bufio.NewReader(s.In)
 	}
+
 	return s.lines
 }
 
@@ -169,16 +173,19 @@ func (s *Streams) TerminalWidth() int {
 	if s.forcedWidth > 0 {
 		return s.forcedWidth
 	}
+
 	if f, ok := s.Out.(interface{ Fd() uintptr }); ok && s.outTTY {
 		if w, _, err := term.GetSize(int(f.Fd())); err == nil && w > 0 {
 			return w
 		}
 	}
+
 	if v := s.getenv("COLUMNS"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			return n
 		}
 	}
+
 	return 80
 }
 
@@ -187,6 +194,7 @@ func isTerminal(v any) bool {
 	if !ok {
 		return false
 	}
+
 	return term.IsTerminal(int(f.Fd()))
 }
 
@@ -194,14 +202,17 @@ func nonInteractiveEnv(getenv func(string) string) bool {
 	if isSet(getenv("ADMIRAL_NO_INPUT")) {
 		return true
 	}
+
 	if isSet(getenv("CI")) {
 		return true
 	}
+
 	for _, k := range agentMarkers {
 		if getenv(k) != "" {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -209,15 +220,19 @@ func colorAllowed(getenv func(string) string, stdoutTTY bool) bool {
 	if getenv("NO_COLOR") != "" {
 		return false
 	}
+
 	if getenv("CLICOLOR_FORCE") != "" {
 		return true
 	}
+
 	if getenv("CLICOLOR") == "0" {
 		return false
 	}
+
 	if getenv("TERM") == "dumb" {
 		return false
 	}
+
 	return stdoutTTY
 }
 
@@ -228,5 +243,6 @@ func isSet(v string) bool {
 	case "", "0", "false", "no", "off":
 		return false
 	}
+
 	return true
 }

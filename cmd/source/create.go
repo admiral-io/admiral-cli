@@ -54,9 +54,11 @@ console, where the repository is picked from the installation's list.`,
 			if err != nil {
 				return err
 			}
+
 			if credential != "" && integration != "" {
 				return cmderr.Usage("a source takes --credential or --integration, not both")
 			}
+
 			if len(allows) == 0 {
 				allows = []string{"*"}
 			}
@@ -71,12 +73,14 @@ console, where the repository is picked from the installation's list.`,
 				Name: args[0], Description: description, Kind: kind, Location: location,
 				Trigger: sourcev1.Source_TRIGGER_REQUEST, Allows: allows,
 			}
+
 			switch {
 			case credential != "":
 				id, err := resolve.Credential(cmd.Context(), c.Credential(), credential)
 				if err != nil {
 					return err
 				}
+
 				src.Grant = &sourcev1.Source_CredentialId{CredentialId: id}
 			case integration != "":
 				src.Grant = &sourcev1.Source_IntegrationId{IntegrationId: integration}
@@ -86,7 +90,9 @@ console, where the repository is picked from the installation's list.`,
 			if err != nil {
 				return createRefused(err, integration != "")
 			}
+
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+
 			return p.PrintOne(resp.Source, resp.Source.Name, sourceTable.Render(p, resp.Source))
 		},
 	}
@@ -96,6 +102,7 @@ console, where the repository is picked from the installation's list.`,
 		locations[k.flag] = &v
 		cmd.Flags().StringVar(&v, k.flag, "", k.what)
 	}
+
 	cmd.Flags().StringArrayVar(&allows, "allows", nil, "what may come through, exact or ending in *, optionally @RANGE (repeatable; default: everything)")
 	cmd.Flags().StringVar(&credential, "credential", "", "the credential that reaches a private upstream, by name or ID")
 	complete.Flag(cmd, "credential", complete.Credentials(opts))
@@ -113,12 +120,14 @@ func locationOf(cmd *cobra.Command, locations map[string]*string) (sourcev1.Sour
 		where string
 		given []string
 	)
+
 	for _, k := range kinds {
 		if v := strings.TrimSpace(*locations[k.flag]); cmd.Flags().Changed(k.flag) {
 			given = append(given, "--"+k.flag)
 			kind, where = k.kind, v
 		}
 	}
+
 	switch {
 	case len(given) == 0:
 		return 0, "", cmderr.Usage("name the location with one of --helm, --oci, --terraform or --git")
@@ -127,6 +136,7 @@ func locationOf(cmd *cobra.Command, locations map[string]*string) (sourcev1.Sour
 	case where == "":
 		return 0, "", cmderr.Usage("%s needs a location", given[0])
 	}
+
 	return kind, where, nil
 }
 
@@ -137,6 +147,7 @@ func createRefused(err error, namedIntegration bool) error {
 	if namedIntegration || status.Code(err) != codes.NotFound {
 		return err
 	}
+
 	return cmderr.WithHint(err, "Creating a source needs permission in this organization. "+
 		"An organization admin can create it, or grant you source creation.")
 }

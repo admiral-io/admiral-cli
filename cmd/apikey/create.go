@@ -14,6 +14,7 @@ import (
 
 func newCreateCmd(opts *client.Options) *cobra.Command {
 	var scopeFlag []string
+
 	cmd := &cobra.Command{
 		Use:   "create <name>",
 		Short: "Create an API key and print its secret",
@@ -31,22 +32,27 @@ stdout. The secret is shown this once.`,
 			if err != nil {
 				return err
 			}
+
 			if len(list) == 0 {
 				return cmderr.Usage("--scope is required: a key carries only the scopes it is created with")
 			}
+
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
 				return err
 			}
 			defer c.Close() //nolint:errcheck
+
 			resp, err := c.ApiKey().CreateApiKey(cmd.Context(), &apikeyv1.CreateApiKeyRequest{
 				ApiKey: &apikeyv1.ApiKey{Name: args[0], Scopes: list},
 			})
 			if err != nil {
 				return err
 			}
+
 			fmt.Fprintln(cmd.OutOrStdout(), resp.GetSecret())
 			fmt.Fprintf(cmd.ErrOrStderr(), "API key %s created. Store the secret now; Admiral cannot show it again.\n", args[0])
+
 			return nil
 		},
 	}
@@ -54,5 +60,6 @@ stdout. The secret is shown this once.`,
 	_ = cmd.RegisterFlagCompletionFunc("scope", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 		return scopes.User(), cobra.ShellCompDirectiveNoFileComp
 	})
+
 	return cmd
 }

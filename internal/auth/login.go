@@ -112,9 +112,11 @@ func Login(ctx context.Context, opts LoginOptions) (*Result, error) {
 	if opts.Status == nil {
 		opts.Status = io.Discard
 	}
+
 	if opts.OpenBrowser == nil {
 		opts.OpenBrowser = openBrowser
 	}
+
 	if opts.ClientID == "" {
 		opts.ClientID = DefaultClientID
 	}
@@ -132,6 +134,7 @@ func Login(ctx context.Context, opts LoginOptions) (*Result, error) {
 
 	httpClient := &http.Client{Timeout: 30 * time.Second}
 	oidcCtx := oidc.ClientContext(ctx, httpClient)
+
 	provider, err := oidc.NewProvider(oidcCtx, opts.Issuer)
 	if err != nil {
 		return nil, fmt.Errorf("querying identity provider %q: %w", opts.Issuer, err)
@@ -141,10 +144,12 @@ func Login(ctx context.Context, opts LoginOptions) (*Result, error) {
 	if err != nil {
 		return nil, fmt.Errorf("generating state: %w", err)
 	}
+
 	nonce, err := randomString(32)
 	if err != nil {
 		return nil, fmt.Errorf("generating nonce: %w", err)
 	}
+
 	verifier := oauth2.GenerateVerifier()
 
 	endpoint := provider.Endpoint()
@@ -177,8 +182,11 @@ func Login(ctx context.Context, opts LoginOptions) (*Result, error) {
 		code string
 		err  error
 	}
+
 	resultCh := make(chan callback, 1)
+
 	var once sync.Once
+
 	deliver := func(c callback) { once.Do(func() { resultCh <- c }) }
 
 	mux := http.NewServeMux()
@@ -187,14 +195,17 @@ func Login(ctx context.Context, opts LoginOptions) (*Result, error) {
 			renderError(w, http.StatusMethodNotAllowed, "Method not allowed.")
 			return
 		}
+
 		q := r.URL.Query()
 
 		if code := q.Get("error"); code != "" {
 			desc := q.Get("error_description")
 			renderError(w, http.StatusBadRequest, "Authorization failed: "+desc)
 			deliver(callback{err: fmt.Errorf("authorization denied: %s: %s", code, desc)})
+
 			return
 		}
+
 		// A request carrying the wrong state is not ours: a stray browser
 		// prefetch, or a page probing loopback ports. It gets an error page
 		// but does not end the login, which keeps waiting for the real
@@ -202,12 +213,15 @@ func Login(ctx context.Context, opts LoginOptions) (*Result, error) {
 		if q.Get("state") != state {
 			slog.Debug("ignoring login callback with mismatched state", "remote", r.RemoteAddr)
 			renderError(w, http.StatusBadRequest, "This sign-in link is not for the current login attempt. Return to the terminal and try again.")
+
 			return
 		}
+
 		code := q.Get("code")
 		if code == "" {
 			renderError(w, http.StatusBadRequest, "Missing authorization code.")
 			deliver(callback{err: errors.New("login callback carried no authorization code")})
+
 			return
 		}
 
@@ -222,11 +236,13 @@ func Login(ctx context.Context, opts LoginOptions) (*Result, error) {
 			deliver(callback{err: fmt.Errorf("login callback server failed: %w", err)})
 		}
 	}()
+
 	defer shutdown(server)
 
 	// Always show the URL. Browser launch can "succeed" and still land in
 	// the wrong profile, a remote desktop, or nowhere at all.
 	slog.Debug("opening browser for login", "url", authURL)
+
 	if err := opts.OpenBrowser(authURL); err != nil {
 		slog.Debug("browser launch failed", "error", err)
 		fmt.Fprintf(opts.Status, "Could not open a browser. Visit this URL to sign in:\n\n    %s\n\n", authURL)
@@ -242,6 +258,7 @@ func Login(ctx context.Context, opts LoginOptions) (*Result, error) {
 		return nil, fmt.Errorf("login timed out after %s waiting for the browser; run 'admiral auth login' again", loginTimeout)
 	case cb = <-resultCh:
 	}
+
 	if cb.err != nil {
 		return nil, cb.err
 	}
@@ -255,10 +272,12 @@ func Login(ctx context.Context, opts LoginOptions) (*Result, error) {
 	if !ok {
 		return nil, errors.New("token response carried no id_token")
 	}
+
 	idToken, err := provider.Verifier(&oidc.Config{ClientID: opts.ClientID}).Verify(oidcCtx, rawIDToken)
 	if err != nil {
 		return nil, fmt.Errorf("verifying id_token: %w", err)
 	}
+
 	if idToken.Nonce != nonce {
 		return nil, errors.New("nonce mismatch in id_token")
 	}
@@ -266,6 +285,7 @@ func Login(ctx context.Context, opts LoginOptions) (*Result, error) {
 	var claims struct {
 		Email string `json:"email"`
 	}
+
 	_ = idToken.Claims(&claims) // best effort; email is informational
 
 	granted := resourceScopes(token)
@@ -294,6 +314,7 @@ func renderResult(page resultPage) []byte {
 	if err := resultPageTmpl.Execute(&buf, page); err != nil {
 		panic("rendering embedded auth result page: " + err.Error())
 	}
+
 	return buf.Bytes()
 }
 
@@ -316,12 +337,15 @@ func writeResultPage(w http.ResponseWriter, status int, body []byte) {
 // Identity scopes are dropped; they are always present and never narrow.
 func resourceScopes(token *oauth2.Token) []string {
 	raw, _ := token.Extra("scope").(string)
+
 	var out []string
+
 	for _, s := range strings.Fields(raw) {
 		if strings.Contains(s, ":") {
 			out = append(out, s)
 		}
 	}
+
 	return out
 }
 
@@ -339,6 +363,7 @@ func renderError(w http.ResponseWriter, status int, msg string) {
 func shutdown(server *http.Server) {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
+
 	if err := server.Shutdown(ctx); err != nil {
 		_ = server.Close()
 	}
@@ -349,5 +374,6 @@ func randomString(n int) (string, error) {
 	if _, err := io.ReadFull(rand.Reader, b); err != nil {
 		return "", err
 	}
+
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }

@@ -32,19 +32,25 @@ func Pages[T any](o PagingOptions, fetch func(token string) ([]T, string, error)
 	if err != nil {
 		return nil, "", err
 	}
+
 	if !o.All {
 		return items, next, nil
 	}
+
 	for next != "" {
 		more, after, err := fetch(next)
 		if err != nil {
 			return nil, "", err
 		}
+
 		items = append(items, more...)
+
 		if after == next {
 			return nil, "", errors.New("the server returned the same page token twice; stopping")
 		}
+
 		next = after
 	}
+
 	return items, "", nil
 }

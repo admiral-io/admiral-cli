@@ -50,10 +50,14 @@ type fakeIdP struct {
 // assert on what the user is told.
 func captureWarnings(t *testing.T) *strings.Builder {
 	t.Helper()
+
 	var buf strings.Builder
+
 	prev := slog.Default()
+
 	slog.SetDefault(slog.New(output.NewLogHandler(&buf, slog.LevelWarn)))
 	t.Cleanup(func() { slog.SetDefault(prev) })
+
 	return &buf
 }
 
@@ -64,6 +68,7 @@ func (f *fakeIdP) revocationURL() string { return f.srv.URL + revokePath }
 
 func newFakeIdP(t *testing.T) *fakeIdP {
 	t.Helper()
+
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
@@ -82,6 +87,7 @@ func newFakeIdP(t *testing.T) *fakeIdP {
 		if !f.hideRevocation {
 			doc["revocation_endpoint"] = f.revocationURL()
 		}
+
 		_ = json.NewEncoder(w).Encode(doc)
 	})
 	mux.HandleFunc("/oauth2/jwks", func(w http.ResponseWriter, r *http.Request) {
@@ -135,11 +141,13 @@ func newFakeIdP(t *testing.T) *fakeIdP {
 	mux.HandleFunc(revokePath, func(w http.ResponseWriter, r *http.Request) {
 		require.NoError(t, r.ParseForm())
 		f.revokeForm = r.Form
+
 		w.WriteHeader(http.StatusOK)
 	})
 
 	f.srv = httptest.NewServer(mux)
 	t.Cleanup(f.srv.Close)
+
 	return f
 }
 
@@ -152,8 +160,10 @@ func followRedirects(t *testing.T) func(string) error {
 			if err == nil {
 				_ = resp.Body.Close()
 			}
+
 			require.NoError(t, err)
 		}()
+
 		return nil
 	}
 }
@@ -163,6 +173,7 @@ func TestLogin_EndToEnd(t *testing.T) {
 	dir := t.TempDir()
 
 	var status strings.Builder
+
 	res, err := Login(context.Background(), LoginOptions{
 		Issuer:      idp.srv.URL,
 		ClientID:    idp.clientID,
@@ -225,6 +236,7 @@ func TestLogin_NarrowedScopes(t *testing.T) {
 
 	// Only resource scopes are reported and stored; identity scopes are noise.
 	require.Equal(t, []string{"project:read", "env:read"}, res.Scopes)
+
 	sess, err := credentials.Load(dir)
 	require.NoError(t, err)
 	require.Equal(t, []string{"project:read", "env:read"}, sess.Scopes)
@@ -233,12 +245,16 @@ func TestLogin_NarrowedScopes(t *testing.T) {
 func TestLogin_BrowserUnavailablePrintsURL(t *testing.T) {
 	idp := newFakeIdP(t)
 
-	var status strings.Builder
-	var captured string
+	var (
+		status   strings.Builder
+		captured string
+	)
+
 	open := func(u string) error {
 		captured = u
 		// Simulate the user pasting the URL after the CLI printed it.
 		followRedirects(t)(u) //nolint:errcheck
+
 		return context.DeadlineExceeded
 	}
 
@@ -262,10 +278,12 @@ func TestLogin_IgnoresStateMismatch(t *testing.T) {
 	open := func(u string) error {
 		parsed, err := url.Parse(u)
 		require.NoError(t, err)
+
 		callbackURL := parsed.Query().Get("redirect_uri")
 
 		resp, err := http.Get(callbackURL + "?code=stray&state=tampered") //nolint:gosec // test-only URL
 		require.NoError(t, err)
+
 		_ = resp.Body.Close()
 		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 
@@ -287,6 +305,7 @@ func TestLogin_IgnoresStateMismatch(t *testing.T) {
 func TestLogin_StateMismatchAloneTimesOut(t *testing.T) {
 	prev := loginTimeout
 	loginTimeout = 200 * time.Millisecond
+
 	t.Cleanup(func() { loginTimeout = prev })
 
 	idp := newFakeIdP(t)
@@ -295,7 +314,9 @@ func TestLogin_StateMismatchAloneTimesOut(t *testing.T) {
 		require.NoError(t, err)
 		resp, err := http.Get(parsed.Query().Get("redirect_uri") + "?code=stray&state=tampered") //nolint:gosec // test-only URL
 		require.NoError(t, err)
+
 		_ = resp.Body.Close()
+
 		return nil
 	}
 	_, err := Login(context.Background(), LoginOptions{
@@ -312,7 +333,9 @@ func TestLogin_IdPErrorSurfaces(t *testing.T) {
 	open := func(u string) error {
 		parsed, err := url.Parse(u)
 		require.NoError(t, err)
+
 		cb := parsed.Query().Get("redirect_uri") + "?error=access_denied&error_description=User+declined"
+
 		return followRedirects(t)(cb)
 	}
 
@@ -469,6 +492,7 @@ func TestLogout_UnreadableFileIsRemoved(t *testing.T) {
 func TestLogin_TimesOutWaitingForBrowser(t *testing.T) {
 	prev := loginTimeout
 	loginTimeout = 50 * time.Millisecond
+
 	t.Cleanup(func() { loginTimeout = prev })
 
 	idp := newFakeIdP(t)
@@ -570,6 +594,7 @@ func TestStore_NothingToRevoke(t *testing.T) {
 			if prev != nil {
 				require.NoError(t, credentials.Save(dir, prev))
 			}
+
 			require.NoError(t, Store(context.Background(), dir, &credentials.Credential{Kind: credentials.KindAPIKey, APIKey: "admp_new"}))
 			require.Nil(t, idp.revokeForm)
 		})

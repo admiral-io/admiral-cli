@@ -17,12 +17,15 @@ import (
 // offer; a scope that implies others (write implies read) covers them.
 func User() []string {
 	var out []string
+
 	for name, sc := range sdkscopes.Catalog {
 		if slices.Contains(sc.AssignableTo, sdkscopes.TokenTypePAT) {
 			out = append(out, name)
 		}
 	}
+
 	sort.Strings(out)
+
 	return out
 }
 
@@ -31,20 +34,25 @@ func User() []string {
 // than intended. Accepts comma-separated values within a single flag.
 func Validate(raw []string) ([]string, error) {
 	allowed := User()
+
 	var out []string
+
 	for _, item := range raw {
 		for _, s := range strings.Split(item, ",") {
 			s = strings.TrimSpace(s)
 			if s == "" {
 				continue
 			}
+
 			if !slices.Contains(allowed, s) {
 				return nil, cmderr.Usage("unknown scope %q; valid scopes: %s", s, strings.Join(allowed, ", "))
 			}
+
 			if !slices.Contains(out, s) {
 				out = append(out, s)
 			}
 		}
 	}
+
 	return out, nil
 }

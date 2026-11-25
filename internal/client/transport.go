@@ -46,6 +46,7 @@ func (m transportMode) credentials() credentials.TransportCredentials {
 	if cfg := m.tlsConfig(); cfg != nil {
 		return credentials.NewTLS(cfg)
 	}
+
 	return insecurecreds.NewCredentials()
 }
 

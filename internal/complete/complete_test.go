@@ -49,6 +49,7 @@ func (m *registryClient) GetComponent(_ context.Context, req *registryv1.GetComp
 			return &registryv1.GetComponentResponse{Component: c}, nil
 		}
 	}
+
 	return nil, errors.New("not found")
 }
 
@@ -76,15 +77,19 @@ func (m *appClient) ListProjects(_ context.Context, req *projectv1.ListProjectsR
 	if m.err != nil {
 		return nil, m.err
 	}
+
 	i := 0
 	if req.PageToken != "" {
 		_, _ = fmt.Sscanf(req.PageToken, "p%d", &i)
 	}
+
 	m.calls++
+
 	resp := &projectv1.ListProjectsResponse{Projects: m.pages[i]}
 	if i+1 < len(m.pages) {
 		resp.NextPageToken = fmt.Sprintf("p%d", i+1)
 	}
+
 	return resp, nil
 }
 
@@ -105,13 +110,16 @@ func useRegistry(t *testing.T, regs *registryClient) {
 
 func useAll(t *testing.T, fake *fakeClient, err error) {
 	t.Helper()
+
 	prev := newClient
 	newClient = func(context.Context, *client.Options) (sdkclient.AdmiralClient, error) {
 		if err != nil {
 			return nil, err
 		}
+
 		return fake, nil
 	}
+
 	t.Cleanup(func() { newClient = prev })
 }
 
@@ -127,11 +135,14 @@ func registryWithTwo() *registryClient {
 // empty, already parsed from the line.
 func scopedCmd(t *testing.T, app string) *cobra.Command {
 	t.Helper()
+
 	cmd := &cobra.Command{Use: "x"}
 	cmd.Flags().String("project", "", "")
+
 	if app != "" {
 		require.NoError(t, cmd.Flags().Set("project", app))
 	}
+
 	return cmd
 }
 
@@ -145,6 +156,7 @@ func shopWithEnvs() (*appClient, *envClient) {
 		{Name: "prod", Description: "Production"},
 		{Name: "staging"},
 	}}
+
 	return apps, envs
 }
 
@@ -161,6 +173,7 @@ func TestFilter(t *testing.T) {
 
 func TestApps_OffersMatchingNames(t *testing.T) {
 	useClient(t, &appClient{pages: [][]*projectv1.Project{{app("billing-api", "Billing"), app("shop", "")}}}, nil)
+
 	got, directive := Projects(&client.Options{})(&cobra.Command{}, nil, "bil")
 	require.Equal(t, []string{"billing-api\tBilling"}, got)
 	require.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
@@ -169,6 +182,7 @@ func TestApps_OffersMatchingNames(t *testing.T) {
 func TestApps_FollowsPages(t *testing.T) {
 	ac := &appClient{pages: [][]*projectv1.Project{{app("a", "")}, {app("b", "")}, {app("c", "")}}}
 	useClient(t, ac, nil)
+
 	got, _ := Projects(&client.Options{})(&cobra.Command{}, nil, "")
 	require.Equal(t, []string{"a", "b", "c"}, got)
 	require.Equal(t, 3, ac.calls)
@@ -178,11 +192,13 @@ func TestApps_FollowsPages(t *testing.T) {
 // candidates and no file completion fallback.
 func TestApps_FailuresAreSilent(t *testing.T) {
 	useClient(t, nil, errors.New("not authenticated"))
+
 	got, directive := Projects(&client.Options{})(&cobra.Command{}, nil, "")
 	require.Nil(t, got)
 	require.Equal(t, cobra.ShellCompDirectiveError, directive)
 
 	useClient(t, &appClient{err: errors.New("unavailable")}, nil)
+
 	got, directive = Projects(&client.Options{})(&cobra.Command{}, nil, "")
 	require.Nil(t, got)
 	require.Equal(t, cobra.ShellCompDirectiveError, directive)
@@ -195,11 +211,13 @@ func TestFirst_OnlyCompletesFirstPositional(t *testing.T) {
 		return []string{"x"}, cobra.ShellCompDirectiveNoFileComp
 	})
 	got, directive := f(&cobra.Command{}, []string{"already"}, "")
+
 	require.False(t, called)
 	require.Nil(t, got)
 	require.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
 
 	got, _ = f(&cobra.Command{}, nil, "")
+
 	require.True(t, called)
 	require.Equal(t, []string{"x"}, got)
 }
@@ -243,6 +261,7 @@ func TestEnvs_PathCompletesSecondSegment(t *testing.T) {
 func TestEnvs_NoAppFlagRegistered(t *testing.T) {
 	apps, envs := shopWithEnvs()
 	useClients(t, apps, envs, nil)
+
 	got, _ := Envs(&client.Options{})(&cobra.Command{}, nil, "shop/p")
 	require.Equal(t, []string{"shop/prod\tProduction"}, got)
 }
@@ -283,6 +302,7 @@ func TestStatic_FiltersByPrefix(t *testing.T) {
 
 func TestComponents_OffersMatchingNames(t *testing.T) {
 	useRegistry(t, registryWithTwo())
+
 	got, directive := Components(&client.Options{})(&cobra.Command{}, nil, "cloud-s")
 	require.Equal(t, []string{"cloud-sql\tManaged Postgres"}, got)
 	require.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
@@ -292,6 +312,7 @@ func TestComponents_OffersMatchingNames(t *testing.T) {
 // so the next Tab completes the tag.
 func TestRefs_NamePrefixEndsInColon(t *testing.T) {
 	useRegistry(t, registryWithTwo())
+
 	got, directive := Refs(&client.Options{})(&cobra.Command{}, nil, "cloud-")
 	require.Equal(t, []string{"cloud-sql:\tManaged Postgres", "cloud-run:"}, got)
 	require.Equal(t, cobra.ShellCompDirectiveNoFileComp|cobra.ShellCompDirectiveNoSpace, directive)
@@ -300,6 +321,7 @@ func TestRefs_NamePrefixEndsInColon(t *testing.T) {
 func TestRefs_AfterColonOffersTags(t *testing.T) {
 	regs := registryWithTwo()
 	useRegistry(t, regs)
+
 	got, directive := Refs(&client.Options{})(&cobra.Command{}, nil, "cloud-sql:")
 	require.Equal(t, []string{"cloud-sql:v1.2.0", "cloud-sql:latest"}, got)
 	require.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
@@ -311,6 +333,7 @@ func TestRefs_AfterColonOffersTags(t *testing.T) {
 
 func TestRefs_UnknownComponentIsSilent(t *testing.T) {
 	useRegistry(t, registryWithTwo())
+
 	got, directive := Refs(&client.Options{})(&cobra.Command{}, nil, "nope:")
 	require.Nil(t, got)
 	require.Equal(t, cobra.ShellCompDirectiveError, directive)
@@ -319,6 +342,7 @@ func TestRefs_UnknownComponentIsSilent(t *testing.T) {
 // Nobody tab-completes a digest.
 func TestRefs_DigestFormOffersNothing(t *testing.T) {
 	useRegistry(t, registryWithTwo())
+
 	got, directive := Refs(&client.Options{})(&cobra.Command{}, nil, "cloud-sql@sha256:3f")
 	require.Nil(t, got)
 	require.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)

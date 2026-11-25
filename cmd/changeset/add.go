@@ -65,26 +65,32 @@ component and its values are one revision.`,
 			if err != nil {
 				return err
 			}
+
 			src, err := registryRef(args[1])
 			if err != nil {
 				return err
 			}
+
 			if name == "" {
 				name = src.Name
 			}
+
 			if err := componentName(name); err != nil {
 				return err
 			}
+
 			var tree map[string]any
 			if valuesPath != "" {
 				if tree, err = readValues(cmd, valuesPath); err != nil {
 					return err
 				}
 			}
+
 			es, err := addEdits(name, src, tree, sets, setStrings)
 			if err != nil {
 				return err
 			}
+
 			return edits(cmd, opts, ref, ifRevision(cmd, ifRev), po, es...)
 		},
 	}
@@ -105,18 +111,23 @@ component and its values are one revision.`,
 // 'changeset set' would and the whole add is one revision.
 func addEdits(name string, src *changesetv1.RegistryRef, tree map[string]any, sets, setStrings []string) ([]*changesetv1.Edit, error) {
 	add := &changesetv1.AddComponent{Name: name, Version: src}
+
 	if tree != nil {
 		js, err := valuesfile.EncodeJSON(tree)
 		if err != nil {
 			return nil, err
 		}
+
 		add.ValuesJson = js
 	}
+
 	es := []*changesetv1.Edit{{Edit: &changesetv1.Edit_AddComponent{AddComponent: add}}}
+
 	values, err := setEdits(prefixed(name, sets), prefixed(name, setStrings))
 	if err != nil {
 		return nil, err
 	}
+
 	return append(es, values...), nil
 }
 
@@ -128,26 +139,32 @@ func prefixed(name string, assignments []string) []string {
 	for i, a := range assignments {
 		out[i] = name + "." + a
 	}
+
 	return out
 }
 
 // registryRef reads NAME:TAG or NAME@DIGEST, the form the component
 // commands use.
 func registryRef(s string) (*changesetv1.RegistryRef, error) {
-	var name, ref string
-	var found bool
+	var (
+		name, ref string
+		found     bool
+	)
 	if i := strings.Index(s, "@"); i >= 0 {
 		name, ref, found = s[:i], s[i+1:], true
 	} else {
 		name, ref, found = strings.Cut(s, ":")
 	}
+
 	if !found || ref == "" {
 		return nil, cmderr.UsageHint("Name a version: cloud-sql:v1.2.0 or cloud-sql@sha256:<hex>.",
 			"%q names no tag or digest", s)
 	}
+
 	if !manifest.ValidName(name) {
 		return nil, cmderr.Usage("invalid registry component name %q: lowercase letters, digits and hyphens, starting with a letter", name)
 	}
+
 	return &changesetv1.RegistryRef{Name: name, Reference: ref}, nil
 }
 
@@ -159,13 +176,16 @@ func readValues(cmd *cobra.Command, path string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	tree, warnings, err := valuesfile.Parse(data)
 	if err != nil {
 		return nil, cmderr.Usage("%s: %v", path, err)
 	}
+
 	for _, w := range warnings {
 		output.Writef(cmd.ErrOrStderr(), "Warning: %s: %s\n", path, w)
 	}
+
 	return tree, nil
 }
 
@@ -176,15 +196,19 @@ func readValuesFile(cmd *cobra.Command, path string) ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read values from stdin: %w", err)
 		}
+
 		return data, nil
 	}
+
 	p, err := input.ExpandPath(path)
 	if err != nil {
 		return nil, err
 	}
+
 	data, err := os.ReadFile(p)
 	if err != nil {
 		return nil, fmt.Errorf("read values: %w", err)
 	}
+
 	return data, nil
 }

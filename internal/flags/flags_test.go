@@ -13,11 +13,13 @@ import (
 
 func exec(cmd *cobra.Command, args ...string) (string, error) {
 	cmd.SilenceUsage, cmd.SilenceErrors = true, true // as the real root does
+
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 	cmd.SetArgs(args)
 	err := cmd.Execute()
+
 	return out.String(), err
 }
 
@@ -61,6 +63,7 @@ func TestNoArgs(t *testing.T) {
 
 func TestEnum(t *testing.T) {
 	var phase string
+
 	cmd := &cobra.Command{Use: "logs", RunE: func(*cobra.Command, []string) error { return nil }}
 	Enum(cmd, &phase, "phase", "", "phase to fetch", "plan", "apply")
 
@@ -75,6 +78,7 @@ func TestEnum(t *testing.T) {
 	// The flag completes from its own list (style guide §1.5).
 	fn, ok := cmd.GetFlagCompletionFunc("phase")
 	require.True(t, ok, "enum flag registers a completion")
+
 	got, directive := fn(cmd, nil, "p")
 	require.Equal(t, []string{"plan"}, got)
 	require.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
@@ -85,7 +89,9 @@ func TestEnum(t *testing.T) {
 func TestScopeFlagsHaveNoDefault(t *testing.T) {
 	t.Setenv("ADMIRAL_APP", "shop")
 	t.Setenv("ADMIRAL_ENV", "prod")
+
 	var app, env string
+
 	cmd := &cobra.Command{Use: "x", RunE: func(*cobra.Command, []string) error { return nil }}
 	Project(cmd, &app, &client.Options{})
 	Env(cmd, &env, &client.Options{})
@@ -100,8 +106,12 @@ func TestScopeFlagsHaveNoDefault(t *testing.T) {
 // ProjectTarget makes of the positional arguments and the --project value.
 func appScoped(t *testing.T, args []string, flagArgs ...string) (string, error) {
 	t.Helper()
-	var projectFlag, got string
-	var gotErr error
+
+	var (
+		projectFlag, got string
+		gotErr           error
+	)
+
 	cmd := &cobra.Command{Use: "x", RunE: func(cmd *cobra.Command, _ []string) error {
 		got, gotErr = ProjectTarget(cmd, projectFlag, args)
 		return nil
@@ -109,6 +119,7 @@ func appScoped(t *testing.T, args []string, flagArgs ...string) (string, error) 
 	Project(cmd, &projectFlag, &client.Options{})
 	_, err := exec(cmd, flagArgs...)
 	require.NoError(t, err)
+
 	return got, gotErr
 }
 
@@ -154,8 +165,12 @@ func TestAppTarget_PathIsUsageError(t *testing.T) {
 // makes of the given --project value and target.
 func scoped(t *testing.T, target string, flagArgs ...string) (string, string, error) {
 	t.Helper()
-	var projectFlag, gotApp, gotEnv string
-	var gotErr error
+
+	var (
+		projectFlag, gotApp, gotEnv string
+		gotErr                      error
+	)
+
 	cmd := &cobra.Command{Use: "x", RunE: func(cmd *cobra.Command, _ []string) error {
 		gotApp, gotEnv, gotErr = EnvTarget(cmd, projectFlag, target)
 		return nil
@@ -163,6 +178,7 @@ func scoped(t *testing.T, target string, flagArgs ...string) (string, string, er
 	Project(cmd, &projectFlag, &client.Options{})
 	_, err := exec(cmd, flagArgs...)
 	require.NoError(t, err)
+
 	return gotApp, gotEnv, gotErr
 }
 

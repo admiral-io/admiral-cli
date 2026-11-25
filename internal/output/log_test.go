@@ -10,6 +10,7 @@ import (
 
 func TestLogHandler(t *testing.T) {
 	var buf bytes.Buffer
+
 	log := slog.New(NewLogHandler(&buf, slog.LevelWarn))
 
 	log.Debug("hidden")

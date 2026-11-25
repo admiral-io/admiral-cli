@@ -62,6 +62,7 @@ names another; get never prepares one, 'admiral changeset plan' does.
 			if err != nil {
 				return err
 			}
+
 			if err := ro.check(cmd); err != nil {
 				return err
 			}
@@ -75,11 +76,14 @@ names another; get never prepares one, 'admiral changeset plan' does.
 			if ro.rendered {
 				return getRendered(cmd, c, csID, ro)
 			}
+
 			resp, err := c.ChangeSet().GetChangeSet(cmd.Context(), &changesetv1.GetChangeSetRequest{ChangeSetId: csID})
 			if err != nil {
 				return err
 			}
+
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+
 			return p.PrintOne(resp.ChangeSet, resp.ChangeSet.Id, changeSetTable.Render(p, resp.ChangeSet))
 		},
 	}
@@ -102,25 +106,32 @@ func (ro renderedOptions) check(cmd *cobra.Command) error {
 				return cmderr.Usage("--%s needs --rendered", name)
 			}
 		}
+
 		return nil
 	}
+
 	if cmd.Flags().Changed("revision") && ro.revision < 1 {
 		return cmderr.Usage("--revision must be 1 or more")
 	}
+
 	if ro.component != "" {
 		if err := componentName(ro.component); err != nil {
 			return err
 		}
 	}
+
 	if ro.outputDir == "" {
 		if ro.force {
 			return cmderr.Usage("--force applies to --output-dir")
 		}
+
 		return nil
 	}
+
 	if ro.component != "" {
 		return cmderr.Usage("--component cannot be combined with --output-dir, which unpacks the whole artifact")
 	}
+
 	return checkOutputDir(ro.outputDir, ro.force)
 }
 
@@ -128,6 +139,7 @@ func (ro renderedOptions) check(cmd *cobra.Command) error {
 func getRendered(cmd *cobra.Command, c sdkclient.AdmiralClient, csID string, ro renderedOptions) error {
 	ctx := cmd.Context()
 	rev := strconv.Itoa(int(ro.revision))
+
 	if !cmd.Flags().Changed("revision") {
 		var err error
 		if rev, err = lastPlanned(cmd, c, csID); err != nil {
@@ -140,18 +152,23 @@ func getRendered(cmd *cobra.Command, c sdkclient.AdmiralClient, csID string, ro 
 		if status.Code(err) == codes.FailedPrecondition {
 			return cmderr.WithHint(err, "To prepare the head, run: admiral changeset plan "+csID)
 		}
+
 		return err
 	}
+
 	files, err := readArtifact(resp.Artifact)
 	if err != nil {
 		return err
 	}
+
 	if ro.outputDir != "" {
 		if err := unpack(ro.outputDir, files); err != nil {
 			return err
 		}
+
 		output.Writef(cmd.ErrOrStderr(), "Unpacked %s revision %s (%s) into %s\n",
 			csID, rev, shortArtifact(resp.ArtifactDigest), ro.outputDir)
+
 		return nil
 	}
 
@@ -159,13 +176,16 @@ func getRendered(cmd *cobra.Command, c sdkclient.AdmiralClient, csID string, ro 
 	if err != nil {
 		return err
 	}
+
 	if ro.component != "" {
 		comps, err = onlyComponent(comps, ro.component, csID, rev)
 		if err != nil {
 			return err
 		}
 	}
+
 	writeRendered(cmd.OutOrStdout(), comps)
+
 	return nil
 }
 
@@ -173,24 +193,29 @@ func getRendered(cmd *cobra.Command, c sdkclient.AdmiralClient, csID string, ro 
 // the head has moved past it.
 func lastPlanned(cmd *cobra.Command, c sdkclient.AdmiralClient, csID string) (string, error) {
 	ctx := cmd.Context()
+
 	resp, err := c.ChangeSet().GetChangeSet(ctx, &changesetv1.GetChangeSetRequest{ChangeSetId: csID})
 	if err != nil {
 		return "", err
 	}
+
 	runID := resp.ChangeSet.GetLatestRunId()
 	if runID == "" {
 		return "", cmderr.WithHint(fmt.Errorf("%s has not been planned", csID),
 			"To prepare the head, run: admiral changeset plan "+csID)
 	}
+
 	run, err := c.Run().GetRun(ctx, &runv1.GetRunRequest{RunId: runID})
 	if err != nil {
 		return "", err
 	}
+
 	rev := run.Run.GetRevisionId()
 	if head := resp.Head; head != nil && head.Id != rev {
 		output.Writef(cmd.ErrOrStderr(), "Warning: this is %s, last planned by %s; the head is revision %d and not yet planned\n",
 			rev, runID, head.Number)
 	}
+
 	return rev, nil
 }
 
@@ -200,8 +225,10 @@ func onlyComponent(comps []*renderedComponent, name, csID, rev string) ([]*rende
 		if c.name == name {
 			return []*renderedComponent{c}, nil
 		}
+
 		names = append(names, c.name)
 	}
+
 	return nil, fmt.Errorf("component %q is not in %s revision %s, which renders: %s",
 		name, csID, rev, strings.Join(names, ", "))
 }

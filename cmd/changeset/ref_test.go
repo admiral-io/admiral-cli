@@ -69,10 +69,13 @@ func (m *changeSetClient) ListChangeSets(_ context.Context, req *changesetv1.Lis
 
 func resolveWith(t *testing.T, ref string, open ...*changesetv1.ChangeSet) (string, *changeSetClient, error) {
 	t.Helper()
+
 	r, err := parseChangeSet(ref)
 	require.NoError(t, err)
+
 	cs := &changeSetClient{open: open}
 	id, err := r.resolve(context.Background(), &fakeClient{cs: cs})
+
 	return id, cs, err
 }
 

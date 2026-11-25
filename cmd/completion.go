@@ -50,7 +50,9 @@ PowerShell:
 			if len(args) == 0 {
 				return cmd.Help()
 			}
+
 			out := cmd.OutOrStdout()
+
 			switch args[0] {
 			case "bash":
 				return cmd.Root().GenBashCompletion(out)
@@ -61,8 +63,10 @@ PowerShell:
 			case "powershell":
 				return cmd.Root().GenPowerShellCompletionWithDesc(out)
 			}
+
 			return cmderr.Usage("unknown shell %q; must be one of %s", args[0], strings.Join(shells, ", "))
 		},
 	}
+
 	return cmd
 }

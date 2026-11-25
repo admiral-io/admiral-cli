@@ -60,9 +60,11 @@ func Read(path string) (*Manifest, error) {
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("%w at %s", ErrNotFound, path)
 	}
+
 	if err != nil {
 		return nil, err
 	}
+
 	return Parse(data)
 }
 
@@ -70,21 +72,27 @@ func Read(path string) (*Manifest, error) {
 // inside the repository, every name valid and unique.
 func Parse(data []byte) (*Manifest, error) {
 	var m Manifest
+
 	dec := yaml.NewDecoder(strings.NewReader(string(data)))
 	dec.KnownFields(true)
+
 	if err := dec.Decode(&m); err != nil {
 		return nil, fmt.Errorf("%s: %w", Filename, err)
 	}
+
 	if len(m.Components) == 0 {
 		return nil, fmt.Errorf("%s: no components declared", Filename)
 	}
+
 	names := map[string]string{}
 	paths := map[string]bool{}
+
 	for i := range m.Components {
 		c := &m.Components[i]
 		if c.Path == "" {
 			return nil, fmt.Errorf("%s: components[%d] has no path", Filename, i)
 		}
+
 		// filepath.IsAbs on the raw value catches a Windows drive path
 		// (C:\modules\x), which ToSlash turns into C:/modules/x and
 		// path.IsAbs would then wave through.
@@ -92,21 +100,27 @@ func Parse(data []byte) (*Manifest, error) {
 		if filepath.IsAbs(c.Path) || path.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, "../") {
 			return nil, fmt.Errorf("%s: path %q is not inside the repository", Filename, c.Path)
 		}
+
 		c.Path = clean
 		if paths[clean] {
 			return nil, fmt.Errorf("%s: path %q is declared twice", Filename, c.Path)
 		}
+
 		paths[clean] = true
 		if c.Name == "" {
 			c.Name = path.Base(clean)
 		}
+
 		if !ValidName(c.Name) {
 			return nil, fmt.Errorf("%s: %q is not a valid component name (lowercase letters, digits and hyphens); set name: on the %q entry", Filename, c.Name, c.Path)
 		}
+
 		if other, dup := names[c.Name]; dup {
 			return nil, fmt.Errorf("%s: name %q is used by both %q and %q", Filename, c.Name, other, c.Path)
 		}
+
 		names[c.Name] = c.Path
 	}
+
 	return &m, nil
 }

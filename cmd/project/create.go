@@ -50,6 +50,7 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 			}
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+
 			return p.PrintOne(resp.Project, resp.Project.Name, projectTable.Render(p, resp.Project))
 		},
 	}

@@ -47,6 +47,7 @@ be presented: with none set it is offered to any host its type fits.`,
 	for _, t := range typeNames {
 		cmd.AddCommand(newCreateTypeCmd(opts, t))
 	}
+
 	return cmd
 }
 
@@ -67,6 +68,7 @@ func newCreateTypeCmd(opts *client.Options, typ string) *cobra.Command {
 			if err != nil {
 				return err
 			}
+
 			auth, err := secret.authConfig(cmd, typ)
 			if err != nil {
 				return err
@@ -89,7 +91,9 @@ func newCreateTypeCmd(opts *client.Options, typ string) *cobra.Command {
 			if err != nil {
 				return err
 			}
+
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+
 			return p.PrintOne(resp.Credential, resp.Credential.Name, credentialTable.Render(p, resp.Credential))
 		},
 	}

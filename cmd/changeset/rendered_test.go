@@ -24,26 +24,34 @@ type tarEntry struct {
 
 func buildArtifact(t *testing.T, entries ...tarEntry) []byte {
 	t.Helper()
+
 	var buf bytes.Buffer
+
 	zw := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(zw)
+
 	for _, e := range entries {
 		tf := e.typeflag
 		if tf == 0 {
 			tf = tar.TypeReg
 		}
+
 		h := &tar.Header{Name: e.name, Mode: 0o644, Size: int64(len(e.body)), Typeflag: tf, Linkname: e.linkname}
 		if tf != tar.TypeReg {
 			h.Size = 0
 		}
+
 		require.NoError(t, tw.WriteHeader(h))
+
 		if tf == tar.TypeReg {
 			_, err := tw.Write([]byte(e.body))
 			require.NoError(t, err)
 		}
 	}
+
 	require.NoError(t, tw.Close())
 	require.NoError(t, zw.Close())
+
 	return buf.Bytes()
 }
 
@@ -124,6 +132,7 @@ func TestRenderedNamespaces(t *testing.T) {
 	require.NoError(t, err)
 	comps, err := components(files)
 	require.NoError(t, err)
+
 	var b bytes.Buffer
 	writeRendered(&b, comps)
 	assert.Equal(t, "# component: api  namespace: <none>\nkind: Service\n", b.String())
@@ -148,6 +157,7 @@ func TestUnpackRefusesPathTraversal(t *testing.T) {
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), strconv.Quote(e.name))
 			assert.Nil(t, files)
+
 			_, statErr := os.Stat(dir)
 			assert.ErrorIs(t, statErr, os.ErrNotExist, "nothing is written")
 			_, statErr = os.Stat(filepath.Join(parent, "evil.yaml"))
@@ -161,6 +171,7 @@ func TestUnpackStaysInsideThroughASymlink(t *testing.T) {
 	parent := t.TempDir()
 	outside := filepath.Join(parent, "outside")
 	require.NoError(t, os.Mkdir(outside, 0o755))
+
 	dir := filepath.Join(parent, "out")
 	require.NoError(t, os.Mkdir(dir, 0o755))
 	require.NoError(t, os.Symlink(outside, filepath.Join(dir, "components")))
@@ -168,6 +179,7 @@ func TestUnpackStaysInsideThroughASymlink(t *testing.T) {
 	files, err := readArtifact(buildArtifact(t, tarEntry{name: "components/api/manifests.yaml", body: "kind: Service\n"}))
 	require.NoError(t, err)
 	require.Error(t, unpack(dir, files))
+
 	_, err = os.Stat(filepath.Join(outside, "api", "manifests.yaml"))
 	assert.ErrorIs(t, err, os.ErrNotExist)
 }
@@ -180,6 +192,7 @@ func TestUnpack(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(dir, "components", "worker", "manifests.yaml"))
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "name: worker")
+
 	_, err = os.Stat(filepath.Join(dir, "artifact.json"))
 	assert.NoError(t, err)
 

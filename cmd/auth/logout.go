@@ -25,6 +25,7 @@ if set, is not affected.`,
 			if err != nil {
 				return err
 			}
+
 			switch {
 			case !res.Removed:
 				output.Writeln(cmd.OutOrStdout(), "Not logged in.")
@@ -39,6 +40,7 @@ if set, is not affected.`,
 			default:
 				output.Writeln(cmd.OutOrStdout(), "Logged out.")
 			}
+
 			return nil
 		},
 	}

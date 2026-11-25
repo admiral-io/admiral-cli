@@ -26,6 +26,7 @@ func newApproveCmd(opts *client.Options) *cobra.Command {
 		yes    bool
 		full   bool
 	)
+
 	cmd := &cobra.Command{
 		Use:               "approve <changeset>",
 		ValidArgsFunction: complete.First(complete.Envs(opts)),
@@ -44,9 +45,11 @@ approved by it. The changeset's author cannot approve it.`,
 			if err != nil {
 				return err
 			}
+
 			if err := input.RequireInteractiveOrYes(cmd, yes); err != nil {
 				return err
 			}
+
 			c, csID, err := dial(cmd, opts, ref)
 			if err != nil {
 				return err
@@ -57,24 +60,30 @@ approved by it. The changeset's author cannot approve it.`,
 			if err != nil {
 				return err
 			}
+
 			if err := showPlan(cmd.Context(), cmd.ErrOrStderr(), c, cs, r, full); err != nil {
 				return err
 			}
+
 			if err := input.Confirm(cmd, yes, "Approve this plan"); err != nil {
 				return err
 			}
+
 			if _, err := c.Run().ApproveRun(cmd.Context(), &runv1.ApproveRunRequest{
 				RunId: r.GetId(), PlanDigest: r.GetPlan().GetPlanDigest(), Reason: reason,
 			}); err != nil {
 				return runcmd.Refusal(err, "admiral changeset", csID)
 			}
+
 			output.Confirmed(cmd.ErrOrStderr(), "changeset", csID, "approved ("+r.GetId()+")")
+
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&reason, "reason", "", "why, recorded with the approval")
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip the confirmation prompt")
 	cmd.Flags().BoolVar(&full, "full", false, "show each changed resource whole, as YAML, with its changed lines marked")
+
 	return cmd
 }
 
@@ -83,6 +92,7 @@ func newApplyCmd(opts *client.Options) *cobra.Command {
 		yes bool
 		po  planOptions
 	)
+
 	cmd := &cobra.Command{
 		Use:               "apply <changeset>",
 		ValidArgsFunction: complete.First(complete.Envs(opts)),
@@ -104,12 +114,15 @@ it failed or applied partway.`,
 			if err != nil {
 				return err
 			}
+
 			if po.waitTimeout <= 0 {
 				return cmderr.Usage("--wait-timeout must be positive")
 			}
+
 			if err := input.RequireInteractiveOrYes(cmd, yes); err != nil {
 				return err
 			}
+
 			c, csID, err := dial(cmd, opts, ref)
 			if err != nil {
 				return err
@@ -120,39 +133,50 @@ it failed or applied partway.`,
 			if err != nil {
 				return err
 			}
+
 			if err := showPlan(cmd.Context(), cmd.ErrOrStderr(), c, cs, r, po.full); err != nil {
 				return err
 			}
+
 			// The plan is one group; the prompt and the wait are the next.
 			output.Writef(cmd.ErrOrStderr(), "\n")
+
 			if err := input.Confirm(cmd, yes, "Apply this plan"); err != nil {
 				return err
 			}
+
 			resp, err := c.Run().ApplyRun(cmd.Context(), &runv1.ApplyRunRequest{
 				RunId: r.GetId(), PlanDigest: r.GetPlan().GetPlanDigest(),
 			})
 			if err != nil {
 				return runcmd.Refusal(err, "admiral changeset", csID)
 			}
+
 			r = resp.GetRun()
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+
 			progress := runcmd.NewProgress(p.Err(), !yes)
 			if !po.noWait {
 				done, err := runcmd.Wait(cmd.Context(), c.Run(), r, po.waitTimeout, true, progress)
 				if err != nil {
 					return runcmd.WaitError(err, r)
 				}
+
 				r = done
 			}
+
 			progress.End()
+
 			if err := runcmd.Print(p, r, cs.GetTitle()); err != nil {
 				return err
 			}
+
 			return runcmd.Outcome(r)
 		},
 	}
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip the confirmation prompt")
 	waitFlagsFor(cmd, &po, "the apply")
+
 	return cmd
 }
 
@@ -163,19 +187,23 @@ func latestPlan(ctx context.Context, c sdkclient.AdmiralClient, csID string) (*c
 	if err != nil {
 		return nil, nil, err
 	}
+
 	cs := resp.GetChangeSet()
 	if cs.GetBehind() {
 		return nil, nil, cmderr.WithHint(fmt.Errorf("%s is behind: its environment moved since it was planned", csID),
 			"Rebase it, then plan it again: 'admiral changeset rebase "+csID+" --plan'.")
 	}
+
 	if cs.GetLatestRunId() == "" {
 		return nil, nil, cmderr.WithHint(fmt.Errorf("%s has not been planned", csID),
 			"To plan it, run: admiral changeset plan "+csID)
 	}
+
 	run, err := c.Run().GetRun(ctx, &runv1.GetRunRequest{RunId: cs.GetLatestRunId()})
 	if err != nil {
 		return nil, nil, err
 	}
+
 	r := run.GetRun()
 	switch r.GetStatus() {
 	case runv1.Run_STATUS_PLANNED:
@@ -202,8 +230,10 @@ func showPlan(ctx context.Context, w io.Writer, c sdkclient.AdmiralClient, cs *c
 	if err != nil {
 		return err
 	}
+
 	output.Writef(w, "%s  %q  by %s  (%s)\n\n", cs.GetId(), cs.GetTitle(), output.FormatActor(cs.GetCreatedBy()), r.GetId())
 	writePlan(w, diff.GetDiff(), r, full)
+
 	return nil
 }
 
@@ -213,5 +243,6 @@ func writePlan(w io.Writer, d *agentv1.PlanDiff, r *runv1.Run, full bool) {
 		runcmd.WriteFullDiff(w, d, r.GetPlan())
 		return
 	}
+
 	runcmd.WriteBriefDiff(w, d, r.GetPlan(), r.GetId())
 }

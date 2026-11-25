@@ -37,23 +37,29 @@ describe is a human view. Use 'agent get -o json' for the raw record.`,
 				return err
 			}
 			defer c.Close() //nolint:errcheck // best-effort cleanup
+
 			id, err := resolve.Agent(cmd.Context(), c.Agent(), args[0])
 			if err != nil {
 				return err
 			}
+
 			resp, err := c.Agent().GetAgent(cmd.Context(), &agentv1.GetAgentRequest{AgentId: id})
 			if err != nil {
 				return err
 			}
+
 			a := resp.GetAgent()
+
 			p := output.NewPrinter(cmd, opts.OutputFormat)
 			if !p.Format.IsTable() {
 				return p.PrintDescribe(nil, "admiral agent get "+a.GetName())
 			}
+
 			d, err := describeAgent(cmd.Context(), c, a)
 			if err != nil {
 				return err
 			}
+
 			return p.PrintDescribe(d, "admiral agent get "+a.GetName())
 		},
 	}
@@ -67,9 +73,11 @@ func describeAgent(ctx context.Context, c sdkclient.AdmiralClient, a *agentv1.Ag
 	d.Field("Health", output.FormatEnum(a.GetHealth()))
 	d.Field("Last Seen", lastSeen(a))
 	d.Field("Version", a.GetReport().GetAgentVersion())
+
 	if k := a.GetReport().GetKubernetes(); k != nil {
 		d.Field("Kubernetes", k.GetKubeVersion())
 	}
+
 	d.Field("Created", output.FormatDescribeTime(a.GetCreatedAt()))
 	d.Field("Created By", output.FormatActorWithID(a.GetCreatedBy()))
 
@@ -77,13 +85,16 @@ func describeAgent(ctx context.Context, c sdkclient.AdmiralClient, a *agentv1.Ag
 	if err != nil {
 		return nil, err
 	}
+
 	denied, err := addServiceAccount(ctx, d, c, a)
 	if err != nil {
 		return nil, err
 	}
+
 	if denied || grantsDenied {
 		d.Hint(cmderr.ScopeHint)
 	}
+
 	return d, nil
 }
 
@@ -93,13 +104,17 @@ func describeAgent(ctx context.Context, c sdkclient.AdmiralClient, a *agentv1.Ag
 func addServiceAccount(ctx context.Context, d *output.Describe, c sdkclient.AdmiralClient, a *agentv1.Agent) (bool, error) {
 	resp, err := c.ServiceAccount().GetServiceAccount(ctx,
 		&serviceaccountv1.GetServiceAccountRequest{ServiceAccountId: a.GetServiceAccountId()})
+
 	denied := status.Code(err) == codes.PermissionDenied
 	if err != nil && !denied {
 		return false, err
 	}
+
 	sa := resp.GetServiceAccount()
+
 	d.Section("Service Account", func(b *output.Block) {
 		b.Field("ID", a.GetServiceAccountId())
+
 		switch {
 		case denied:
 			// Reading an agent does not imply reading its service account.
@@ -112,6 +127,7 @@ func addServiceAccount(ctx context.Context, d *output.Describe, c sdkclient.Admi
 			b.Field("Issuer", sa.GetIssuerId())
 		}
 	})
+
 	return denied, nil
 }
 
@@ -126,11 +142,14 @@ func addGrants(ctx context.Context, d *output.Describe, c sdkclient.AdmiralClien
 	case err != nil:
 		return false, err
 	}
+
 	targets := make([]string, 0, len(resp.GetGrants()))
 	for _, g := range resp.GetGrants() {
 		targets = append(targets, grantName(ctx, c, g))
 	}
+
 	d.Fields("Granted To", targets)
+
 	return false, nil
 }
 
@@ -147,10 +166,12 @@ func grantName(ctx context.Context, c sdkclient.AdmiralClient, g *agentv1.AgentG
 		if err != nil {
 			break
 		}
+
 		app, err := c.Project().GetProject(ctx, &projectv1.GetProjectRequest{ProjectId: env.GetEnvironment().GetProjectId()})
 		if err == nil {
 			return "env:" + app.GetProject().GetName() + "/" + env.GetEnvironment().GetName()
 		}
 	}
+
 	return grantTarget(g)
 }

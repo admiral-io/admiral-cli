@@ -36,9 +36,11 @@ what makes it a release.`,
 			if err != nil {
 				return err
 			}
+
 			if tag == "" {
 				return cmderr.Usage("%q names no tag; use <name>:<tag>", args[0])
 			}
+
 			// Before any network use: a run that cannot confirm and did not
 			// pass --yes fails here, in milliseconds, with the usage error.
 			if err := input.RequireInteractiveOrYes(cmd, yes); err != nil {
@@ -67,6 +69,7 @@ what makes it a release.`,
 			}
 
 			output.Confirmed(cmd.ErrOrStderr(), "tag", name+":"+tag, "removed")
+
 			return nil
 		},
 	}

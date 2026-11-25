@@ -13,15 +13,19 @@ func ExpandPath(path string) (string, error) {
 	if path == "" || path[0] != '~' {
 		return path, nil
 	}
+
 	if path != "~" && !strings.HasPrefix(path, "~/") {
 		return path, nil
 	}
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("resolve home directory: %w", err)
 	}
+
 	if path == "~" {
 		return home, nil
 	}
+
 	return home + path[1:], nil
 }

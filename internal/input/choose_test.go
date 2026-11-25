@@ -35,6 +35,7 @@ func TestChoose_NumbersOnlyWhatItShows(t *testing.T) {
 	for i := range 60 {
 		many = append(many, Option{Name: fmt.Sprintf("v%d", i)})
 	}
+
 	cmd, errOut := interactiveCmd(t, "v59\n")
 	got, err := Choose(cmd, "--version", "version", many)
 	require.NoError(t, err)
@@ -74,6 +75,7 @@ func TestChoose_NotInteractiveNamesTheFlagAndTheOptions(t *testing.T) {
 	for i := range 25 {
 		many = append(many, Option{Name: fmt.Sprintf("v%d", i)})
 	}
+
 	_, err = Choose(cmd, "--version", "version", many)
 	require.Contains(t, cmderr.Hint(err), "v19, and 5 more")
 	require.NotContains(t, cmderr.Hint(err), "v20")

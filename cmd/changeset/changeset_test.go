@@ -27,17 +27,20 @@ import (
 func newTestRoot(t *testing.T) *ChangeSetCmd {
 	t.Helper()
 	os.Unsetenv(credentials.EnvAPIKey)
+
 	return NewChangeSetCmd(&client.Options{ConfigDir: t.TempDir()})
 }
 
 func run(t *testing.T, args ...string) (string, error) {
 	t.Helper()
 	root := newTestRoot(t)
+
 	var out, errOut bytes.Buffer
 	root.Cmd.SetOut(&out)
 	root.Cmd.SetErr(&errOut)
 	root.Cmd.SetArgs(args)
 	err := root.Cmd.Execute()
+
 	return out.String() + errOut.String(), err
 }
 
@@ -91,10 +94,12 @@ func TestChangeSetIsCheckedBeforeTheNetwork(t *testing.T) {
 		_, err = run(t, "discard", bad, "--yes")
 		requireUsage(t, err, `invalid changeset "`+bad+`"`)
 	}
+
 	for _, bad := range []string{"shop/", "/dev", "shop/dev/x"} {
 		_, err := run(t, "plan", bad)
 		requireUsage(t, err, `invalid environment "`+bad+`": expected project/environment`)
 	}
+
 	for _, good := range []string{csID, "shop/dev"} {
 		_, err := run(t, "get", good)
 		requireAccepted(t, err, "get", good)
@@ -200,6 +205,7 @@ func keys(segs []*changesetv1.PathSegment) []string {
 	for i, s := range segs {
 		out[i] = s.GetKey()
 	}
+
 	return out
 }
 
@@ -230,6 +236,7 @@ func TestSetEdit_ReadsValuesLikeHelm(t *testing.T) {
 		a := valuesfile.Assignment{Component: "api", Path: []string{"image", "tag"}, Raw: tc.raw}
 		e, err := setEdit(a, tc.forceString)
 		require.NoError(t, err, tc.raw)
+
 		sv := e.GetSetValue()
 		require.NotNil(t, sv, "%q should be SetValue", tc.raw)
 		assert.Equal(t, "api", sv.Component)
@@ -312,6 +319,7 @@ func TestSetAndAddRefuseBeforeTheNetwork(t *testing.T) {
 	for i := range maxEdits + 1 {
 		many = append(many, fmt.Sprintf("api.k%d=1", i))
 	}
+
 	_, err = run(t, many...)
 	requireUsage(t, err, "accepts at most 101 arg(s)")
 
@@ -348,6 +356,7 @@ func TestAddFromValuesFile(t *testing.T) {
 	write := func(name, body string) string {
 		p := filepath.Join(dir, name)
 		require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
+
 		return p
 	}
 	add := func(path string) (string, error) {
@@ -380,10 +389,12 @@ func TestAddFromValuesFile(t *testing.T) {
 // downloaded writes a file as `values` downloads it.
 func downloaded(t *testing.T, h valuesfile.Header, tree map[string]any) string {
 	t.Helper()
+
 	data, err := valuesfile.Render(tree, h)
 	require.NoError(t, err)
 	p := filepath.Join(t.TempDir(), "values.yaml")
 	require.NoError(t, os.WriteFile(p, data, 0o644))
+
 	return p
 }
 
@@ -446,9 +457,11 @@ func TestValuesUploadSendsTheTreeAndItsRevision(t *testing.T) {
 	require.Contains(t, string(data), "!ref users-db.host", "a download writes a reference as !ref")
 
 	var stderr bytes.Buffer
+
 	e, rev, fromCS, err := uploadEdit(&stderr, path, changeSetRef{id: csID}, "api", data)
 	require.NoError(t, err)
 	assert.Equal(t, csID, fromCS)
+
 	rv := e.GetReplaceValues()
 	require.NotNil(t, rv)
 	assert.Equal(t, "api", rv.Component)
@@ -545,9 +558,11 @@ func TestDiffShowsNestedValuesAtTheirOwnPath(t *testing.T) {
 				Component: "web", Action: changesetv1.EntryAction_ENTRY_ACTION_UPDATE,
 				Paths: []*changesetv1.PathDiff{{DisplayPath: "ui", BeforePresent: tc.bp, BeforeJson: tc.b, AfterPresent: tc.ap, AfterJson: tc.a}},
 			}}})
+
 			for _, w := range tc.want {
 				assert.Contains(t, b.String(), w)
 			}
+
 			if tc.wantNot != "" {
 				assert.NotContains(t, b.String(), tc.wantNot)
 			}
@@ -586,6 +601,7 @@ func TestComponentNameLimit(t *testing.T) {
 func TestPlacementEdit(t *testing.T) {
 	e, err := placementEdit("api", "shop-api", []string{"kube-system", "monitoring"})
 	require.NoError(t, err)
+
 	ss := e.GetSetSettings()
 	require.NotNil(t, ss)
 	assert.Equal(t, "api", ss.Component)
@@ -605,10 +621,12 @@ func TestPlacementEdit(t *testing.T) {
 	requireUsage(t, err, `invalid extra namespace ""`)
 	_, err = placementEdit("api", "shop", []string{"kube-system", "kube-system"})
 	requireUsage(t, err, `extra namespace "kube-system" given twice`)
+
 	many := make([]string, maxExtraNamespaces+1)
 	for i := range many {
 		many[i] = fmt.Sprintf("ns-%d", i)
 	}
+
 	_, err = placementEdit("api", "shop", many)
 	requireUsage(t, err, "17 extra namespaces; the limit is 16")
 }

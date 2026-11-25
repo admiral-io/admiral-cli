@@ -32,10 +32,12 @@ func newListCmd(opts *client.Options) *cobra.Command {
 		ValidArgsFunction: complete.First(complete.Envs(opts)),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			envTarget := args[0]
+
 			app, env, err := flags.EnvTarget(cmd, "", envTarget)
 			if err != nil {
 				return err
 			}
+
 			// Checked before the client is built: dialing first would report
 			// a missing credential for what is a missing argument.
 			if app == "" && !resolve.IsID("env", env) {
@@ -53,12 +55,14 @@ func newListCmd(opts *client.Options) *cobra.Command {
 			if err != nil {
 				return err
 			}
+
 			var byStatus string
 			if status != "" {
 				if byStatus, err = filter.Eq("status", "STATUS_"+strings.ToUpper(status)); err != nil {
 					return err
 				}
 			}
+
 			css, next, err := flags.Pages(paging, func(token string) ([]*changesetv1.ChangeSet, string, error) {
 				resp, err := c.ChangeSet().ListChangeSets(cmd.Context(), &changesetv1.ListChangeSetsRequest{
 					EnvironmentId: envID,
@@ -69,6 +73,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 				if err != nil {
 					return nil, "", err
 				}
+
 				return resp.ChangeSets, resp.NextPageToken, nil
 			})
 			if err != nil {
@@ -76,6 +81,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 			}
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+
 			return p.PrintList(output.List{
 				Kind:          "changesets",
 				Scope:         envTarget,

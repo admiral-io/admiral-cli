@@ -26,6 +26,7 @@ func (e *enumValue) Set(v string) error {
 		*e.dest = v
 		return nil
 	}
+
 	return cmderr.Usage("must be one of %s", strings.Join(e.allowed, ", "))
 }
 
@@ -34,10 +35,12 @@ func (e *enumValue) Set(v string) error {
 // the flag completes from the same list (style guide §1.5).
 func Enum(cmd *cobra.Command, dest *string, name, def, usage string, allowed ...string) {
 	*dest = def
+
 	u := fmt.Sprintf("%s: %s", usage, strings.Join(allowed, ", "))
 	if def != "" {
 		u += " (default " + def + ")"
 	}
+
 	cmd.Flags().Var(&enumValue{dest: dest, allowed: allowed}, name, u)
 	complete.Flag(cmd, name, complete.Static(allowed...))
 }

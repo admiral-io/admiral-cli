@@ -16,6 +16,7 @@ func uniqueName(prefix string) string {
 func TestApp_RoundTrip(t *testing.T) {
 	cli := newServerCLI(t)
 	name := uniqueName("e2e-app")
+
 	t.Cleanup(func() { cli.Run("project", "delete", name, "--yes") })
 
 	cli.Run("auth", "status").Succeeds().StdoutContains("Authenticated:  yes")
@@ -31,9 +32,11 @@ func TestApp_RoundTrip(t *testing.T) {
 		Labels      map[string]string `json:"labels"`
 	}
 	cli.Run("project", "get", name, "-o", "json").DecodeJSON(&app)
+
 	if app.Name != name || app.Description != "e2e round trip" || app.Labels["suite"] != "e2e" || app.ID == "" {
 		t.Fatalf("app get -o json returned %+v", app)
 	}
+
 	cli.Run("project", "get", name, "-o", "name").Succeeds().StdoutIs(name + "\n")
 
 	// The ID addresses the same resource.
@@ -43,20 +46,24 @@ func TestApp_RoundTrip(t *testing.T) {
 	cli.Run("project", "list").Succeeds().StdoutContains(name)
 	cli.Run("project", "list", "-o", "name").Succeeds().StdoutContains(name + "\n")
 	cli.Run("project", "list", "--label", "suite=e2e", "-o", "name").Succeeds().StdoutContains(name + "\n")
+
 	var listed []struct {
 		Name string `json:"name"`
 	}
 	cli.Run("project", "list", "-o", "json").DecodeJSON(&listed)
+
 	found := false
 	for _, a := range listed {
 		found = found || a.Name == name
 	}
+
 	if !found {
 		t.Fatalf("app list -o json does not include %s: %+v", name, listed)
 	}
 
 	cli.Run("project", "update", name, "--description", "updated").Succeeds()
 	cli.Run("project", "get", name, "-o", "json").DecodeJSON(&app)
+
 	if app.Description != "updated" {
 		t.Fatalf("description after update: %q", app.Description)
 	}

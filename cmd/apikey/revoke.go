@@ -13,6 +13,7 @@ import (
 
 func newRevokeCmd(opts *client.Options) *cobra.Command {
 	var yes bool
+
 	cmd := &cobra.Command{
 		Use:   "revoke <name>",
 		Short: "Revoke an API key",
@@ -25,25 +26,32 @@ minutes, once its current access token expires.`,
 			if err := input.RequireInteractiveOrYes(cmd, yes); err != nil {
 				return err
 			}
+
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
 				return err
 			}
 			defer c.Close() //nolint:errcheck
+
 			id, err := resolve.PersonalAccessToken(cmd.Context(), c.ApiKey(), args[0])
 			if err != nil {
 				return err
 			}
+
 			if err := input.Confirm(cmd, yes, "Revoke API key "+args[0]); err != nil {
 				return err
 			}
+
 			if _, err := c.ApiKey().RevokeApiKey(cmd.Context(), &apikeyv1.RevokeApiKeyRequest{ApiKeyId: id}); err != nil {
 				return err
 			}
+
 			output.Confirmed(cmd.ErrOrStderr(), "API key", args[0], "revoked")
+
 			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip the confirmation prompt")
+
 	return cmd
 }

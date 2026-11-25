@@ -38,5 +38,6 @@ Commands accept a key name or ID as the positional argument.`,
 		newRevokeCmd(opts),
 	)
 	root.Cmd = cmd
+
 	return root
 }

@@ -54,5 +54,6 @@ Commands accept a source name or ID as the positional argument.`,
 	)
 
 	root.Cmd = cmd
+
 	return root
 }

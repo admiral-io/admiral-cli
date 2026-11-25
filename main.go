@@ -33,12 +33,15 @@ func buildVersion(version, commit, date, builtBy string) vers.Version {
 			if commit != "" {
 				v.GitCommit = commit
 			}
+
 			if date != "" {
 				v.BuildDate = date
 			}
+
 			if version != "" {
 				v.GitVersion = version
 			}
+
 			if builtBy != "" {
 				v.BuiltBy = builtBy
 			}

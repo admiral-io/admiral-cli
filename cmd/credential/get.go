@@ -32,11 +32,14 @@ func newGetCmd(opts *client.Options) *cobra.Command {
 			if err != nil {
 				return err
 			}
+
 			resp, err := c.Credential().GetCredential(cmd.Context(), &credentialv1.GetCredentialRequest{CredentialId: id})
 			if err != nil {
 				return err
 			}
+
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+
 			return p.PrintOne(resp.Credential, resp.Credential.Name, credentialTable.Render(p, resp.Credential))
 		},
 	}

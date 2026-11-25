@@ -41,6 +41,7 @@ func (v Version) String() string {
 	_, _ = fmt.Fprintf(w, "Platform:\t%s\n", v.Platform)
 
 	_ = w.Flush()
+
 	return b.String()
 }
 
@@ -91,6 +92,7 @@ func getBuildInfo() *debug.BuildInfo {
 	if !ok {
 		return nil
 	}
+
 	return bi
 }
 
@@ -115,10 +117,12 @@ func getCommit(bi *debug.BuildInfo) string {
 
 func getBuildDate(bi *debug.BuildInfo) string {
 	buildTime := getKey(bi, "vcs.time")
+
 	t, err := time.Parse("2006-01-02T15:04:05Z", buildTime)
 	if err != nil {
 		return ""
 	}
+
 	return t.Format("2006-01-02T15:04:05")
 }
 
@@ -126,11 +130,13 @@ func getKey(bi *debug.BuildInfo, key string) string {
 	if bi == nil {
 		return ""
 	}
+
 	for _, iter := range bi.Settings {
 		if iter.Key == key {
 			return iter.Value
 		}
 	}
+
 	return ""
 }
 
@@ -140,5 +146,6 @@ func firstNonEmpty(ss ...string) string {
 			return s
 		}
 	}
+
 	return ""
 }

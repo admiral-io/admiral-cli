@@ -32,6 +32,7 @@ changeset cannot be edited again.`,
 			if err != nil {
 				return err
 			}
+
 			if err := input.RequireInteractiveOrYes(cmd, yes); err != nil {
 				return err
 			}
@@ -45,6 +46,7 @@ changeset cannot be edited again.`,
 			if err := input.Confirm(cmd, yes, "Discard changeset "+csID); err != nil {
 				return err
 			}
+
 			if _, err := c.ChangeSet().DiscardChangeSet(cmd.Context(), &changesetv1.DiscardChangeSetRequest{
 				ChangeSetId: csID,
 			}); err != nil {
@@ -52,6 +54,7 @@ changeset cannot be edited again.`,
 			}
 
 			output.Confirmed(cmd.ErrOrStderr(), "changeset", csID, "discarded")
+
 			return nil
 		},
 	}

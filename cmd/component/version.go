@@ -61,6 +61,7 @@ func newVersionListCmd(opts *client.Options) *cobra.Command {
 		ValidArgsFunction: complete.First(complete.Components(opts)),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var f string
+
 			if status != "" {
 				// The flag has already refused anything but the three words;
 				// the server's enum names are their upper-case forms.
@@ -80,6 +81,7 @@ func newVersionListCmd(opts *client.Options) *cobra.Command {
 			if err != nil {
 				return err
 			}
+
 			vers, next, err := flags.Pages(paging, func(token string) ([]*registryv1.Version, string, error) {
 				resp, err := c.Registry().ListVersions(cmd.Context(), &registryv1.ListVersionsRequest{
 					ComponentId: componentID, Filter: f, PageSize: paging.PageSize, PageToken: token,
@@ -87,6 +89,7 @@ func newVersionListCmd(opts *client.Options) *cobra.Command {
 				if err != nil {
 					return nil, "", err
 				}
+
 				return resp.Versions, resp.NextPageToken, nil
 			})
 			if err != nil {
@@ -94,6 +97,7 @@ func newVersionListCmd(opts *client.Options) *cobra.Command {
 			}
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+
 			return p.PrintList(output.List{
 				Kind:          "versions",
 				Items:         output.Messages(vers),
@@ -126,6 +130,7 @@ func newVersionGetCmd(opts *client.Options) *cobra.Command {
 			if err != nil {
 				return err
 			}
+
 			if ref == "" {
 				return cmderr.Usage("%q names no version; use <name>:<tag> or <name>@<digest>", args[0])
 			}
@@ -140,6 +145,7 @@ func newVersionGetCmd(opts *client.Options) *cobra.Command {
 			if err != nil {
 				return err
 			}
+
 			resp, err := c.Registry().GetVersion(cmd.Context(), &registryv1.GetVersionRequest{
 				ComponentId: componentID, Reference: ref,
 			})
@@ -148,6 +154,7 @@ func newVersionGetCmd(opts *client.Options) *cobra.Command {
 			}
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+
 			return p.PrintOne(resp.Version, name+"@"+resp.Version.Digest, versionTable.Render(p, resp.Version))
 		},
 	}

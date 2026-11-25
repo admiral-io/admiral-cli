@@ -15,12 +15,15 @@ import (
 // source can be imported through.
 func readySource(t *testing.T) admiraltest.Shape {
 	t.Helper()
+
 	for _, s := range admiraltest.Shapes() {
 		if s.String() == "branch-1" {
 			return s
 		}
 	}
+
 	t.Fatal("no branch-1 shape")
+
 	return admiraltest.Shape{}
 }
 

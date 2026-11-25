@@ -17,22 +17,29 @@ import (
 // in-process function returning out or err, recording each call.
 func fakeOp(t *testing.T, out string, err error) *[][]string {
 	t.Helper()
+
 	bin := t.TempDir()
 	if werr := os.WriteFile(filepath.Join(bin, "op"), []byte("#!/bin/sh\nexit 0\n"), 0755); werr != nil { //nolint:gosec // test stub must be executable
 		t.Fatal(werr)
 	}
+
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	var calls [][]string
+
 	prev := runCommand
 	runCommand = func(_ context.Context, name string, args ...string) ([]byte, error) {
 		calls = append(calls, append([]string{name}, args...))
+
 		if err != nil {
 			return nil, err
 		}
+
 		return []byte(out), nil
 	}
+
 	t.Cleanup(func() { runCommand = prev })
+
 	return &calls
 }
 
@@ -40,6 +47,7 @@ func fakeOp(t *testing.T, out string, err error) *[][]string {
 // including stderr capture on failure.
 func TestRunCommand_RealExec(t *testing.T) {
 	bin := t.TempDir()
+
 	script := "#!/bin/sh\nif [ \"$1\" = fail ]; then echo boom >&2; exit 1; fi\nprintf '%s' \"$2\"\n"
 	if err := os.WriteFile(filepath.Join(bin, "stub"), []byte(script), 0755); err != nil { //nolint:gosec // test stub
 		t.Fatal(err)
@@ -108,7 +116,9 @@ func TestResolveRef_NotARef(t *testing.T) {
 
 func TestResolveToken_StoredRef(t *testing.T) {
 	dir := t.TempDir()
+
 	os.Unsetenv(EnvAPIKey)
+
 	calls := fakeOp(t, "admp_from_op", nil)
 	require.NoError(t, Save(dir, &Credential{Kind: KindAPIKeyRef, Ref: "op://Vault/item/field"}))
 
@@ -127,6 +137,7 @@ func TestResolveToken_StoredRef(t *testing.T) {
 
 func TestResolveToken_StoredRefFailure(t *testing.T) {
 	dir := t.TempDir()
+
 	os.Unsetenv(EnvAPIKey)
 	fakeOp(t, "", errors.New("vault is locked"))
 	require.NoError(t, Save(dir, &Credential{Kind: KindAPIKeyRef, Ref: "op://Vault/item/field"}))
@@ -138,6 +149,7 @@ func TestResolveToken_StoredRefFailure(t *testing.T) {
 
 func TestResolveToken_StoredRefEmpty(t *testing.T) {
 	dir := t.TempDir()
+
 	os.Unsetenv(EnvAPIKey)
 	require.NoError(t, Save(dir, &Credential{Kind: KindAPIKeyRef}))
 
@@ -147,6 +159,7 @@ func TestResolveToken_StoredRefEmpty(t *testing.T) {
 
 func TestRefresh_IgnoresStoredRef(t *testing.T) {
 	dir := t.TempDir()
+
 	os.Unsetenv(EnvAPIKey)
 	require.NoError(t, Save(dir, &Credential{Kind: KindAPIKeyRef, Ref: "op://Vault/item/field"}))
 
@@ -163,9 +176,12 @@ func TestRunCommand_ChildInheritsStdin(t *testing.T) {
 
 	r, w, err := os.Pipe()
 	require.NoError(t, err)
+
 	prev := os.Stdin
 	os.Stdin = r
+
 	t.Cleanup(func() { os.Stdin = prev })
+
 	_, _ = w.WriteString("yes\n")
 	_ = w.Close()
 
@@ -179,19 +195,24 @@ func TestRunCommand_ChildInheritsStdin(t *testing.T) {
 // biometric prompt for sixty.
 func TestResolveToken_StoredRefReceivesCallerContext(t *testing.T) {
 	dir := t.TempDir()
+
 	os.Unsetenv(EnvAPIKey)
 	fakeOp(t, "admp_from_op", nil)
+
 	var seen context.Context
+
 	prev := runCommand
 	runCommand = func(ctx context.Context, name string, args ...string) ([]byte, error) {
 		seen = ctx
 		return []byte("admp_from_op"), nil
 	}
+
 	t.Cleanup(func() { runCommand = prev })
 	require.NoError(t, Save(dir, &Credential{Kind: KindAPIKeyRef, Ref: "op://Vault/item/field"}))
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
+
 	_, err := ResolveToken(ctx, dir)
 	require.NoError(t, err)
 	require.NotNil(t, seen)

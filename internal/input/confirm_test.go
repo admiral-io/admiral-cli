@@ -17,10 +17,12 @@ import (
 // pipedCmd returns a command whose streams are buffers: never interactive.
 func pipedCmd(stdin string) (*cobra.Command, *bytes.Buffer) {
 	var errOut bytes.Buffer
+
 	cmd := &cobra.Command{}
 	cmd.SetIn(strings.NewReader(stdin))
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&errOut)
+
 	return cmd, &errOut
 }
 
@@ -59,6 +61,7 @@ func TestErrCanceledExitsOne(t *testing.T) {
 func interactiveCmd(t *testing.T, stdin string) (*cobra.Command, *bytes.Buffer) {
 	t.Helper()
 	t.Setenv("ADMIRAL_FORCE_INTERACTIVE", "1")
+
 	return pipedCmd(stdin)
 }
 
@@ -73,11 +76,14 @@ func TestConfirm_Interactive(t *testing.T) {
 		t.Run(strings.TrimSpace(tc.answer), func(t *testing.T) {
 			cmd, errOut := interactiveCmd(t, tc.answer)
 			err := Confirm(cmd, false, "Delete foo")
+
 			require.Contains(t, errOut.String(), "Delete foo? [y/N] ")
+
 			if tc.ok {
 				require.NoError(t, err)
 				return
 			}
+
 			require.ErrorIs(t, err, ErrCanceled)
 			require.Contains(t, errOut.String(), "canceled")
 		})

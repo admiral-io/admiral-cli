@@ -55,20 +55,24 @@ when the upstream does not answer.`,
 			if err != nil {
 				return err
 			}
+
 			p := output.NewPrinter(cmd, opts.OutputFormat)
 
 			if len(args) == 1 && src.Kind != sourcev1.Source_KIND_GIT {
 				return printArtifacts(cmd, c.Source(), p, src, paging)
 			}
+
 			artifact := ""
 			if len(args) == 2 {
 				artifact = args[1]
 			}
+
 			return printVersions(cmd, c.Source(), p, src, artifact, paging)
 		},
 	}
 
 	flags.Paging(cmd, &paging)
+
 	return cmd
 }
 
@@ -82,11 +86,13 @@ func short(commit string) string {
 	if len(commit) > 7 {
 		return commit[:7]
 	}
+
 	return commit
 }
 
 func printArtifacts(cmd *cobra.Command, c sourcev1.SourceAPIClient, p *output.Printer, src *sourcev1.Source, paging flags.PagingOptions) error {
 	var stale string
+
 	artifacts, next, err := flags.Pages(paging, func(token string) ([]*sourcev1.SourceArtifact, string, error) {
 		resp, err := c.ListSourceArtifacts(cmd.Context(), &sourcev1.ListSourceArtifactsRequest{
 			SourceId: src.Id, PageSize: paging.PageSize, PageToken: token,
@@ -94,13 +100,17 @@ func printArtifacts(cmd *cobra.Command, c sourcev1.SourceAPIClient, p *output.Pr
 		if err != nil {
 			return nil, "", err
 		}
+
 		stale = resp.StaleReason
+
 		return resp.Artifacts, resp.NextPageToken, nil
 	})
 	if err != nil {
 		return err
 	}
+
 	warnStale(p, stale)
+
 	return p.PrintList(output.List{
 		Kind: "artifacts", Items: output.Messages(artifacts),
 		Name:          func(i int) string { return artifacts[i].Name },
@@ -110,6 +120,7 @@ func printArtifacts(cmd *cobra.Command, c sourcev1.SourceAPIClient, p *output.Pr
 
 func printVersions(cmd *cobra.Command, c sourcev1.SourceAPIClient, p *output.Printer, src *sourcev1.Source, artifact string, paging flags.PagingOptions) error {
 	var stale string
+
 	versions, next, err := flags.Pages(paging, func(token string) ([]*sourcev1.SourceVersion, string, error) {
 		resp, err := c.ListSourceVersions(cmd.Context(), &sourcev1.ListSourceVersionsRequest{
 			SourceId: src.Id, Artifact: artifact, PageSize: paging.PageSize, PageToken: token,
@@ -117,13 +128,17 @@ func printVersions(cmd *cobra.Command, c sourcev1.SourceAPIClient, p *output.Pri
 		if err != nil {
 			return nil, "", err
 		}
+
 		stale = resp.StaleReason
+
 		return resp.Versions, resp.NextPageToken, nil
 	})
 	if err != nil {
 		return err
 	}
+
 	warnStale(p, stale)
+
 	return p.PrintList(output.List{
 		Kind: "versions", Items: output.Messages(versions),
 		Name:          func(i int) string { return versions[i].Name },

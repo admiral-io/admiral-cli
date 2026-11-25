@@ -40,6 +40,7 @@ component's values can be carried to another environment.`,
 			if err != nil {
 				return err
 			}
+
 			comp := args[1]
 
 			c, err := client.CreateClient(cmd.Context(), opts)
@@ -52,6 +53,7 @@ component's values can be carried to another environment.`,
 			if err != nil {
 				return err
 			}
+
 			resp, err := c.Environment().GetEnvironmentComponentValues(cmd.Context(), &environmentv1.GetEnvironmentComponentValuesRequest{
 				EnvironmentId: envID,
 				Component:     comp,
@@ -60,28 +62,36 @@ component's values can be carried to another environment.`,
 			if err != nil {
 				return err
 			}
+
 			p := output.NewPrinter(cmd, opts.OutputFormat)
 			if p.Format.IsMachine() {
 				return p.PrintResource(resp, nil)
 			}
+
 			tree, err := valuesfile.DecodeJSON(resp.TreeJson)
 			if err != nil {
 				return err
 			}
+
 			body, err := valuesfile.Encode(tree)
 			if err != nil {
 				return err
 			}
+
 			var b bytes.Buffer
 			fmt.Fprintf(&b, "# environment: %s\n# component: %s\n", args[0], comp)
+
 			if la := resp.LastApply; la != nil {
 				fmt.Fprintf(&b, "# applied by: %s %s\n", la.ChangeSetId, la.RevisionId)
 			}
+
 			if effective {
 				b.WriteString("# effective: every value the component receives\n")
 			}
+
 			b.Write(body)
 			_, err = p.Out().Write(b.Bytes())
+
 			return err
 		},
 	}
@@ -90,5 +100,6 @@ component's values can be carried to another environment.`,
 	cmd.Flags().BoolVar(&effective, "effective", false, "print the whole tree the component receives, defaults included")
 	// Hidden until the platform builds the effective tree; it refuses the flag today.
 	_ = cmd.Flags().MarkHidden("effective")
+
 	return cmd
 }

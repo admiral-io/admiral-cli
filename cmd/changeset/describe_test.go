@@ -37,6 +37,7 @@ func TestDescribeShowsTheChangeAndTheFailedRun(t *testing.T) {
 		}}},
 		runs: []*runv1.Run{{Id: "run-7zd93c9p4qer", Status: runv1.Run_STATUS_FAILED, CreatedAt: ago}},
 	}
+
 	var b bytes.Buffer
 	require.NoError(t, describeChangeSet(cs, sec).Render(&b))
 	out := b.String()
@@ -58,6 +59,7 @@ func TestChangesInBriefCountsWhatItCannotFit(t *testing.T) {
 		Paths:      []*changesetv1.PathDiff{leaf("a"), leaf("b")},
 		Violations: []*changesetv1.Violation{{Path: "a", Message: "no"}},
 	}))
+
 	long := &changesetv1.PathDiff{DisplayPath: "config.database.url", BeforePresent: true,
 		BeforeJson: `"postgres://a-very-long-host.example.com/db"`, AfterPresent: true, AfterJson: `"postgres://another.example.com/db"`}
 	assert.Equal(t, "1 value", changesInBrief(&changesetv1.ComponentDiff{Paths: []*changesetv1.PathDiff{long}}))
@@ -73,6 +75,7 @@ func TestDescribeWithoutItsRunsStillShowsTheChange(t *testing.T) {
 		}}},
 		runsErr: status.Error(codes.PermissionDenied, "needs run:read"),
 	}
+
 	var b bytes.Buffer
 	require.NoError(t, describeChangeSet(cs, sec).Render(&b))
 	out := b.String()

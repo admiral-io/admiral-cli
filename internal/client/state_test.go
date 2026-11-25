@@ -34,6 +34,7 @@ func TestStateBaseURLIsTheAPIHostWithStateForAPI(t *testing.T) {
 	assert.ErrorContains(t, err, EnvStateHost, "a host it cannot derive names the override")
 
 	t.Setenv(EnvStateHost, "localhost:9090")
+
 	got, err := StateBaseURL(&Options{ServerAddr: "localhost:8080", PlainText: true})
 	require.NoError(t, err)
 	assert.Equal(t, "http://localhost:9090", got)
@@ -41,20 +42,25 @@ func TestStateBaseURLIsTheAPIHostWithStateForAPI(t *testing.T) {
 
 func stateClientFor(t *testing.T, h http.HandlerFunc) *StateClient {
 	t.Helper()
+
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 	t.Setenv(EnvStateHost, strings.TrimPrefix(srv.URL, "http://"))
 	t.Setenv(credentials.EnvAPIKey, "admp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopq1ZqpkG")
 	c, err := NewStateClient(context.Background(), &Options{ConfigDir: t.TempDir(), PlainText: true})
 	require.NoError(t, err)
+
 	return c
 }
 
 // admiral-state takes every credential as Bearer, an API key included, and
 // the history is the documented state-versions list.
 func TestListStateVersionsReadsTheDocumentedList(t *testing.T) {
-	var gotAuth, gotPath string
-	var gotQuery url.Values
+	var (
+		gotAuth, gotPath string
+		gotQuery         url.Values
+	)
+
 	c := stateClientFor(t, func(w http.ResponseWriter, r *http.Request) {
 		gotAuth, gotPath, gotQuery = r.Header.Get("Authorization"), r.URL.Path, r.URL.Query()
 		_, _ = io.WriteString(w, `{"data":[{"id":"stv-1","type":"state-versions","attributes":{"serial":7,"size":10,"forced":true},`+
@@ -91,6 +97,7 @@ func TestAnAPIKeyIsNotRetriedOn401(t *testing.T) {
 	calls := 0
 	c := stateClientFor(t, func(w http.ResponseWriter, _ *http.Request) {
 		calls++
+
 		w.WriteHeader(http.StatusUnauthorized)
 	})
 	_, _, err := c.ListStateVersions(context.Background(), "acme", "shop_prod_net", 0, "")

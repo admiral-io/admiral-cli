@@ -44,10 +44,12 @@ func formatTags(tags []*registryv1.Tag) string {
 	if len(tags) == 0 {
 		return "" // the table renders the empty cell as <none>
 	}
+
 	names := make([]string, 0, len(tags))
 	for _, t := range tags {
 		names = append(names, t.Name)
 	}
+
 	return strings.Join(names, ",")
 }
 
@@ -58,6 +60,7 @@ func shortDigest(d string) string {
 	if len(hex) > 12 {
 		hex = hex[:12]
 	}
+
 	return hex
 }
 
@@ -65,11 +68,14 @@ func formatFindingCount(fs []*registryv1.Finding) string {
 	if len(fs) == 0 {
 		return "0"
 	}
+
 	counts := map[registryv1.FindingSeverity]int{}
 	for _, f := range fs {
 		counts[f.Severity]++
 	}
+
 	var parts []string
+
 	for _, sev := range []registryv1.FindingSeverity{
 		registryv1.FindingSeverity_FINDING_SEVERITY_CRITICAL, registryv1.FindingSeverity_FINDING_SEVERITY_HIGH,
 		registryv1.FindingSeverity_FINDING_SEVERITY_MEDIUM, registryv1.FindingSeverity_FINDING_SEVERITY_LOW, registryv1.FindingSeverity_FINDING_SEVERITY_INFO,
@@ -78,6 +84,7 @@ func formatFindingCount(fs []*registryv1.Finding) string {
 			parts = append(parts, output.FormatEnumKebab(sev)+":"+strconv.Itoa(n))
 		}
 	}
+
 	return strings.Join(parts, " ")
 }
 
@@ -90,11 +97,14 @@ func formatSize(n int64) string {
 	if n < unit {
 		return strconv.FormatInt(n, 10) + " B"
 	}
+
 	div, exp := int64(unit), 1
 	for m := n / unit; m >= unit && exp < len(sizeUnits)-1; m /= unit {
 		div *= unit
 		exp++
 	}
+
 	v := strconv.FormatFloat(float64(n)/float64(div), 'f', 1, 64)
+
 	return strings.TrimSuffix(strings.TrimSuffix(v, "0"), ".") + " " + sizeUnits[exp]
 }

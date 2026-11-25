@@ -60,10 +60,12 @@ func WithHint(err error, hint string) error {
 	if err == nil {
 		return nil
 	}
+
 	var e *Error
 	if errors.As(err, &e) {
 		return &Error{Err: e.Err, Code: e.Code, Hint: hint}
 	}
+
 	return &Error{Err: err, Code: ExitError, Hint: hint}
 }
 
@@ -74,6 +76,7 @@ func Reported(err error) error {
 	if err == nil {
 		return nil
 	}
+
 	return &reported{err: err}
 }
 
@@ -96,6 +99,7 @@ func Code(err error) int {
 	if errors.As(err, &e) && e.Code != 0 {
 		return e.Code
 	}
+
 	return ExitError
 }
 
@@ -105,9 +109,11 @@ func Hint(err error) string {
 	if errors.As(err, &e) && e.Hint != "" {
 		return e.Hint
 	}
+
 	var h Hinter
 	if errors.As(err, &h) {
 		return h.Hint()
 	}
+
 	return ""
 }

@@ -12,7 +12,6 @@ import (
 )
 
 func newGetCmd(opts *client.Options) *cobra.Command {
-
 	cmd := &cobra.Command{
 		Use:   "get <name>",
 		Short: "Get a project",
@@ -48,6 +47,7 @@ view and '-o json' for the raw record.`,
 			}
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+
 			return p.PrintOne(resp.Project, resp.Project.Name, projectTable.Render(p, resp.Project))
 		},
 	}

@@ -75,15 +75,19 @@ one that is dropped stops serving the environment.`,
 			if cmd.Flags().Changed("name") {
 				paths = append(paths, "name")
 			}
+
 			if cmd.Flags().Changed("description") {
 				paths = append(paths, "description")
 			}
+
 			if cmd.Flags().Changed("label") {
 				paths = append(paths, "labels")
 			}
+
 			if err := target.check(cmd, false); err != nil {
 				return err
 			}
+
 			targetChanged := cmd.Flags().Changed("agent") || cmd.Flags().Changed("namespace") || cmd.Flags().Changed("approvals")
 			if len(paths) == 0 && !targetChanged && !infra.changed(cmd) && !track.changed(cmd) {
 				return cmderr.Usage("at least one of --name, --description, --label, --agent, --namespace, --approvals, --engine, --backend, --track or --after-merge must be specified")
@@ -105,37 +109,48 @@ one that is dropped stops serving the environment.`,
 			if err != nil {
 				return err
 			}
+
 			e := current.Environment
 			before := proto.CloneOf(e)
 
 			if cmd.Flags().Changed("name") {
 				e.Name = newName
 			}
+
 			if cmd.Flags().Changed("description") {
 				e.Description = description
 			}
+
 			if cmd.Flags().Changed("label") {
 				labels, err := flags.ApplyLabelPatch(e.Labels, labelStrs)
 				if err != nil {
 					return err
 				}
+
 				e.Labels = labels
 			}
+
 			targetPaths, err := target.apply(cmd.Context(), cmd, c.Agent(), e)
 			if err != nil {
 				return err
 			}
+
 			paths = append(paths, targetPaths...)
+
 			infraPaths, err := infra.apply(cmd, e)
 			if err != nil {
 				return err
 			}
+
 			paths = append(paths, infraPaths...)
+
 			trackPaths, err := track.apply(cmd, e)
 			if err != nil {
 				return err
 			}
+
 			paths = append(paths, trackPaths...)
+
 			resp, err := c.Environment().UpdateEnvironment(cmd.Context(), &environmentv1.UpdateEnvironmentRequest{
 				Environment: e,
 				UpdateMask:  &fieldmaskpb.FieldMask{Paths: paths},
@@ -148,6 +163,7 @@ one that is dropped stops serving the environment.`,
 			for _, line := range settingChanges(before, resp.Environment) {
 				output.Writef(p.Err(), "%s\n", line)
 			}
+
 			return p.PrintOne(resp.Environment, resp.Environment.Name, envTable.Render(p, resp.Environment))
 		},
 	}
@@ -169,6 +185,7 @@ one that is dropped stops serving the environment.`,
 // the table already.
 func settingChanges(before, after *environmentv1.Environment) []string {
 	var out []string
+
 	change := func(what, from, to string) {
 		if from != to {
 			out = append(out, fmt.Sprintf("%s: %s -> %s", what, orNone(from), orNone(to)))
@@ -181,6 +198,7 @@ func settingChanges(before, after *environmentv1.Environment) []string {
 	change("engine", engineName(before.GetInfraEngine()), engineName(after.GetInfraEngine()))
 	change("backend", backendName(before.GetInfraBackend()), backendName(after.GetInfraBackend()))
 	change("tracking", trackingName(before.GetTracking()), trackingName(after.GetTracking()))
+
 	return out
 }
 
@@ -188,5 +206,6 @@ func orNone(s string) string {
 	if s == "" {
 		return output.None
 	}
+
 	return s
 }

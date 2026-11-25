@@ -24,6 +24,7 @@ func TestADownloadedStateIsTheOwnersAndKeepsAnExistingFile(t *testing.T) {
 
 	err = writeState(path, false, strings.NewReader("two"))
 	assert.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
+
 	got, _ := os.ReadFile(path)
 	assert.Equal(t, "one", string(got))
 
@@ -44,9 +45,11 @@ func TestAVersionRendersWithSnakeCaseFields(t *testing.T) {
 	st, err := asStruct(&client.StateVersion{ID: "stv-1", Serial: 3, SizeBytes: 10,
 		CreatedBy: client.StateWriter{Type: "jobs", ID: "job-1", Attempt: 2}})
 	require.NoError(t, err)
+
 	fields := st.GetFields()
 	for _, name := range []string{"id", "serial", "size_bytes", "forced", "created_at", "created_by"} {
 		assert.Contains(t, fields, name)
 	}
+
 	assert.Equal(t, "job-1", fields["created_by"].GetStructValue().GetFields()["id"].GetStringValue())
 }

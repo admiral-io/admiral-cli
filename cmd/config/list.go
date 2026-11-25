@@ -36,21 +36,26 @@ built-in default. Credentials are not configuration; see 'admiral auth status'.`
 			}
 
 			path := filepath.Join(opts.ConfigDir, "config.json")
+
 			rows := make([]settingRow, 0, len(config.DisplayKeys))
 			for _, k := range config.DisplayKeys {
 				value, source := resolve(cmd, k, s)
 				rows = append(rows, settingRow{key: k, value: config.DisplayValue(k, value), source: source})
 			}
+
 			p := output.NewPrinter(cmd, opts.OutputFormat)
 			if p.Format.IsMachine() {
 				doc := make(map[string]settingJSON, len(rows))
 				for _, r := range rows {
 					doc[r.key] = settingJSON{Value: r.value, Source: r.source}
 				}
+
 				return p.PrintStatus(doc, nil)
 			}
+
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 3, ' ', 0)
 			settingTable.Write(w, p, rows...)
+
 			if err := w.Flush(); err != nil {
 				return err
 			}
@@ -60,6 +65,7 @@ built-in default. Credentials are not configuration; see 'admiral auth status'.`
 			} else {
 				output.Writef(cmd.ErrOrStderr(), "\nConfig file: %s (not created yet)\n", output.Tildify(path))
 			}
+
 			return nil
 		},
 	}
@@ -72,14 +78,17 @@ func resolve(cmd *cobra.Command, key string, s config.Settings) (value, source s
 	if f := cmd.Flags().Lookup(key); f != nil && f.Changed {
 		return f.Value.String(), "flag --" + key
 	}
+
 	if env, ok := envOverrides[key]; ok {
 		if v := os.Getenv(env); v != "" {
 			return v, "env " + env
 		}
 	}
+
 	if v := s.Get(key); v != "" {
 		return v, "config file"
 	}
+
 	return "", "default"
 }
 

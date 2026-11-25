@@ -38,6 +38,7 @@ func TestParseFormat(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
+
 			if got != tc.want {
 				t.Fatalf("want %q, got %q", tc.want, got)
 			}
@@ -49,6 +50,7 @@ func TestParseFormat(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error for invalid format")
 		}
+
 		if !strings.Contains(err.Error(), "invalid output format") {
 			t.Fatalf("unexpected error message: %v", err)
 		}
@@ -84,6 +86,7 @@ func TestFormat_String(t *testing.T) {
 func TestWritef(t *testing.T) {
 	var buf bytes.Buffer
 	Writef(&buf, "hello %s %d", "world", 42)
+
 	if got := buf.String(); got != "hello world 42" {
 		t.Fatalf("want %q, got %q", "hello world 42", got)
 	}
@@ -92,6 +95,7 @@ func TestWritef(t *testing.T) {
 func TestWriteln(t *testing.T) {
 	var buf bytes.Buffer
 	Writeln(&buf, "hello", "world")
+
 	if got := buf.String(); got != "hello world\n" {
 		t.Fatalf("want %q, got %q", "hello world\n", got)
 	}
@@ -100,6 +104,7 @@ func TestWriteln(t *testing.T) {
 func TestWriteln_Empty(t *testing.T) {
 	var buf bytes.Buffer
 	Writeln(&buf)
+
 	if got := buf.String(); got != "\n" {
 		t.Fatalf("want %q, got %q", "\n", got)
 	}
@@ -130,6 +135,7 @@ func TestNewPrinter(t *testing.T) {
 	if p.Format != FormatJSON {
 		t.Fatalf("want format %q, got %q", FormatJSON, p.Format)
 	}
+
 	if p.Out() == nil {
 		t.Fatal("expected non-nil writer")
 	}
@@ -137,6 +143,7 @@ func TestNewPrinter(t *testing.T) {
 
 func TestPrintResource_Table(t *testing.T) {
 	var buf bytes.Buffer
+
 	p := testPrinter(FormatTable, &buf)
 
 	err := p.PrintResource(structpb.NewStringValue("test"), func(w *tabwriter.Writer) {
@@ -155,9 +162,11 @@ func TestPrintResource_Table(t *testing.T) {
 
 func TestPrintResource_JSON(t *testing.T) {
 	var buf bytes.Buffer
+
 	p := testPrinter(FormatJSON, &buf)
 
 	msg := structpb.NewStringValue("hello")
+
 	err := p.PrintResource(msg, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -166,6 +175,7 @@ func TestPrintResource_JSON(t *testing.T) {
 	if !json.Valid(buf.Bytes()) {
 		t.Fatalf("output is not valid JSON: %q", buf.String())
 	}
+
 	if !strings.Contains(buf.String(), "hello") {
 		t.Fatalf("expected 'hello' in JSON output: %q", buf.String())
 	}
@@ -173,9 +183,11 @@ func TestPrintResource_JSON(t *testing.T) {
 
 func TestPrintResource_YAML(t *testing.T) {
 	var buf bytes.Buffer
+
 	p := testPrinter(FormatYAML, &buf)
 
 	msg := structpb.NewStringValue("world")
+
 	err := p.PrintResource(msg, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -188,12 +200,14 @@ func TestPrintResource_YAML(t *testing.T) {
 
 func TestPrintResource_UnsupportedFormat(t *testing.T) {
 	var buf bytes.Buffer
+
 	p := testPrinter("xml", &buf)
 
 	err := p.PrintResource(structpb.NewStringValue("test"), nil)
 	if err == nil {
 		t.Fatal("expected error for unsupported format")
 	}
+
 	if !strings.Contains(err.Error(), "unsupported format") {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -211,6 +225,7 @@ func TestFormatAge(t *testing.T) {
 	})
 	t.Run("seconds", func(t *testing.T) {
 		ts := timestamppb.New(time.Now().Add(-30 * time.Second))
+
 		got := FormatAge(ts)
 		if !strings.HasSuffix(got, "s") {
 			t.Fatalf("expected seconds suffix, got %q", got)
@@ -218,6 +233,7 @@ func TestFormatAge(t *testing.T) {
 	})
 	t.Run("minutes", func(t *testing.T) {
 		ts := timestamppb.New(time.Now().Add(-5 * time.Minute))
+
 		got := FormatAge(ts)
 		if !strings.HasSuffix(got, "m") {
 			t.Fatalf("expected minutes suffix, got %q", got)
@@ -225,6 +241,7 @@ func TestFormatAge(t *testing.T) {
 	})
 	t.Run("hours", func(t *testing.T) {
 		ts := timestamppb.New(time.Now().Add(-3 * time.Hour))
+
 		got := FormatAge(ts)
 		if !strings.HasSuffix(got, "h") {
 			t.Fatalf("expected hours suffix, got %q", got)
@@ -232,6 +249,7 @@ func TestFormatAge(t *testing.T) {
 	})
 	t.Run("days", func(t *testing.T) {
 		ts := timestamppb.New(time.Now().Add(-72 * time.Hour))
+
 		got := FormatAge(ts)
 		if !strings.HasSuffix(got, "d") {
 			t.Fatalf("expected days suffix, got %q", got)
@@ -249,6 +267,7 @@ func TestFormatTimestamp(t *testing.T) {
 		now := time.Now().UTC()
 		ts := timestamppb.New(now)
 		got := FormatTimestamp(ts)
+
 		want := now.Format(time.RFC3339)
 		if got != want {
 			t.Fatalf("want %q, got %q", want, got)
@@ -327,6 +346,7 @@ func TestNewPrinter_DefaultsToStdout(t *testing.T) {
 
 func TestPrintResource_Wide(t *testing.T) {
 	var buf bytes.Buffer
+
 	p := testPrinter(FormatWide, &buf)
 
 	err := p.PrintResource(structpb.NewStringValue("test"), func(w *tabwriter.Writer) {
@@ -343,6 +363,7 @@ func TestPrintResource_Wide(t *testing.T) {
 
 func TestPrintResource_JSON_ValidStructure(t *testing.T) {
 	var buf bytes.Buffer
+
 	p := testPrinter(FormatJSON, &buf)
 
 	val, err := structpb.NewStruct(map[string]any{
@@ -362,6 +383,7 @@ func TestPrintResource_JSON_ValidStructure(t *testing.T) {
 
 func TestPrintResource_JSON_Multiline(t *testing.T) {
 	var buf bytes.Buffer
+
 	p := testPrinter(FormatJSON, &buf)
 
 	err := p.PrintResource(structpb.NewStringValue("test"), nil)
@@ -373,6 +395,7 @@ func TestPrintResource_JSON_Multiline(t *testing.T) {
 
 func TestPrintResource_YAML_Structure(t *testing.T) {
 	var buf bytes.Buffer
+
 	p := testPrinter(FormatYAML, &buf)
 
 	val, err := structpb.NewStruct(map[string]any{
@@ -390,6 +413,7 @@ func TestPrintResource_YAML_Structure(t *testing.T) {
 
 func TestPrintResource_NilMessage_JSON(t *testing.T) {
 	var buf bytes.Buffer
+
 	p := testPrinter(FormatJSON, &buf)
 
 	// nil proto.Message should marshal as empty JSON object
@@ -400,6 +424,7 @@ func TestPrintResource_NilMessage_JSON(t *testing.T) {
 
 func TestPrintResource_NilMessage_YAML(t *testing.T) {
 	var buf bytes.Buffer
+
 	p := testPrinter(FormatYAML, &buf)
 
 	err := p.PrintResource(nil, nil)

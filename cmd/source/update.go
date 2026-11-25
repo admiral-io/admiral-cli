@@ -57,12 +57,15 @@ Tightening --allows never touches what already runs; it stops new imports.`,
 			if err != nil {
 				return err
 			}
+
 			if cmd.Flags().Changed("description") {
 				src.Description = description
 			}
+
 			if cmd.Flags().Changed("allows") {
 				src.Allows = allows
 			}
+
 			if err := applyGrant(cmd, c.Credential(), src, credential, integration, clearGrant); err != nil {
 				return err
 			}
@@ -74,7 +77,9 @@ Tightening --allows never touches what already runs; it stops new imports.`,
 			if err != nil {
 				return err
 			}
+
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+
 			return p.PrintOne(resp.Source, resp.Source.Name, sourceTable.Render(p, resp.Source))
 		},
 	}
@@ -85,6 +90,7 @@ Tightening --allows never touches what already runs; it stops new imports.`,
 	complete.Flag(cmd, "credential", complete.Credentials(opts))
 	cmd.Flags().StringVar(&integration, "integration", "", "the GitHub integration that reaches the repository, by ID")
 	cmd.Flags().BoolVar(&clearGrant, "clear-grant", false, "fetch the upstream with no credential")
+
 	return cmd
 }
 
@@ -95,24 +101,31 @@ func updatePaths(cmd *cobra.Command, credential, integration string, clearGrant 
 	if cmd.Flags().Changed("description") {
 		paths = append(paths, "description")
 	}
+
 	if cmd.Flags().Changed("allows") {
 		paths = append(paths, "allows")
 	}
+
 	grants := 0
+
 	for _, set := range []bool{credential != "", integration != "", clearGrant} {
 		if set {
 			grants++
 		}
 	}
+
 	if grants > 1 {
 		return nil, cmderr.Usage("pass one of --credential, --integration or --clear-grant")
 	}
+
 	if grants == 1 {
 		paths = append(paths, "credential_id", "integration_id")
 	}
+
 	if len(paths) == 0 {
 		return nil, cmderr.Usage("at least one of --description, --allows, --credential, --integration or --clear-grant must be specified")
 	}
+
 	return paths, nil
 }
 
@@ -125,11 +138,13 @@ func applyGrant(cmd *cobra.Command, creds credentialv1.CredentialAPIClient, src 
 		if err != nil {
 			return err
 		}
+
 		src.Grant = &sourcev1.Source_CredentialId{CredentialId: id}
 	case integration != "":
 		src.Grant = &sourcev1.Source_IntegrationId{IntegrationId: integration}
 	case clearGrant:
 		src.Grant = nil
 	}
+
 	return nil
 }

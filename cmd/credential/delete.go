@@ -29,6 +29,7 @@ pulled with it stays published.`,
 			if err := input.RequireInteractiveOrYes(cmd, yes); err != nil {
 				return err
 			}
+
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
 				return err
@@ -39,13 +40,17 @@ pulled with it stays published.`,
 			if err != nil {
 				return err
 			}
+
 			if err := input.Confirm(cmd, yes, "Delete credential "+args[0]); err != nil {
 				return err
 			}
+
 			if _, err := c.Credential().DeleteCredential(cmd.Context(), &credentialv1.DeleteCredentialRequest{CredentialId: id}); err != nil {
 				return err
 			}
+
 			output.Confirmed(cmd.ErrOrStderr(), "credential", args[0], "deleted")
+
 			return nil
 		},
 	}

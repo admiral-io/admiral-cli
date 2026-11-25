@@ -13,20 +13,24 @@ func Agent(ctx context.Context, c agentv1.AgentAPIClient, nameOrID string) (stri
 	if IsID("agt", nameOrID) {
 		return nameOrID, nil
 	}
+
 	if nameOrID == "" {
 		return "", cmderr.Usage("no agent specified")
 	}
+
 	var token string
 	for {
 		resp, err := c.ListAgents(ctx, &agentv1.ListAgentsRequest{PageSize: 100, PageToken: token})
 		if err != nil {
 			return "", err
 		}
+
 		for _, a := range resp.GetAgents() {
 			if a.GetName() == nameOrID {
 				return a.GetId(), nil
 			}
 		}
+
 		if token = resp.GetNextPageToken(); token == "" {
 			return "", &NotFoundError{Kind: "agent", Name: nameOrID, ListCommand: "agent list"}
 		}

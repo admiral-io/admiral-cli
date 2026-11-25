@@ -20,12 +20,15 @@ func splitRef(s string) (name, ref string, err error) {
 	} else {
 		name = s
 	}
+
 	if name == "" {
 		return "", "", cmderr.Usage("reference %q has no component name", s)
 	}
+
 	if (strings.Contains(s, "@") || strings.Contains(s, ":")) && ref == "" {
 		return "", "", cmderr.Usage("reference %q names no tag or digest", s)
 	}
+
 	return name, ref, nil
 }
 

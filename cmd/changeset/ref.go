@@ -27,6 +27,7 @@ func (r changeSetRef) String() string {
 	if r.id != "" {
 		return r.id
 	}
+
 	return r.app + "/" + r.env
 }
 
@@ -36,12 +37,15 @@ func parseChangeSet(s string) (changeSetRef, error) {
 		if app == "" || env == "" || strings.Contains(env, "/") {
 			return changeSetRef{}, cmderr.Usage("invalid environment %q: expected project/environment", s)
 		}
+
 		return changeSetRef{app: app, env: env}, nil
 	}
+
 	if !changeSetIDPattern.MatchString(s) {
 		return changeSetRef{}, cmderr.UsageHint("Name a changeset by its ID (cs- and twelve characters) or by its environment as project/environment.",
 			"invalid changeset %q", s)
 	}
+
 	return changeSetRef{id: s}, nil
 }
 
@@ -52,14 +56,17 @@ func (r changeSetRef) resolve(ctx context.Context, c sdkclient.AdmiralClient) (s
 	if r.id != "" {
 		return r.id, nil
 	}
+
 	envID, err := resolve.Environment(ctx, c.Environment(), c.Project(), r.app, r.env)
 	if err != nil {
 		return "", err
 	}
+
 	open, err := filter.Eq("status", changesetv1.ChangeSet_STATUS_OPEN.String())
 	if err != nil {
 		return "", err
 	}
+
 	// Two is enough to know it is ambiguous; the list shows a page of them.
 	resp, err := c.ChangeSet().ListChangeSets(ctx, &changesetv1.ListChangeSetsRequest{
 		EnvironmentId: envID,
@@ -69,6 +76,7 @@ func (r changeSetRef) resolve(ctx context.Context, c sdkclient.AdmiralClient) (s
 	if err != nil {
 		return "", err
 	}
+
 	switch css := resp.GetChangeSets(); len(css) {
 	case 0:
 		return "", cmderr.WithHint(fmt.Errorf("%s has no open changeset", r),
@@ -78,16 +86,20 @@ func (r changeSetRef) resolve(ctx context.Context, c sdkclient.AdmiralClient) (s
 	default:
 		var b strings.Builder
 		fmt.Fprintf(&b, "%s has %d open changesets; name one:", r, len(css))
+
 		if resp.GetNextPageToken() != "" {
 			b.Reset()
 			fmt.Fprintf(&b, "%s has more than %d open changesets; name one:", r, len(css))
 		}
+
 		for _, cs := range css {
 			fmt.Fprintf(&b, "\n  %s  %q  by %s", cs.GetId(), cs.GetTitle(), output.FormatActor(cs.GetCreatedBy()))
+
 			if cs.GetBehind() {
 				b.WriteString("  (behind)")
 			}
 		}
+
 		return "", cmderr.WithHint(fmt.Errorf("%s", b.String()),
 			"'admiral changeset list "+r.String()+" --status open' lists them all.")
 	}
@@ -99,10 +111,12 @@ func dial(cmd *cobra.Command, opts *client.Options, ref changeSetRef) (sdkclient
 	if err != nil {
 		return nil, "", err
 	}
+
 	csID, err := ref.resolve(cmd.Context(), c)
 	if err != nil {
 		c.Close() //nolint:errcheck
 		return nil, "", err
 	}
+
 	return c, csID, nil
 }

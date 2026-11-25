@@ -49,10 +49,12 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 			if err != nil {
 				return err
 			}
+
 			labels, err := flags.ParseLabels(labelStrs)
 			if err != nil {
 				return err
 			}
+
 			if err := target.check(cmd, true); err != nil {
 				return err
 			}
@@ -72,12 +74,15 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 			if _, err := target.apply(cmd.Context(), cmd, c.Agent(), e); err != nil {
 				return err
 			}
+
 			if _, err := infra.apply(cmd, e); err != nil {
 				return err
 			}
+
 			if _, err := track.apply(cmd, e); err != nil {
 				return err
 			}
+
 			req := &environmentv1.CreateEnvironmentRequest{ProjectId: resolvedAppID, Environment: e}
 
 			resp, err := c.Environment().CreateEnvironment(cmd.Context(), req)
@@ -86,6 +91,7 @@ func newCreateCmd(opts *client.Options) *cobra.Command {
 			}
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+
 			return p.PrintOne(resp.Environment, resp.Environment.Name, envTable.Render(p, resp.Environment))
 		},
 	}

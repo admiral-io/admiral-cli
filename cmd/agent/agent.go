@@ -41,5 +41,6 @@ Commands accept an agent name or ID as the positional argument.`,
 		newGrantCmd(opts),
 		newRevokeCmd(opts),
 	)
+
 	return &AgentCmd{Cmd: cmd}
 }

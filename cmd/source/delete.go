@@ -29,6 +29,7 @@ its provenance; nothing new comes through it.`,
 			if err := input.RequireInteractiveOrYes(cmd, yes); err != nil {
 				return err
 			}
+
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
 				return err
@@ -39,17 +40,22 @@ its provenance; nothing new comes through it.`,
 			if err != nil {
 				return err
 			}
+
 			if err := input.Confirm(cmd, yes, "Delete source "+src.Name); err != nil {
 				return err
 			}
+
 			if _, err := c.Source().DeleteSource(cmd.Context(), &sourcev1.DeleteSourceRequest{SourceId: src.Id}); err != nil {
 				return err
 			}
+
 			output.Confirmed(cmd.ErrOrStderr(), "source", src.Name, "deleted")
+
 			return nil
 		},
 	}
 
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip the confirmation prompt")
+
 	return cmd
 }

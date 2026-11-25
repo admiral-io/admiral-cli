@@ -22,6 +22,7 @@ func lastSeen(a *agentv1.Agent) string {
 	if a.GetReport().GetReportedAt() == nil {
 		return "never"
 	}
+
 	return output.FormatAge(a.GetReport().GetReportedAt()) + " ago"
 }
 

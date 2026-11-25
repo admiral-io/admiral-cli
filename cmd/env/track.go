@@ -41,24 +41,31 @@ func (f *trackFlag) apply(cmd *cobra.Command, e *environmentv1.Environment) ([]s
 	if !f.changed(cmd) {
 		return nil, nil
 	}
+
 	t := e.GetTracking()
+
 	if cmd.Flags().Changed("track") {
 		var err error
 		if t, err = parseTrack(f.value); err != nil {
 			return nil, err
 		}
 	}
+
 	if cmd.Flags().Changed("after-merge") {
 		after, err := parseAfterMerge(f.afterMerge)
 		if err != nil {
 			return nil, err
 		}
+
 		if t == nil {
 			return nil, cmderr.Usage("--after-merge applies to an environment that tracks a branch; pass --track too")
 		}
+
 		t.AfterMerge = after
 	}
+
 	e.Tracking = t
+
 	return []string{"tracking"}, nil
 }
 
@@ -84,11 +91,14 @@ func parseTrack(s string) (*environmentv1.Tracking, error) {
 	if s == "none" {
 		return nil, nil
 	}
+
 	kind, pattern, ok := strings.Cut(s, "=")
+
 	k, known := trackKinds[kind]
 	if !ok || !known || pattern == "" {
 		return nil, cmderr.Usage("--track takes branch=<name or glob>, tag=<glob>, range=<semver range>, or none, not %q", s)
 	}
+
 	return &environmentv1.Tracking{Kind: k, Pattern: pattern}, nil
 }
 
@@ -98,14 +108,17 @@ func trackingName(t *environmentv1.Tracking) string {
 	if t == nil {
 		return "pinned"
 	}
+
 	name := t.GetPattern()
 	for kind, k := range trackKinds {
 		if k == t.GetKind() {
 			name = kind + "=" + t.GetPattern()
 		}
 	}
+
 	if t.GetAfterMerge() == environmentv1.Tracking_AFTER_MERGE_WAIT {
 		name += " (wait after merge)"
 	}
+
 	return name
 }

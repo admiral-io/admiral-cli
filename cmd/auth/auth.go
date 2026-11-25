@@ -40,5 +40,6 @@ If ADMIRAL_API_KEY is set, it takes precedence over the stored credential.`,
 	)
 
 	root.Cmd = cmd
+
 	return root
 }

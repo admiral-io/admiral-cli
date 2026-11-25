@@ -18,12 +18,15 @@ import (
 // keeps unknown values readable instead of erasing them.
 func TrimEnumPrefix(e protoreflect.Enum) string {
 	desc := e.Descriptor()
+
 	value := desc.Values().ByNumber(e.Number())
 	if value == nil {
 		return fmt.Sprintf("%d", e.Number())
 	}
+
 	name := string(value.Name())
 	prefix := camelToScreamingSnake(string(desc.Name())) + "_"
+
 	return strings.TrimPrefix(name, prefix)
 }
 
@@ -34,6 +37,7 @@ func FormatEnum(e protoreflect.Enum) string {
 	if e.Number() == 0 {
 		return None
 	}
+
 	return screamingSnakeToCamel(TrimEnumPrefix(e))
 }
 
@@ -45,18 +49,22 @@ func FormatEnumKebab(e protoreflect.Enum) string {
 	if e.Number() == 0 {
 		return None
 	}
+
 	return strings.ToLower(strings.ReplaceAll(TrimEnumPrefix(e), "_", "-"))
 }
 
 func screamingSnakeToCamel(s string) string {
 	var b strings.Builder
+
 	for _, w := range strings.Split(s, "_") {
 		if w == "" {
 			continue
 		}
+
 		b.WriteString(strings.ToUpper(w[:1]))
 		b.WriteString(strings.ToLower(w[1:]))
 	}
+
 	return b.String()
 }
 
@@ -65,11 +73,14 @@ func screamingSnakeToCamel(s string) string {
 // Acronyms aren't preserved, but proto enum types in this codebase don't use them.
 func camelToScreamingSnake(s string) string {
 	var b strings.Builder
+
 	for i, r := range s {
 		if i > 0 && unicode.IsUpper(r) {
 			b.WriteByte('_')
 		}
+
 		b.WriteRune(unicode.ToUpper(r))
 	}
+
 	return b.String()
 }

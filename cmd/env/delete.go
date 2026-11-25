@@ -39,6 +39,7 @@ func newDeleteCmd(opts *client.Options) *cobra.Command {
 			if err != nil {
 				return err
 			}
+
 			// Before any network use: a run that cannot confirm and did not
 			// pass --yes fails here, in milliseconds, with the usage error.
 			if err := input.RequireInteractiveOrYes(cmd, yes); err != nil {
@@ -55,6 +56,7 @@ func newDeleteCmd(opts *client.Options) *cobra.Command {
 			if app != "" {
 				display = app + "/" + name
 			}
+
 			envID, err := resolve.Environment(cmd.Context(), c.Environment(), c.Project(), app, name)
 			if err != nil {
 				return err
@@ -71,6 +73,7 @@ func newDeleteCmd(opts *client.Options) *cobra.Command {
 			}
 
 			output.Confirmed(cmd.ErrOrStderr(), "environment", display, "deleted")
+
 			return nil
 		},
 	}

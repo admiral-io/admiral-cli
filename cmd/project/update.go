@@ -46,12 +46,15 @@ pass are changed.`,
 			if cmd.Flags().Changed("name") {
 				paths = append(paths, "name")
 			}
+
 			if cmd.Flags().Changed("label") {
 				paths = append(paths, "labels")
 			}
+
 			if cmd.Flags().Changed("description") {
 				paths = append(paths, "description")
 			}
+
 			if len(paths) == 0 {
 				return cmderr.Usage("at least one of --name, --label, or --description must be specified")
 			}
@@ -74,18 +77,22 @@ pass are changed.`,
 			if err != nil {
 				return err
 			}
+
 			project := current.Project
 
 			if cmd.Flags().Changed("name") {
 				project.Name = newName
 			}
+
 			if cmd.Flags().Changed("label") {
 				labels, err := flags.ApplyLabelPatch(project.Labels, labelStrs)
 				if err != nil {
 					return err
 				}
+
 				project.Labels = labels
 			}
+
 			if cmd.Flags().Changed("description") {
 				project.Description = description
 			}
@@ -99,6 +106,7 @@ pass are changed.`,
 			}
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+
 			return p.PrintOne(resp.Project, resp.Project.Name, projectTable.Render(p, resp.Project))
 		},
 	}

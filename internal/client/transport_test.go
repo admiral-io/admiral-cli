@@ -45,8 +45,10 @@ func TestTransportMode(t *testing.T) {
 // trusts, the shape of a staging box with a homemade cert.
 func selfSignedTLS(t *testing.T) credentials.TransportCredentials {
 	t.Helper()
+
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
+
 	tmpl := &x509.Certificate{
 		SerialNumber: big.NewInt(1),
 		Subject:      pkix.Name{CommonName: "staging.test"},
@@ -58,6 +60,7 @@ func selfSignedTLS(t *testing.T) credentials.TransportCredentials {
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
 	require.NoError(t, err)
+
 	return credentials.NewTLS(&tls.Config{
 		MinVersion:   tls.VersionTLS12,
 		Certificates: []tls.Certificate{{Certificate: [][]byte{der}, PrivateKey: key}},
@@ -67,16 +70,20 @@ func selfSignedTLS(t *testing.T) credentials.TransportCredentials {
 // startTLSServer serves fakeAPI over TLS on bufconn.
 func startTLSServer(t *testing.T, api *fakeAPI) {
 	t.Helper()
+
 	lis := bufconn.Listen(1 << 20)
 	srv := grpc.NewServer(grpc.Creds(selfSignedTLS(t)))
+
 	projectv1.RegisterProjectAPIServer(srv, api)
 	go func() { _ = srv.Serve(lis) }()
+
 	t.Cleanup(srv.Stop)
 
 	prev := testDialOptions
 	testDialOptions = []grpc.DialOption{grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
 		return lis.Dial()
 	})}
+
 	t.Cleanup(func() { testDialOptions = prev })
 }
 
@@ -90,10 +97,12 @@ func TestCreateClient_TransportModes(t *testing.T) {
 		},
 		"session via CLI conn": func(t *testing.T) *Options {
 			os.Unsetenv(credstore.EnvAPIKey)
+
 			dir := t.TempDir()
 			require.NoError(t, credstore.Save(dir, &credstore.Credential{
 				Kind: credstore.KindSession, AccessToken: "jwt", Expiry: time.Now().Add(time.Hour),
 			}))
+
 			return &Options{ServerAddr: "passthrough:///bufconn", ConfigDir: dir}
 		},
 	}
@@ -106,7 +115,9 @@ func TestCreateClient_TransportModes(t *testing.T) {
 				opts := mk(t)
 				c, err := CreateClient(context.Background(), opts)
 				require.NoError(t, err)
+
 				defer c.Close() //nolint:errcheck
+
 				_, err = c.Project().ListProjects(context.Background(), &projectv1.ListProjectsRequest{})
 				require.Equal(t, codes.Unavailable, status.Code(err))
 				require.Contains(t, err.Error(), "certificate")
@@ -119,7 +130,9 @@ func TestCreateClient_TransportModes(t *testing.T) {
 				opts.Insecure = true
 				c, err := CreateClient(context.Background(), opts)
 				require.NoError(t, err)
+
 				defer c.Close() //nolint:errcheck
+
 				_, err = c.Project().ListProjects(context.Background(), &projectv1.ListProjectsRequest{})
 				require.NoError(t, err)
 				require.Len(t, api.calls, 1)
@@ -131,7 +144,9 @@ func TestCreateClient_TransportModes(t *testing.T) {
 				opts.PlainText = true
 				c, err := CreateClient(context.Background(), opts)
 				require.NoError(t, err)
+
 				defer c.Close() //nolint:errcheck
+
 				_, err = c.Project().ListProjects(context.Background(), &projectv1.ListProjectsRequest{})
 				require.Error(t, err, "a plaintext client must not silently succeed against TLS")
 				require.Empty(t, api.calls)

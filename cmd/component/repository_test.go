@@ -21,14 +21,17 @@ func gitRepo(t *testing.T) (root, sha string) {
 		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, string(out))
+
 		return string(out)
 	}
+
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "modules", "agent"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "modules", "agent", "main.tf"), []byte(`variable "a" {}`), 0o644))
 	run("init", "-q", "-b", "main")
 	run("add", "-A")
 	run("commit", "-qm", "one")
 	sha = run("rev-parse", "--short=7", "HEAD")
+
 	return root, sha[:7]
 }
 
@@ -91,6 +94,7 @@ func TestSemverPattern(t *testing.T) {
 	for _, ok := range []string{"0.1.0", "v1.2.3", "9.5.1", "1.0.0-rc.1", "1.0.0+build.7"} {
 		assert.True(t, semverPattern.MatchString(ok), ok)
 	}
+
 	for _, bad := range []string{"", "latest", "1.0", "1.0.0.0", "v1", "01.0.0"} {
 		assert.False(t, semverPattern.MatchString(bad), bad)
 	}

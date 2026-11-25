@@ -24,6 +24,7 @@ func (c *registryClient) GetComponent(_ context.Context, _ *registryv1.GetCompon
 	if c.component == nil {
 		return nil, status.Error(codes.NotFound, "component not found")
 	}
+
 	return &registryv1.GetComponentResponse{Component: c.component}, nil
 }
 
@@ -59,6 +60,7 @@ func TestOriginOfIsWhereABumpGoesThrough(t *testing.T) {
 
 func TestOriginLabel(t *testing.T) {
 	names := map[string]string{"src-000000000001": "argo-helm"}
+
 	testCases := []struct {
 		name   string
 		origin *registryv1.ComponentOrigin

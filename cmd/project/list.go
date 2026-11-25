@@ -52,6 +52,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 				if err != nil {
 					return nil, "", err
 				}
+
 				return resp.Projects, resp.NextPageToken, nil
 			})
 			if err != nil {
@@ -59,6 +60,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 			}
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+
 			return p.PrintList(output.List{
 				Kind:          "projects",
 				Items:         output.Messages(apps),

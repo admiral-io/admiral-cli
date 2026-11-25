@@ -45,6 +45,7 @@ list the versions and download one, for a rollback with
 		newDownloadCmd(opts),
 	)
 	root.Cmd = cmd
+
 	return root
 }
 
@@ -56,22 +57,27 @@ func workspace(ctx context.Context, c sdkclient.AdmiralClient, cmd *cobra.Comman
 	if err != nil {
 		return "", "", err
 	}
+
 	envID, err := resolve.Environment(ctx, c.Environment(), c.Project(), appScope, name)
 	if err != nil {
 		return "", "", err
 	}
+
 	env, err := c.Environment().GetEnvironment(ctx, &environmentv1.GetEnvironmentRequest{EnvironmentId: envID})
 	if err != nil {
 		return "", "", err
 	}
+
 	app, err := c.Project().GetProject(ctx, &projectv1.GetProjectRequest{ProjectId: env.GetEnvironment().GetProjectId()})
 	if err != nil {
 		return "", "", err
 	}
+
 	organization, err := c.Organization().GetOrganization(ctx, &organizationv1.GetOrganizationRequest{})
 	if err != nil {
 		return "", "", err
 	}
+
 	return organization.GetOrganization().GetSlug(), app.GetProject().GetName() + "_" + env.GetEnvironment().GetName() + "_" + component, nil
 }
 
@@ -81,9 +87,11 @@ func asStruct(v any) (*structpb.Struct, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	var m map[string]any
 	if err := json.Unmarshal(raw, &m); err != nil {
 		return nil, err
 	}
+
 	return structpb.NewStruct(m)
 }

@@ -41,20 +41,25 @@ does.`,
 			if err != nil {
 				return err
 			}
+
 			if app == "" && !resolve.IsID("env", env) {
 				return cmderr.UsageHint("Give the environment as project/environment: 'admiral changeset create shop/prod'.",
 					"no project specified")
 			}
+
 			es, err := setEdits(sets, setStrings)
 			if err != nil {
 				return err
 			}
+
 			if len(es) > maxEdits {
 				return cmderr.Usage("%d edits in one command; the limit is %d", len(es), maxEdits)
 			}
+
 			if err := po.check(cmd); err != nil {
 				return err
 			}
+
 			if po.plan && len(es) == 0 {
 				return cmderr.UsageHint("Pass --set or --set-string, or plan after the first edit.",
 					"--plan needs a revision, and a changeset created without edits has none")
@@ -70,6 +75,7 @@ does.`,
 			if err != nil {
 				return err
 			}
+
 			resp, err := c.ChangeSet().CreateChangeSet(cmd.Context(), &changesetv1.CreateChangeSetRequest{
 				EnvironmentId: envID,
 				ChangeSet:     &changesetv1.ChangeSet{Title: title, Description: description},
@@ -82,9 +88,11 @@ does.`,
 			p := output.NewPrinter(cmd, opts.OutputFormat)
 			printWarnings(p.Err(), resp.Warnings, resp.Revision.GetViolations())
 			output.Confirmed(p.Err(), "changeset", resp.ChangeSet.Id, "created")
+
 			if po.plan {
 				return planRevision(cmd, opts, c.Run(), resp.ChangeSet, resp.Revision, po)
 			}
+
 			return p.PrintOne(resp.ChangeSet, resp.ChangeSet.Id, changeSetTable.Render(p, resp.ChangeSet))
 		},
 	}

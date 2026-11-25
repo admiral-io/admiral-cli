@@ -23,6 +23,7 @@ func items(names ...string) []proto.Message {
 	for i, n := range names {
 		out[i] = structpb.NewStringValue(n)
 	}
+
 	return out
 }
 
@@ -35,6 +36,7 @@ func nameOf(l List) func(int) string {
 
 func TestPrintList_Table(t *testing.T) {
 	var out, errOut bytes.Buffer
+
 	p := testPrinterErr(FormatTable, &out, &errOut)
 	l := List{Kind: "widgets", Items: items("a", "b")}
 	err := p.PrintList(l, func(w *tabwriter.Writer) {
@@ -50,6 +52,7 @@ func TestPrintList_Table(t *testing.T) {
 func TestPrintList_EmptyTableGoesToStderr(t *testing.T) {
 	for _, f := range []Format{FormatTable, FormatWide} {
 		var out, errOut bytes.Buffer
+
 		p := testPrinterErr(f, &out, &errOut)
 		err := p.PrintList(List{Kind: "runs", Scope: "shop/prod"}, func(w *tabwriter.Writer) {
 			t.Fatal("table renderer must not run for an empty list")
@@ -60,6 +63,7 @@ func TestPrintList_EmptyTableGoesToStderr(t *testing.T) {
 	}
 
 	var out, errOut bytes.Buffer
+
 	p := testPrinterErr(FormatTable, &out, &errOut)
 	require.NoError(t, p.PrintList(List{Kind: "projects"}, nil))
 	require.Equal(t, "No projects found.\n", errOut.String())
@@ -67,6 +71,7 @@ func TestPrintList_EmptyTableGoesToStderr(t *testing.T) {
 
 func TestPrintList_JSONIsBareArray(t *testing.T) {
 	var out bytes.Buffer
+
 	p := testPrinter(FormatJSON, &out)
 	require.NoError(t, p.PrintList(List{Kind: "w", Items: items("a", "b")}, nil))
 	require.Equal(t, "[\"a\",\"b\"]\n", out.String(), "piped JSON is compact")
@@ -78,6 +83,7 @@ func TestPrintList_JSONIsBareArray(t *testing.T) {
 
 func TestPrintList_JSONEmptyIsEmptyArray(t *testing.T) {
 	var out, errOut bytes.Buffer
+
 	p := testPrinterErr(FormatJSON, &out, &errOut)
 	require.NoError(t, p.PrintList(List{Kind: "w"}, nil))
 	require.Equal(t, "[]\n", out.String())
@@ -86,6 +92,7 @@ func TestPrintList_JSONEmptyIsEmptyArray(t *testing.T) {
 
 func TestPrintList_JSONIndentedOnTTY(t *testing.T) {
 	var out bytes.Buffer
+
 	p := &Printer{
 		Format: FormatJSON,
 		IO:     iostreams.New(strings.NewReader(""), &out, &bytes.Buffer{}, func(k string) string { return map[string]string{"ADMIRAL_FORCE_TTY": "100"}[k] }),
@@ -96,6 +103,7 @@ func TestPrintList_JSONIndentedOnTTY(t *testing.T) {
 
 func TestPrintList_YAML(t *testing.T) {
 	var out bytes.Buffer
+
 	p := testPrinter(FormatYAML, &out)
 	require.NoError(t, p.PrintList(List{Kind: "w", Items: items("a", "b")}, nil))
 	require.Equal(t, "- a\n- b\n", out.String())
@@ -107,6 +115,7 @@ func TestPrintList_YAML(t *testing.T) {
 
 func TestPrintList_Name(t *testing.T) {
 	var out, errOut bytes.Buffer
+
 	p := testPrinterErr(FormatName, &out, &errOut)
 	l := List{Kind: "w", Items: items("prod", "staging")}
 	l.Name = nameOf(l)
@@ -122,6 +131,7 @@ func TestPrintList_Name(t *testing.T) {
 func TestPrintList_NextPageTokenOnStderrInEveryFormat(t *testing.T) {
 	for _, f := range []Format{FormatTable, FormatJSON, FormatYAML, FormatName} {
 		var out, errOut bytes.Buffer
+
 		p := testPrinterErr(f, &out, &errOut)
 		l := List{Kind: "w", Items: items("a"), NextPageToken: "tok123"}
 		l.Name = nameOf(l)
@@ -133,6 +143,7 @@ func TestPrintList_NextPageTokenOnStderrInEveryFormat(t *testing.T) {
 
 func TestPrintList_UnsupportedFormat(t *testing.T) {
 	var out bytes.Buffer
+
 	p := testPrinter("xml", &out)
 	require.Error(t, p.PrintList(List{Kind: "w"}, nil))
 }
@@ -158,6 +169,7 @@ func TestPrintOne(t *testing.T) {
 
 func TestPrintResource_RejectsName(t *testing.T) {
 	var out bytes.Buffer
+
 	err := testPrinter(FormatName, &out).PrintResource(structpb.NewStringValue("x"), nil)
 	require.ErrorContains(t, err, "-o name is not supported")
 }
@@ -199,6 +211,7 @@ func TestFormatEnum(t *testing.T) {
 // dereference; an empty list still prints nothing.
 func TestPrintList_NameMissing(t *testing.T) {
 	var out, errOut bytes.Buffer
+
 	p := testPrinterErr(FormatName, &out, &errOut)
 	err := p.PrintList(List{Kind: "w", Items: items("prod")}, nil)
 	require.ErrorContains(t, err, "-o name is not supported")

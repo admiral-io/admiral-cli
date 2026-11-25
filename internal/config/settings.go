@@ -30,6 +30,7 @@ func LoadSettings(configDir string) (Settings, error) {
 	if errors.Is(err, fs.ErrNotExist) {
 		return Settings{}, nil
 	}
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config: %w", err)
 	}
@@ -48,6 +49,7 @@ func Set(configDir, key, value string) error {
 	if err := CheckKey(key); err != nil {
 		return err
 	}
+
 	if IsBool(key) && value != "true" && value != "false" {
 		return cmderr.Usage("invalid value %q for %s: must be true or false", value, key)
 	}
@@ -58,6 +60,7 @@ func Set(configDir, key, value string) error {
 	}
 
 	s[key] = value
+
 	return write(configDir, s)
 }
 
@@ -73,6 +76,7 @@ func Unset(configDir, key string) error {
 	}
 
 	delete(s, key)
+
 	return write(configDir, s)
 }
 

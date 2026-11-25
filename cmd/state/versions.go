@@ -12,6 +12,7 @@ import (
 
 func newVersionsCmd(opts *client.Options) *cobra.Command {
 	var paging flags.PagingOptions
+
 	cmd := &cobra.Command{
 		Use:   "versions <project/environment> <component>",
 		Short: "List a component's state versions, newest first",
@@ -27,27 +28,33 @@ func newVersionsCmd(opts *client.Options) *cobra.Command {
 				return err
 			}
 			defer c.Close() //nolint:errcheck
+
 			org, ws, err := workspace(cmd.Context(), c, cmd, args[0], args[1])
 			if err != nil {
 				return err
 			}
+
 			sc, err := client.NewStateClient(cmd.Context(), opts)
 			if err != nil {
 				return err
 			}
+
 			versions, next, err := flags.Pages(paging, func(token string) ([]*client.StateVersion, string, error) {
 				return sc.ListStateVersions(cmd.Context(), org, ws, paging.PageSize, token)
 			})
 			if err != nil {
 				return err
 			}
+
 			items := make([]proto.Message, len(versions))
 			for i, v := range versions {
 				if items[i], err = asStruct(v); err != nil {
 					return err
 				}
 			}
+
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+
 			return p.PrintList(output.List{
 				Kind:          "state versions",
 				Scope:         args[0] + " " + args[1],
@@ -58,5 +65,6 @@ func newVersionsCmd(opts *client.Options) *cobra.Command {
 		},
 	}
 	flags.Paging(cmd, &paging)
+
 	return cmd
 }

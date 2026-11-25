@@ -74,9 +74,11 @@ If ADMIRAL_API_KEY is set, it takes precedence over whatever is stored.`,
 			if withToken && noBrowser {
 				return cmderr.Usage("--with-token and --no-browser are mutually exclusive")
 			}
+
 			if withToken && len(scopeFlag) > 0 {
 				return cmderr.Usage("--scope applies to browser sign-in; an API key's scopes are fixed when the key is created")
 			}
+
 			scopeList, err := scopes.Validate(scopeFlag)
 			if err != nil {
 				return err
@@ -110,10 +112,13 @@ If ADMIRAL_API_KEY is set, it takes precedence over whatever is stored.`,
 			if who == "" {
 				who = res.Subject
 			}
+
 			output.Writef(cmd.OutOrStdout(), "Logged in as %s.\n", who)
+
 			if len(res.Scopes) > 0 {
 				output.Writef(cmd.OutOrStdout(), "Session limited to: %s\n", strings.Join(res.Scopes, ", "))
 			}
+
 			return nil
 		},
 	}
@@ -124,6 +129,7 @@ If ADMIRAL_API_KEY is set, it takes precedence over whatever is stored.`,
 		return scopes.User(), cobra.ShellCompDirectiveNoFileComp
 	})
 	cmd.Flags().BoolVar(&withToken, "with-token", false, "read an API key from stdin and store it, instead of signing in via browser")
+
 	return cmd
 }
 
@@ -138,10 +144,12 @@ func loginWithToken(cmd *cobra.Command, opts *client.Options) error {
 	if terminal {
 		output.Writef(cmd.ErrOrStderr(), "Paste your Admiral API key or an op:// reference (input is hidden).\n")
 	}
+
 	in, err := input.Secret(cmd, "API key", true)
 	if err != nil {
 		return fmt.Errorf("reading API key: %w", err)
 	}
+
 	// An empty pipe is a wiring mistake in the calling script, not a bad
 	// key: say so as a usage error rather than "auth token is empty".
 	if in == "" && !terminal {
@@ -149,12 +157,14 @@ func loginWithToken(cmd *cobra.Command, opts *client.Options) error {
 	}
 
 	cred := &credentials.Credential{Kind: credentials.KindAPIKey, APIKey: in}
+
 	key := in
 	if credentials.IsRef(in) {
 		key, err = credentials.ResolveRef(cmd.Context(), in)
 		if err != nil {
 			return err
 		}
+
 		cred = &credentials.Credential{Kind: credentials.KindAPIKeyRef, Ref: in}
 	}
 
@@ -171,6 +181,7 @@ func loginWithToken(cmd *cobra.Command, opts *client.Options) error {
 	} else {
 		output.Writeln(cmd.OutOrStdout(), "API key stored.")
 	}
+
 	return nil
 }
 
@@ -181,5 +192,6 @@ func refuseIfEnvKeySet() error {
 	if os.Getenv(credentials.EnvAPIKey) == "" {
 		return nil
 	}
+
 	return fmt.Errorf("the value of the %s environment variable is being used for authentication.\nTo have the CLI store a credential instead, first clear it from the environment", credentials.EnvAPIKey)
 }

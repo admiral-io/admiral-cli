@@ -58,6 +58,7 @@ func Messages[T proto.Message](items []T) []proto.Message {
 	for i, it := range items {
 		out[i] = it
 	}
+
 	return out
 }
 
@@ -72,6 +73,7 @@ func Messages[T proto.Message](items []T) []proto.Message {
 // every format, so JSON stays a plain array.
 func (p *Printer) PrintList(l List, tableFn func(w *tabwriter.Writer)) error {
 	var err error
+
 	switch p.Format {
 	case FormatJSON:
 		err = p.printJSONArray(l.Items)
@@ -81,6 +83,7 @@ func (p *Printer) PrintList(l List, tableFn func(w *tabwriter.Writer)) error {
 		if l.Name == nil && len(l.Items) > 0 {
 			return errors.New("-o name is not supported by this command")
 		}
+
 		for i := range l.Items {
 			Writeln(p.IO.Out, l.Name(i))
 		}
@@ -89,16 +92,20 @@ func (p *Printer) PrintList(l List, tableFn func(w *tabwriter.Writer)) error {
 			PrintEmpty(p.IO.Err, l.Kind, l.Scope)
 			return nil
 		}
+
 		err = p.printTable(tableFn)
 	default:
 		return fmt.Errorf("unsupported format: %s", p.Format)
 	}
+
 	if err != nil {
 		return err
 	}
+
 	if l.NextPageToken != "" {
 		Writef(p.IO.Err, "next page token: %s (pass it with --page-token, or use --all)\n", l.NextPageToken)
 	}
+
 	return nil
 }
 
@@ -127,6 +134,7 @@ func (p *Printer) PrintResource(msg proto.Message, tableFn func(w *tabwriter.Wri
 	if p.Format == FormatName {
 		return fmt.Errorf("-o name is not supported by this command")
 	}
+
 	return p.PrintOne(msg, "", tableFn)
 }
 
@@ -139,6 +147,7 @@ func (p *Printer) marshalJSON(msg proto.Message) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal response: %w", err)
 	}
+
 	return p.normalizeJSON(raw)
 }
 
@@ -153,6 +162,7 @@ func (p *Printer) normalizeJSON(raw []byte) ([]byte, error) {
 			return nil, fmt.Errorf("failed to format response: %w", err)
 		}
 	}
+
 	return buf.Bytes(), nil
 }
 
@@ -161,7 +171,9 @@ func (p *Printer) printJSON(msg proto.Message) error {
 	if err != nil {
 		return err
 	}
+
 	_, err = fmt.Fprintln(p.IO.Out, string(b))
+
 	return err
 }
 
@@ -172,13 +184,17 @@ func (p *Printer) printJSONArray(items []proto.Message) error {
 		if err != nil {
 			return fmt.Errorf("failed to marshal response: %w", err)
 		}
+
 		parts[i] = string(raw)
 	}
+
 	b, err := p.normalizeJSON([]byte("[" + strings.Join(parts, ",") + "]"))
 	if err != nil {
 		return err
 	}
+
 	_, err = fmt.Fprintln(p.IO.Out, string(b))
+
 	return err
 }
 
@@ -187,6 +203,7 @@ func (p *Printer) printYAML(msg proto.Message) error {
 	if err != nil {
 		return err
 	}
+
 	return p.writeYAML(obj)
 }
 
@@ -197,8 +214,10 @@ func (p *Printer) printYAMLArray(items []proto.Message) error {
 		if err != nil {
 			return err
 		}
+
 		objs[i] = obj
 	}
+
 	return p.writeYAML(objs)
 }
 
@@ -207,13 +226,16 @@ func (p *Printer) writeYAML(obj any) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal yaml: %w", err)
 	}
+
 	_, err = p.IO.Out.Write(yamlBytes)
+
 	return err
 }
 
 func (p *Printer) printTable(fn func(w *tabwriter.Writer)) error {
 	w := tabwriter.NewWriter(p.IO.Out, 0, 0, 3, ' ', 0)
 	fn(w)
+
 	return w.Flush()
 }
 
@@ -224,6 +246,7 @@ func PrintEmpty(stderr io.Writer, kind, scope string) {
 		Writef(stderr, "No %s found in %s.\n", kind, scope)
 		return
 	}
+
 	Writef(stderr, "No %s found.\n", kind)
 }
 
@@ -251,9 +274,11 @@ func toYAMLValue(msg proto.Message) (any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal response: %w", err)
 	}
+
 	var obj any
 	if err := json.Unmarshal(jsonBytes, &obj); err != nil {
 		return nil, fmt.Errorf("failed to parse json: %w", err)
 	}
+
 	return obj, nil
 }

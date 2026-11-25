@@ -38,10 +38,12 @@ func ProjectTarget(cmd *cobra.Command, app string, args []string) (string, error
 	if len(args) == 0 {
 		return app, nil
 	}
+
 	if f := cmd.Flags().Lookup("project"); f != nil && f.Changed {
 		return "", cmderr.UsageHint("Name the project as the argument or with --project, not both.",
 			"--project cannot be combined with a project argument")
 	}
+
 	// A path addresses one environment, which is not what a collection of
 	// environments is scoped by. Say so rather than look the name up and
 	// report that no project is called "shop/prod".
@@ -49,6 +51,7 @@ func ProjectTarget(cmd *cobra.Command, app string, args []string) (string, error
 		return "", cmderr.UsageHint("Name the project alone; project/environment addresses a single environment.",
 			"invalid project %q", target)
 	}
+
 	return args[0], nil
 }
 
@@ -63,12 +66,15 @@ func EnvTarget(cmd *cobra.Command, app, target string) (string, string, error) {
 	if !isPath {
 		return app, target, nil
 	}
+
 	if f := cmd.Flags().Lookup("project"); f != nil && f.Changed {
 		return "", "", cmderr.UsageHint("Give the environment as project/environment or with --project, not both.",
 			"--project cannot be combined with a path")
 	}
+
 	if pathApp == "" || name == "" || strings.Contains(name, "/") {
 		return "", "", cmderr.Usage("invalid environment %q: expected project/environment", target)
 	}
+
 	return pathApp, name, nil
 }

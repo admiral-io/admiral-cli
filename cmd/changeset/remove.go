@@ -37,15 +37,18 @@ its resources stay where they are.`,
 			if err != nil {
 				return err
 			}
+
 			if err := componentName(args[1]); err != nil {
 				return err
 			}
+
 			e := &changesetv1.Edit{
 				Edit: &changesetv1.Edit_RemoveComponent{RemoveComponent: &changesetv1.RemoveComponent{Component: args[1]}},
 			}
 			if orphan {
 				e.Edit = &changesetv1.Edit_OrphanComponent{OrphanComponent: &changesetv1.OrphanComponent{Component: args[1]}}
 			}
+
 			return edits(cmd, opts, ref, ifRevision(cmd, ifRev), po, e)
 		},
 	}

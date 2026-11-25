@@ -35,16 +35,19 @@ func newDescribeCmd(opts *client.Options) *cobra.Command {
 				return err
 			}
 			defer c.Close() //nolint:errcheck
+
 			ctx := cmd.Context()
 
 			id, err := resolve.Project(ctx, c.Project(), args[0])
 			if err != nil {
 				return err
 			}
+
 			resp, err := c.Project().GetProject(ctx, &projectv1.GetProjectRequest{ProjectId: id})
 			if err != nil {
 				return err
 			}
+
 			a := resp.Project
 
 			envs, envErr := c.Environment().ListEnvironments(ctx, &environmentv1.ListEnvironmentsRequest{ProjectId: &id, PageSize: 100})
@@ -52,6 +55,7 @@ func newDescribeCmd(opts *client.Options) *cobra.Command {
 			// Runs are listed per environment, so the app's runs are those
 			// of its environments.
 			envNames := map[string]string{}
+
 			runs, runErr := &runv1.ListRunsResponse{}, envErr
 			if envErr == nil && len(envs.Environments) > 0 {
 				ids := make([]string, 0, len(envs.Environments))
@@ -59,10 +63,12 @@ func newDescribeCmd(opts *client.Options) *cobra.Command {
 					ids = append(ids, e.Id)
 					envNames[e.Id] = e.Name
 				}
+
 				byEnv, err := filter.In("environment_id", ids)
 				if err != nil {
 					return err
 				}
+
 				runs, runErr = c.Run().ListRuns(ctx, &runv1.ListRunsRequest{Filter: byEnv, PageSize: 5})
 			}
 
@@ -71,8 +77,10 @@ func newDescribeCmd(opts *client.Options) *cobra.Command {
 				comps   []*environmentv1.EnvironmentComponent
 				compErr error
 			)
+
 			for _, e := range envs.GetEnvironments() {
 				envID := e.Id
+
 				resp, err := c.Environment().ListEnvironmentComponents(ctx, &environmentv1.ListEnvironmentComponentsRequest{
 					EnvironmentId: &envID, PageSize: 100,
 				})
@@ -80,12 +88,15 @@ func newDescribeCmd(opts *client.Options) *cobra.Command {
 					compErr = err
 					break
 				}
+
 				comps = append(comps, resp.GetComponents()...)
 			}
+
 			refs := make([]*changesetv1.VersionRef, 0, len(comps))
 			for _, comp := range comps {
 				refs = append(refs, comp.GetVersion())
 			}
+
 			tags := resolve.VersionTags(ctx, c.Registry(), refs)
 
 			d := output.NewDescribe()
@@ -110,6 +121,7 @@ func newDescribeCmd(opts *client.Options) *cobra.Command {
 				for _, r := range runs.Runs {
 					runRows = append(runRows, []string{r.Id, envNames[r.EnvironmentId], output.FormatEnum(r.Status), output.OrEmpty(r.ChangeSetId), output.FormatAge(r.CreatedAt)})
 				}
+
 				d.Table("Recent Runs", []string{"ID", "Env", "Status", "Changeset", "Age"}, runRows)
 			}
 
@@ -118,9 +130,11 @@ func newDescribeCmd(opts *client.Options) *cobra.Command {
 			}
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+
 			return p.PrintDescribe(d, "admiral project get "+a.Name)
 		},
 	}
+
 	return cmd
 }
 
@@ -134,23 +148,29 @@ func environmentRows(envs []*environmentv1.Environment, comps []*environmentv1.E
 	for _, c := range comps {
 		byEnv[c.GetEnvironmentId()] = append(byEnv[c.GetEnvironmentId()], c.GetName()+" "+resolve.VersionLabel(c.GetVersion(), tags))
 	}
+
 	applying := map[string]bool{}
+
 	for _, r := range runs {
 		if r.GetStatus() == runv1.Run_STATUS_APPLYING {
 			applying[r.GetEnvironmentId()] = true
 		}
 	}
+
 	rows := make([][]string, 0, len(envs))
 	for _, e := range envs {
 		components := strings.Join(byEnv[e.Id], ", ")
 		if compErr != nil {
 			components = "<unavailable>"
 		}
+
 		last := ""
 		if la := e.GetLastApply(); la != nil {
 			last = la.GetChangeSetId() + " " + output.FormatAge(la.GetAppliedAt()) + " ago"
 		}
+
 		state := "never applied"
+
 		switch {
 		case e.GetHold() != nil:
 			state = "held by " + e.GetHold().GetChangeSetId()
@@ -159,7 +179,9 @@ func environmentRows(envs []*environmentv1.Environment, comps []*environmentv1.E
 		case e.GetLastApply() != nil:
 			state = "applied"
 		}
+
 		rows = append(rows, []string{e.Name, components, last, state})
 	}
+
 	return rows
 }

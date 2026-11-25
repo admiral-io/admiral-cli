@@ -42,6 +42,7 @@ func Logout(ctx context.Context, configDir string) (LogoutResult, error) {
 		if errors.Is(err, fs.ErrNotExist) {
 			return LogoutResult{}, nil
 		}
+
 		// Unreadable file: still remove it so the user ends up logged out.
 		slog.Debug("could not read credentials before logout", "error", err)
 	}
@@ -49,11 +50,13 @@ func Logout(ctx context.Context, configDir string) (LogoutResult, error) {
 	if err := credentials.Delete(configDir); err != nil {
 		return LogoutResult{}, fmt.Errorf("removing credentials: %w", err)
 	}
+
 	if cred == nil {
 		return LogoutResult{Removed: true}, nil
 	}
 
 	revokeSession(ctx, cred, "logged out locally, but the session")
+
 	return LogoutResult{Kind: cred.Kind, Removed: true}, nil
 }
 
@@ -68,12 +71,15 @@ func Store(ctx context.Context, configDir string, cred *credentials.Credential) 
 	if err != nil {
 		prev = nil // nothing stored, or unreadable: nothing to revoke
 	}
+
 	if err := credentials.Save(configDir, cred); err != nil {
 		return err
 	}
+
 	if prev != nil && prev.RefreshToken != cred.RefreshToken {
 		revokeSession(ctx, prev, "signed in, but the previous session")
 	}
+
 	return nil
 }
 
@@ -87,6 +93,7 @@ func revokeSession(ctx context.Context, cred *credentials.Credential, subject st
 	if cred.Kind != credentials.KindSession || cred.RefreshToken == "" {
 		return
 	}
+
 	ctx, cancel := context.WithTimeout(ctx, revokeTimeout)
 	defer cancel()
 
@@ -95,6 +102,7 @@ func revokeSession(ctx context.Context, cred *credentials.Credential, subject st
 		if err = revoke(ctx, endpoint, cred.ClientID, cred.RefreshToken); err == nil {
 			return
 		}
+
 		slog.Debug("refresh token revocation failed", "endpoint", endpoint, "error", err)
 	} else {
 		slog.Debug("no revocation endpoint", "error", err)
@@ -104,6 +112,7 @@ func revokeSession(ctx context.Context, cred *credentials.Credential, subject st
 	if where == "" {
 		where = "the identity provider"
 	}
+
 	slog.Warn(fmt.Sprintf("%s was not revoked at %s and stays valid until it expires", subject, where),
 		"error", err)
 }
@@ -116,6 +125,7 @@ func revocationEndpoint(ctx context.Context, cred *credentials.Credential) (stri
 	if cred.RevocationURL != "" {
 		return cred.RevocationURL, nil
 	}
+
 	if cred.Issuer == "" {
 		return "", errors.New("session carries neither a revocation endpoint nor an issuer")
 	}
@@ -124,15 +134,18 @@ func revocationEndpoint(ctx context.Context, cred *credentials.Credential) (stri
 	if err != nil {
 		return "", fmt.Errorf("querying identity provider %q: %w", cred.Issuer, err)
 	}
+
 	var meta struct {
 		RevocationEndpoint string `json:"revocation_endpoint"`
 	}
 	if err := provider.Claims(&meta); err != nil {
 		return "", fmt.Errorf("reading provider metadata: %w", err)
 	}
+
 	if meta.RevocationEndpoint == "" {
 		return "", fmt.Errorf("identity provider %q advertises no revocation endpoint", cred.Issuer)
 	}
+
 	return meta.RevocationEndpoint, nil
 }
 
@@ -147,6 +160,7 @@ func revoke(ctx context.Context, endpoint, clientID, token string) error {
 	if err != nil {
 		return err
 	}
+
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := http.DefaultClient.Do(req)
@@ -158,5 +172,6 @@ func revoke(ctx context.Context, endpoint, clientID, token string) error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("revocation endpoint returned HTTP %d", resp.StatusCode)
 	}
+
 	return nil
 }

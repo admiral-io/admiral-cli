@@ -25,6 +25,7 @@ func ParseFormat(s string) (Format, error) {
 			return f, nil
 		}
 	}
+
 	return "", fmt.Errorf("invalid output format %q: must be one of table, wide, json, yaml, name", s)
 }
 

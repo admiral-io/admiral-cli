@@ -51,6 +51,7 @@ func TestResolveToken_EnvBeatsFile(t *testing.T) {
 
 func TestResolveToken_StoredAPIKey(t *testing.T) {
 	dir := t.TempDir()
+
 	os.Unsetenv(EnvAPIKey)
 	require.NoError(t, Save(dir, &Credential{Kind: KindAPIKey, APIKey: "admp_stored"}))
 
@@ -63,6 +64,7 @@ func TestResolveToken_StoredAPIKey(t *testing.T) {
 
 func TestResolveToken_Session(t *testing.T) {
 	dir := t.TempDir()
+
 	os.Unsetenv(EnvAPIKey)
 	require.NoError(t, Save(dir, session(time.Now().Add(time.Hour), "", "")))
 
@@ -75,6 +77,7 @@ func TestResolveToken_Session(t *testing.T) {
 
 func TestResolveToken_SessionNoExpiry(t *testing.T) {
 	dir := t.TempDir()
+
 	os.Unsetenv(EnvAPIKey)
 	require.NoError(t, Save(dir, session(time.Time{}, "", "")))
 
@@ -92,6 +95,7 @@ func TestResolveToken_NotAuthenticated(t *testing.T) {
 
 func TestResolveToken_UnknownKind(t *testing.T) {
 	dir := t.TempDir()
+
 	os.Unsetenv(EnvAPIKey)
 	require.NoError(t, Save(dir, &Credential{Kind: "mystery"}))
 
@@ -112,6 +116,7 @@ func TestLoad_LegacyFileWithoutKindIsSession(t *testing.T) {
 
 func TestResolveToken_ExpiredWithoutRefreshToken(t *testing.T) {
 	dir := t.TempDir()
+
 	os.Unsetenv(EnvAPIKey)
 	require.NoError(t, Save(dir, session(time.Now().Add(-time.Minute), "", "")))
 
@@ -122,12 +127,14 @@ func TestResolveToken_ExpiredWithoutRefreshToken(t *testing.T) {
 // failingTokenServer answers every refresh with status code and body.
 func failingTokenServer(t *testing.T, code int, body string) *httptest.Server {
 	t.Helper()
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(code)
 		_, _ = w.Write([]byte(body))
 	}))
 	t.Cleanup(srv.Close)
+
 	return srv
 }
 
@@ -136,6 +143,7 @@ func failingTokenServer(t *testing.T, code int, body string) *httptest.Server {
 // session is left for the next attempt.
 func TestResolveToken_RefreshFailures(t *testing.T) {
 	os.Unsetenv(EnvAPIKey)
+
 	closed := httptest.NewServer(http.NotFoundHandler())
 	closed.Close()
 
@@ -158,10 +166,12 @@ func TestResolveToken_RefreshFailures(t *testing.T) {
 
 			_, err := ResolveToken(context.Background(), dir)
 			require.Error(t, err)
+
 			if tc.expired {
 				require.ErrorIs(t, err, ErrSessionExpired)
 				return
 			}
+
 			require.NotErrorIs(t, err, ErrSessionExpired)
 			require.Contains(t, err.Error(), tc.contains)
 			require.NotContains(t, err.Error(), "\n", "one line, not the response body")
@@ -177,11 +187,14 @@ func TestResolveToken_RefreshFailures(t *testing.T) {
 // grants and records what it received.
 func tokenServer(t *testing.T, newRefresh string) (*httptest.Server, *[]string) {
 	t.Helper()
+
 	var seen []string
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.NoError(t, r.ParseForm())
 		require.Empty(t, r.Header.Get("Authorization"), "public client must not use HTTP Basic")
 		seen = append(seen, r.Form.Get("grant_type")+":"+r.Form.Get("refresh_token")+":"+r.Form.Get("client_id"))
+
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"access_token":  "jwt-2",
@@ -191,12 +204,15 @@ func tokenServer(t *testing.T, newRefresh string) (*httptest.Server, *[]string) 
 		})
 	}))
 	t.Cleanup(srv.Close)
+
 	return srv, &seen
 }
 
 func TestResolveToken_RefreshesNearExpiry(t *testing.T) {
 	dir := t.TempDir()
+
 	os.Unsetenv(EnvAPIKey)
+
 	srv, seen := tokenServer(t, "refresh-2")
 	require.NoError(t, Save(dir, session(time.Now().Add(5*time.Second), "refresh-1", srv.URL)))
 
@@ -217,7 +233,9 @@ func TestResolveToken_RefreshesNearExpiry(t *testing.T) {
 
 func TestRefresh_KeepsOldRefreshTokenWhenNoneReturned(t *testing.T) {
 	dir := t.TempDir()
+
 	os.Unsetenv(EnvAPIKey)
+
 	srv, _ := tokenServer(t, "")
 	require.NoError(t, Save(dir, session(time.Now().Add(-time.Minute), "refresh-1", srv.URL)))
 
@@ -231,7 +249,9 @@ func TestRefresh_KeepsOldRefreshTokenWhenNoneReturned(t *testing.T) {
 
 func TestForceRefresh(t *testing.T) {
 	dir := t.TempDir()
+
 	os.Unsetenv(EnvAPIKey)
+
 	srv, seen := tokenServer(t, "refresh-2")
 	require.NoError(t, Save(dir, session(time.Now().Add(time.Hour), "refresh-1", srv.URL))) // looks valid locally
 
@@ -249,6 +269,7 @@ func TestForceRefresh_APIKeyActive(t *testing.T) {
 	})
 	t.Run("stored", func(t *testing.T) {
 		dir := t.TempDir()
+
 		os.Unsetenv(EnvAPIKey)
 		require.NoError(t, Save(dir, &Credential{Kind: KindAPIKey, APIKey: "admp_stored"}))
 		_, err := ForceRefresh(context.Background(), dir)
@@ -305,10 +326,12 @@ func TestSave_LeavesNoTempFile(t *testing.T) {
 
 	entries, err := os.ReadDir(dir)
 	require.NoError(t, err)
+
 	var names []string
 	for _, e := range entries {
 		names = append(names, e.Name())
 	}
+
 	require.Equal(t, []string{credentialsFile}, names)
 }
 
@@ -316,23 +339,32 @@ func TestSave_LeavesNoTempFile(t *testing.T) {
 // way the real server does with reuse-refresh-tokens=false.
 func rotatingTokenServer(t *testing.T) (*httptest.Server, *int32) {
 	t.Helper()
-	var calls int32
-	var mu sync.Mutex
+
+	var (
+		calls int32
+		mu    sync.Mutex
+	)
+
 	used := map[string]bool{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.NoError(t, r.ParseForm())
 		atomic.AddInt32(&calls, 1)
+
 		rt := r.Form.Get("refresh_token")
+
 		mu.Lock()
 		reused := used[rt]
 		used[rt] = true
 		mu.Unlock()
+
 		if reused {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
 			_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
+
 			return
 		}
+
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"access_token":  "jwt-" + rt,
@@ -342,32 +374,41 @@ func rotatingTokenServer(t *testing.T) (*httptest.Server, *int32) {
 		})
 	}))
 	t.Cleanup(srv.Close)
+
 	return srv, &calls
 }
 
 func TestResolveToken_ConcurrentRefreshHappensOnce(t *testing.T) {
 	dir := t.TempDir()
+
 	os.Unsetenv(EnvAPIKey)
+
 	srv, calls := rotatingTokenServer(t)
 	require.NoError(t, Save(dir, session(time.Now().Add(-time.Minute), "r1", srv.URL)))
 
 	const n = 8
+
 	var wg sync.WaitGroup
+
 	results := make([]*TokenResult, n)
+
 	errs := make([]error, n)
 	for i := range n {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+
 			results[i], errs[i] = ResolveToken(context.Background(), dir)
 		}()
 	}
+
 	wg.Wait()
 
 	for i := range n {
 		require.NoError(t, errs[i], "invocation %d must not lose the refresh race", i)
 		require.Equal(t, "jwt-r1", results[i].Token, "every invocation sees the one refreshed token")
 	}
+
 	require.EqualValues(t, 1, atomic.LoadInt32(calls), "exactly one token-endpoint call")
 
 	cred, err := Load(dir)
@@ -377,7 +418,9 @@ func TestResolveToken_ConcurrentRefreshHappensOnce(t *testing.T) {
 
 func TestForceRefresh_SkipsWhenAlreadyRefreshed(t *testing.T) {
 	dir := t.TempDir()
+
 	os.Unsetenv(EnvAPIKey)
+
 	srv, calls := rotatingTokenServer(t)
 	require.NoError(t, Save(dir, session(time.Now().Add(time.Hour), "r1", srv.URL)))
 
@@ -398,6 +441,7 @@ func TestForceRefresh_SkipsWhenAlreadyRefreshed(t *testing.T) {
 
 func TestResolveToken_CorruptFile(t *testing.T) {
 	dir := t.TempDir()
+
 	os.Unsetenv(EnvAPIKey)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, credentialsFile), []byte(`{"kind":"session","access_tok`), 0600))
 
@@ -426,7 +470,9 @@ func TestDelete_KeepsLockFile(t *testing.T) {
 // "Interrupted." instead of telling the user to sign in again.
 func TestResolveToken_RefreshHonorsContext(t *testing.T) {
 	dir := t.TempDir()
+
 	os.Unsetenv(EnvAPIKey)
+
 	release := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		select {
@@ -434,11 +480,13 @@ func TestResolveToken_RefreshHonorsContext(t *testing.T) {
 		case <-r.Context().Done():
 		}
 	}))
+
 	t.Cleanup(func() { close(release); srv.Close() })
 	require.NoError(t, Save(dir, session(time.Now().Add(-time.Minute), "r1", srv.URL)))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
+
 	start := time.Now()
 	_, err := ResolveToken(ctx, dir)
 	require.ErrorIs(t, err, context.DeadlineExceeded)

@@ -40,5 +40,6 @@ variable is not given. Credentials are not configuration; see 'admiral auth'.`,
 	)
 
 	root.Cmd = cmd
+
 	return root
 }

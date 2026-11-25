@@ -35,6 +35,7 @@ func componentName(s string) error {
 	if !componentPattern.MatchString(s) {
 		return cmderr.Usage("invalid component name %q: at most 53 lowercase letters, digits and hyphens, starting with a letter", s)
 	}
+
 	return nil
 }
 
@@ -44,22 +45,28 @@ func placementEdit(comp, namespace string, extra []string) (*changesetv1.Edit, e
 	if err := componentName(comp); err != nil {
 		return nil, err
 	}
+
 	if namespace != "" && !namespacePattern.MatchString(namespace) {
 		return nil, cmderr.Usage("invalid namespace %q: at most 63 lowercase letters, digits and hyphens", namespace)
 	}
+
 	if len(extra) > maxExtraNamespaces {
 		return nil, cmderr.Usage("%d extra namespaces; the limit is %d", len(extra), maxExtraNamespaces)
 	}
+
 	seen := make(map[string]bool, len(extra))
 	for _, ns := range extra {
 		if !namespacePattern.MatchString(ns) {
 			return nil, cmderr.Usage("invalid extra namespace %q: at most 63 lowercase letters, digits and hyphens", ns)
 		}
+
 		if seen[ns] {
 			return nil, cmderr.Usage("extra namespace %q given twice", ns)
 		}
+
 		seen[ns] = true
 	}
+
 	return &changesetv1.Edit{Edit: &changesetv1.Edit_SetSettings{SetSettings: &changesetv1.SetSettings{
 		Component: comp,
 		Settings: &changesetv1.ComponentSettings{Kind: &changesetv1.ComponentSettings_Kubernetes{
@@ -81,6 +88,7 @@ func ifRevision(cmd *cobra.Command, n int32) *int32 {
 	if !cmd.Flags().Changed("if-revision") {
 		return nil
 	}
+
 	return &n
 }
 
@@ -91,14 +99,17 @@ func edits(cmd *cobra.Command, opts *client.Options, ref changeSetRef, ifRev *in
 	if len(es) > maxEdits {
 		return cmderr.Usage("%d edits in one command; the limit is %d", len(es), maxEdits)
 	}
+
 	if err := po.check(cmd); err != nil {
 		return err
 	}
+
 	c, csID, err := dial(cmd, opts, ref)
 	if err != nil {
 		return err
 	}
 	defer c.Close() //nolint:errcheck
+
 	return send(cmd, opts, c, csID, ifRev, po, es...)
 }
 
@@ -116,9 +127,11 @@ func send(cmd *cobra.Command, opts *client.Options, c sdkclient.AdmiralClient, c
 	p := output.NewPrinter(cmd, opts.OutputFormat)
 	printWarnings(p.Err(), resp.Warnings, resp.Revision.GetViolations())
 	output.Confirmed(p.Err(), "changeset", csID, "revision "+strconv.Itoa(int(resp.Revision.GetNumber())))
+
 	if po.plan {
 		return planRevision(cmd, opts, c.Run(), resp.ChangeSet, resp.Revision, po)
 	}
+
 	return p.PrintOne(resp.Revision, revisionName(csID, resp.Revision), revisionTable.Render(p, resp.Revision))
 }
 
@@ -128,6 +141,7 @@ func printWarnings(w io.Writer, warnings []string, violations []*changesetv1.Vio
 	for _, s := range warnings {
 		output.Writef(w, "Warning: %s\n", s)
 	}
+
 	for _, v := range violations {
 		output.Writef(w, "Violation: %s %s: %s\n", v.Component, v.Path, v.Message)
 	}
@@ -140,18 +154,22 @@ func setEdit(a valuesfile.Assignment, forceString bool) (*changesetv1.Edit, erro
 	if err := componentName(a.Component); err != nil {
 		return nil, err
 	}
+
 	var v any = a.Raw
 	if !forceString {
 		parsed, err := valuesfile.ParseScalar(a.Raw)
 		if err != nil {
 			return nil, cmderr.Usage("%s.%s: %v", a.Component, displayPath(a.Path), err)
 		}
+
 		v = parsed
 	}
+
 	js, err := valuesfile.EncodeJSON(v)
 	if err != nil {
 		return nil, cmderr.Usage("%s.%s: %v", a.Component, displayPath(a.Path), err)
 	}
+
 	return &changesetv1.Edit{Edit: &changesetv1.Edit_SetValue{SetValue: &changesetv1.SetValue{
 		Component: a.Component,
 		Path:      pathSegments(a.Path),
@@ -169,13 +187,16 @@ func setEdits(sets, setStrings []string) ([]*changesetv1.Edit, error) {
 			if err != nil {
 				return nil, cmderr.Usage("%v", err)
 			}
+
 			e, err := setEdit(a, i == 1)
 			if err != nil {
 				return nil, err
 			}
+
 			out = append(out, e)
 		}
 	}
+
 	return out, nil
 }
 
@@ -184,6 +205,7 @@ func pathSegments(keys []string) []*changesetv1.PathSegment {
 	for i, k := range keys {
 		out[i] = &changesetv1.PathSegment{Segment: &changesetv1.PathSegment_Key{Key: k}}
 	}
+
 	return out
 }
 

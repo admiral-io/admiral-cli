@@ -25,6 +25,7 @@ func Format(err error) string {
 	if e, ok := errors.AsType[*requestIDError](err); ok {
 		msg += " (request " + e.id + ")"
 	}
+
 	return msg
 }
 
@@ -32,6 +33,7 @@ func format(err error) string {
 	if err == nil {
 		return ""
 	}
+
 	s, prefix, ok := innermostStatus(err)
 	if !ok {
 		return err.Error()
@@ -47,16 +49,20 @@ func format(err error) string {
 		if msg == "" {
 			return "not signed in"
 		}
+
 		return "not signed in: " + msg
 	case codes.PermissionDenied:
 		if msg == "" {
 			return prefix + "permission denied"
 		}
+
 		return prefix + "permission denied: " + msg
 	}
+
 	if msg == "" {
 		return prefix + codeWords(s.Code())
 	}
+
 	return prefix + msg
 }
 
@@ -80,15 +86,19 @@ func WithRequestID(err error, id string) error { return &requestIDError{err: err
 // which puts "rpc error: code = … desc = …" back in front of the user.
 func innermostStatus(err error) (st *status.Status, prefix string, ok bool) {
 	var found error
+
 	for e := err; e != nil; e = errors.Unwrap(e) {
 		if _, isStatus := e.(interface{ GRPCStatus() *status.Status }); isStatus {
 			found = e
 		}
 	}
+
 	if found == nil {
 		return nil, "", false
 	}
+
 	st, _ = status.FromError(found)
+
 	return st, strings.TrimSuffix(err.Error(), found.Error()), true
 }
 
@@ -103,12 +113,16 @@ func codeWords(c codes.Code) string {
 	case codes.Unknown:
 		return "unknown error"
 	}
+
 	var b strings.Builder
+
 	for i, r := range c.String() {
 		if i > 0 && unicode.IsUpper(r) {
 			b.WriteByte(' ')
 		}
+
 		b.WriteRune(unicode.ToLower(r))
 	}
+
 	return b.String()
 }

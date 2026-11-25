@@ -46,6 +46,7 @@ See 'admiral config --help' for what each key does.`,
 				if err != nil {
 					return err
 				}
+
 				value = v
 			}
 
@@ -54,6 +55,7 @@ See 'admiral config --help' for what each key does.`,
 			}
 
 			output.Writef(cmd.OutOrStdout(), "%s: %s\n", key, config.DisplayValue(key, value))
+
 			return nil
 		},
 	}

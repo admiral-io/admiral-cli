@@ -34,9 +34,11 @@ func deadlineInterceptor(timeout time.Duration) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		if _, has := ctx.Deadline(); !has && timeout > 0 {
 			var cancel context.CancelFunc
+
 			ctx, cancel = context.WithTimeout(ctx, timeout)
 			defer cancel()
 		}
+
 		return invoker(ctx, method, req, reply, cc, opts...)
 	}
 }
@@ -46,15 +48,18 @@ func deadlineInterceptor(timeout time.Duration) grpc.UnaryClientInterceptor {
 func requestIDInterceptor() grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		var header, trailer metadata.MD
+
 		err := invoker(ctx, method, req, reply, cc, append(opts, grpc.Header(&header), grpc.Trailer(&trailer))...)
 		if c := status.Code(err); c != codes.Internal && c != codes.Unknown {
 			return err
 		}
+
 		for _, md := range []metadata.MD{header, trailer} {
 			if ids := md.Get("x-request-id"); len(ids) > 0 && ids[0] != "" {
 				return cmderr.WithRequestID(err, ids[0])
 			}
 		}
+
 		return err
 	}
 }
@@ -69,21 +74,26 @@ func unavailableRetryInterceptor() grpc.UnaryClientInterceptor {
 		if err == nil || !isReadOnly(method) {
 			return err
 		}
+
 		for _, wait := range retryBackoff {
 			if status.Code(err) != codes.Unavailable {
 				return err
 			}
+
 			slog.Debug("transient failure; retrying", "method", method, "wait", wait, "error", err)
+
 			select {
 			case <-ctx.Done():
 				return err
 			case <-time.After(wait):
 			}
+
 			err = invoker(ctx, method, req, reply, cc, opts...)
 			if err == nil {
 				return nil
 			}
 		}
+
 		return err
 	}
 }
@@ -97,6 +107,7 @@ func debugLogInterceptor() grpc.UnaryClientInterceptor {
 		if !slog.Default().Enabled(ctx, slog.LevelDebug) {
 			return invoker(ctx, method, req, reply, cc, opts...)
 		}
+
 		start := time.Now()
 		err := invoker(ctx, method, req, reply, cc, opts...)
 		slog.Debug("rpc",
@@ -105,6 +116,7 @@ func debugLogInterceptor() grpc.UnaryClientInterceptor {
 			"duration", time.Since(start).Round(time.Millisecond),
 			"target", cc.Target(),
 		)
+
 		return err
 	}
 }
@@ -131,21 +143,27 @@ func authRetryInterceptor(configDir string, setToken func(*credentials.TokenResu
 		if err == nil || status.Code(err) != codes.Unauthenticated {
 			return err
 		}
+
 		if !disarmed.CompareAndSwap(false, true) {
 			return err
 		}
 
 		slog.Debug("unauthenticated response; refreshing session and retrying", "method", method)
+
 		fresh, refreshErr := credentials.ForceRefresh(ctx, configDir)
 		if refreshErr != nil {
 			slog.Debug("session refresh failed", "error", refreshErr)
 			return err
 		}
+
 		setToken(fresh)
+
 		if err := invoker(ctx, method, req, reply, cc, opts...); err != nil {
 			return err
 		}
+
 		disarmed.Store(false)
+
 		return nil
 	}
 }

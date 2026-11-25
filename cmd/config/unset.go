@@ -23,7 +23,9 @@ func newUnsetCmd(opts *admiralclient.Options) *cobra.Command {
 			if err := config.Unset(opts.ConfigDir, key); err != nil {
 				return err
 			}
+
 			output.Writef(cmd.OutOrStdout(), "%s: %s\n", key, config.DisplayValue(key, ""))
+
 			return nil
 		},
 	}

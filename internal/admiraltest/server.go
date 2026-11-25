@@ -46,6 +46,7 @@ func (s Shape) String() string {
 	case s.emptyLists:
 		return fmt.Sprintf("branch-%d-empty-lists", s.branch)
 	}
+
 	return fmt.Sprintf("branch-%d", s.branch)
 }
 
@@ -57,6 +58,7 @@ func Shapes() []Shape {
 	for b := range 8 {
 		out = append(out, Shape{branch: b})
 	}
+
 	return append(out, Shape{branch: 1, emptyLists: true})
 }
 
@@ -70,16 +72,22 @@ type Server struct {
 // until Respond says otherwise.
 func Start(t testing.TB) *Server {
 	t.Helper()
+
 	s := &Server{}
 	s.current.Store(&Shape{sparse: true, emptyLists: true})
+
 	lis, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("admiraltest: listen: %v", err)
 	}
+
 	srv := grpc.NewServer(grpc.UnknownServiceHandler(s.handle))
 	go func() { _ = srv.Serve(lis) }()
+
 	t.Cleanup(srv.Stop)
+
 	s.addr = lis.Addr().String()
+
 	return s
 }
 
@@ -94,36 +102,46 @@ func (s *Server) handle(_ any, stream grpc.ServerStream) error {
 	if !ok {
 		return errors.New("no method")
 	}
+
 	svc, method, _ := strings.Cut(strings.TrimPrefix(full, "/"), "/")
+
 	d, err := protoregistry.GlobalFiles.FindDescriptorByName(protoreflect.FullName(svc))
 	if err != nil {
 		return err
 	}
+
 	sd, ok := d.(protoreflect.ServiceDescriptor)
 	if !ok {
 		return fmt.Errorf("%s is not a service", svc)
 	}
+
 	md := sd.Methods().ByName(protoreflect.Name(method))
 	if md == nil {
 		return fmt.Errorf("no method %s", full)
 	}
+
 	for {
 		if err := stream.RecvMsg(dynamicpb.NewMessage(md.Input())); err != nil {
 			if errors.Is(err, io.EOF) {
 				break
 			}
+
 			return err
 		}
+
 		if !md.IsStreamingClient() {
 			break
 		}
 	}
+
 	mt, err := protoregistry.GlobalTypes.FindMessageByName(md.Output().FullName())
 	if err != nil {
 		return err
 	}
+
 	out := mt.New()
 	fill(out, *s.current.Load(), 0)
+
 	return stream.SendMsg(out.Interface())
 }
 
@@ -133,9 +151,11 @@ func fill(m protoreflect.Message, s Shape, depth int) {
 	if depth > 6 || (s.sparse && depth > 0) {
 		return
 	}
+
 	if wellKnown(m, s) {
 		return
 	}
+
 	fields := m.Descriptor().Fields()
 	for i := range fields.Len() {
 		f := fields.Get(i)
@@ -146,35 +166,45 @@ func fill(m protoreflect.Message, s Shape, depth int) {
 				continue
 			}
 		}
+
 		switch {
 		case f.IsList():
 			if s.emptyLists {
 				continue
 			}
+
 			l := m.NewField(f).List()
 			for i := range 2 {
 				if f.Message() != nil {
 					e := l.NewElement()
 					fill(e.Message(), s, depth+1)
+
 					if i == 1 {
 						rename(e.Message())
 					}
+
 					l.Append(e)
+
 					continue
 				}
+
 				l.Append(scalar(f, s))
 			}
+
 			m.Set(f, protoreflect.ValueOfList(l))
 		case f.IsMap():
 			if s.emptyLists {
 				continue
 			}
+
 			mp := m.NewField(f).Map()
+
 			v := scalar(f.MapValue(), s)
 			if f.MapValue().Message() != nil {
 				v = mp.NewValue()
 				fill(v.Message(), s, depth+1)
 			}
+
 			mp.Set(scalar(f.MapKey(), s).MapKey(), v)
 			m.Set(f, protoreflect.ValueOfMap(mp))
 		case f.Message() != nil:
@@ -199,6 +229,7 @@ func rename(m protoreflect.Message) {
 // timestamp is a time and a struct holds a value.
 func wellKnown(m protoreflect.Message, s Shape) bool {
 	var v proto.Message
+
 	switch m.Descriptor().FullName() {
 	case "google.protobuf.Timestamp":
 		v = timestamppb.New(time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC))
@@ -220,11 +251,13 @@ func wellKnown(m protoreflect.Message, s Shape) bool {
 	default:
 		return false
 	}
+
 	src := v.ProtoReflect()
 	src.Range(func(f protoreflect.FieldDescriptor, val protoreflect.Value) bool {
 		m.Set(m.Descriptor().Fields().ByNumber(f.Number()), val)
 		return true
 	})
+
 	return true
 }
 
@@ -284,6 +317,7 @@ func stringFor(f protoreflect.FieldDescriptor) string {
 	case strings.Contains(name, "version"):
 		return "1.2.3"
 	}
+
 	return "x"
 }
 
@@ -291,19 +325,24 @@ func typedID(kind string) string {
 	if p, ok := idPrefixes[kind]; ok {
 		return p + "-000000000001"
 	}
+
 	return "x-000000000001"
 }
 
 func snake(camel string) string {
 	var b strings.Builder
+
 	for i, r := range camel {
 		if r >= 'A' && r <= 'Z' {
 			if i > 0 {
 				b.WriteByte('_')
 			}
+
 			r += 'a' - 'A'
 		}
+
 		b.WriteRune(r)
 	}
+
 	return b.String()
 }

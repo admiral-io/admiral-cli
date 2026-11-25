@@ -32,10 +32,12 @@ type through struct {
 // it.
 func throughSource(cmd *cobra.Command, c sourcev1.SourceAPIClient, nameOrID, name, artifact, version string) (through, error) {
 	ctx := cmd.Context()
+
 	src, err := resolve.Source(ctx, c, nameOrID)
 	if err != nil {
 		return through{}, err
 	}
+
 	if src.Status != sourcev1.Source_STATUS_READY {
 		return through{}, cmderr.WithHint(
 			fmt.Errorf("source %s needs attention: %s", src.Name, src.StatusReason),
@@ -54,14 +56,17 @@ func throughSource(cmd *cobra.Command, c sourcev1.SourceAPIClient, nameOrID, nam
 		if src.Kind == sourcev1.Source_KIND_GIT {
 			versionsArtifact = ""
 		}
+
 		options, err := versionsOf(ctx, c, src, versionsArtifact)
 		if err != nil {
 			return through{}, err
 		}
+
 		picked, err := input.Choose(cmd, "--version", "version", options)
 		if err != nil {
 			return through{}, err
 		}
+
 		version = picked.Name
 	}
 
@@ -69,6 +74,7 @@ func throughSource(cmd *cobra.Command, c sourcev1.SourceAPIClient, nameOrID, nam
 	if what == "" {
 		what = src.Location
 	}
+
 	return through{
 		sourceID: src.Id, artifact: artifact, version: version,
 		label: fmt.Sprintf("%s %s from %s", what, version, src.Name),
@@ -80,6 +86,7 @@ func throughSource(cmd *cobra.Command, c sourcev1.SourceAPIClient, nameOrID, nam
 // empty.
 func artifactIn(src *sourcev1.Source, name, artifact string) (string, error) {
 	artifact = strings.Trim(strings.TrimSpace(artifact), "/")
+
 	switch src.Kind {
 	case sourcev1.Source_KIND_GIT:
 		return artifact, nil
@@ -87,6 +94,7 @@ func artifactIn(src *sourcev1.Source, name, artifact string) (string, error) {
 		if artifact == "" {
 			return name, nil
 		}
+
 		return artifact, nil
 	default:
 		return "", fmt.Errorf("source %s is of a kind this command cannot import from", src.Name)
@@ -101,10 +109,13 @@ func originOf(ctx context.Context, c registryv1.RegistryAPIClient, name string) 
 	if status.Code(err) == codes.NotFound {
 		return "", "", cmderr.Usage("%s is not a component yet; name the source to import it from with --source", name)
 	}
+
 	if err != nil {
 		return "", "", fmt.Errorf("looking up component %q: %w", name, err)
 	}
+
 	moveHint := "An organization admin can move it with 'admiral component set-origin " + name + " --source SOURCE'."
+
 	switch o := resp.Component.GetOrigin().GetKind().(type) {
 	case *registryv1.ComponentOrigin_Source:
 		return o.Source.SourceId, o.Source.Artifact, nil
@@ -122,6 +133,7 @@ func originOf(ctx context.Context, c registryv1.RegistryAPIClient, name string) 
 // source lists it, each said to be a version or a branch.
 func versionsOf(ctx context.Context, c sourcev1.SourceAPIClient, src *sourcev1.Source, artifact string) ([]input.Option, error) {
 	var out []input.Option
+
 	token := ""
 	for {
 		resp, err := c.ListSourceVersions(ctx, &sourcev1.ListSourceVersionsRequest{
@@ -130,19 +142,24 @@ func versionsOf(ctx context.Context, c sourcev1.SourceAPIClient, src *sourcev1.S
 		if err != nil {
 			return nil, fmt.Errorf("listing versions of %s: %w", artifact, err)
 		}
+
 		for _, v := range resp.Versions {
 			detail := "version"
 			if v.Kind == sourcev1.SourceVersion_KIND_BRANCH {
 				detail = "branch"
 			}
+
 			if v.Commit != "" {
 				detail += " " + shortCommit(v.Commit)
 			}
+
 			out = append(out, input.Option{Name: v.Name, Detail: detail})
 		}
+
 		if resp.NextPageToken == "" {
 			return out, nil
 		}
+
 		token = resp.NextPageToken
 	}
 }
@@ -151,5 +168,6 @@ func shortCommit(c string) string {
 	if len(c) > 7 {
 		return c[:7]
 	}
+
 	return c
 }

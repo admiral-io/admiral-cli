@@ -23,10 +23,13 @@ var widgetTable = Table[widget]{
 
 func renderTable(t *testing.T, p *Printer, rows ...widget) string {
 	t.Helper()
+
 	var buf bytes.Buffer
+
 	w := tabwriter.NewWriter(&buf, 0, 0, 3, ' ', 0)
 	widgetTable.Render(p, rows...)(w)
 	require.NoError(t, w.Flush())
+
 	return buf.String()
 }
 
@@ -39,18 +42,21 @@ func ttyPrinter(format Format, out *bytes.Buffer) *Printer {
 
 func TestTable_NarrowHidesWideColumns(t *testing.T) {
 	var out bytes.Buffer
+
 	got := renderTable(t, testPrinter(FormatTable, &out), widget{"a", "short", "u1"})
 	require.Equal(t, "NAME   DESCRIPTION\na      short\n", got)
 }
 
 func TestTable_WideAppendsAndHyphenatesHeaders(t *testing.T) {
 	var out bytes.Buffer
+
 	got := renderTable(t, testPrinter(FormatWide, &out), widget{"a", "short", "u1"})
 	require.Equal(t, "NAME   DESCRIPTION   CREATED-BY\na      short         u1\n", got)
 }
 
 func TestTable_EmptyCellIsNone(t *testing.T) {
 	var out bytes.Buffer
+
 	got := renderTable(t, testPrinter(FormatTable, &out), widget{"a", "", ""})
 	require.Equal(t, "NAME   DESCRIPTION\na      <none>\n", got)
 }
@@ -59,6 +65,7 @@ func TestTable_TruncatesOnlyOnTTY(t *testing.T) {
 	long := widget{"a", "a description that is long", "u1"}
 
 	var out bytes.Buffer
+
 	piped := renderTable(t, testPrinter(FormatTable, &out), long)
 	require.Contains(t, piped, "a description that is long", "piped output is never truncated")
 
@@ -69,12 +76,14 @@ func TestTable_TruncatesOnlyOnTTY(t *testing.T) {
 
 func TestTable_HeaderOnlyWhenNoRows(t *testing.T) {
 	var out bytes.Buffer
+
 	got := renderTable(t, testPrinter(FormatTable, &out))
 	require.Equal(t, "NAME   DESCRIPTION\n", got, "PrintList guards the empty case; Render itself just prints the header")
 }
 
 func TestTable_Write(t *testing.T) {
 	var buf bytes.Buffer
+
 	w := tabwriter.NewWriter(&buf, 0, 0, 3, ' ', 0)
 	widgetTable.Write(w, testPrinter(FormatTable, &bytes.Buffer{}), widget{"a", "x", ""}, widget{"b", "y", ""})
 	require.NoError(t, w.Flush())

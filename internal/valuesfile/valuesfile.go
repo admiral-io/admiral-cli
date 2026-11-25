@@ -31,18 +31,23 @@ func Parse(data []byte) (map[string]any, []string, error) {
 	if err := yaml.Unmarshal(data, &doc); err != nil {
 		return nil, nil, err
 	}
+
 	if doc.Kind == 0 {
 		return map[string]any{}, nil, nil
 	}
+
 	var warnings []string
+
 	v, err := fromNode(doc.Content[0], "", &warnings)
 	if err != nil {
 		return nil, nil, err
 	}
+
 	m, ok := v.(map[string]any)
 	if !ok {
 		return nil, nil, errors.New("values must be a map at the top level")
 	}
+
 	return m, warnings, nil
 }
 
@@ -54,10 +59,13 @@ func ParseScalar(s string) (any, error) {
 	if err := yaml.Unmarshal([]byte(s), &doc); err != nil {
 		return nil, err
 	}
+
 	if doc.Kind == 0 {
 		return "", nil
 	}
+
 	var warnings []string
+
 	return fromNode(doc.Content[0], "", &warnings)
 }
 
@@ -74,8 +82,10 @@ func fromNode(n *yaml.Node, at string, warnings *[]string) (any, error) {
 			if err != nil {
 				return nil, err
 			}
+
 			out = append(out, v)
 		}
+
 		return out, nil
 	case yaml.MappingNode:
 		out := make(map[string]any, len(n.Content)/2)
@@ -84,16 +94,20 @@ func fromNode(n *yaml.Node, at string, warnings *[]string) (any, error) {
 			if k.Kind != yaml.ScalarNode {
 				return nil, fmt.Errorf("%s: a map key must be a string", where(at))
 			}
+
 			child := join(at, k.Value)
 			if k.Tag == "!!merge" {
 				return nil, fmt.Errorf("%s: merge keys (<<) are not supported", where(child))
 			}
+
 			v, err := fromNode(n.Content[i+1], child, warnings)
 			if err != nil {
 				return nil, err
 			}
+
 			out[k.Value] = v
 		}
+
 		if len(out) == 1 {
 			for k, v := range out {
 				if refKey.MatchString(k) {
@@ -102,6 +116,7 @@ func fromNode(n *yaml.Node, at string, warnings *[]string) (any, error) {
 				}
 			}
 		}
+
 		return out, nil
 	default:
 		return nil, fmt.Errorf("%s: unsupported YAML node", where(at))
@@ -112,6 +127,7 @@ func scalar(n *yaml.Node, at string) (any, error) {
 	if n.Tag == refTag {
 		return map[string]any{"$ref": n.Value}, nil
 	}
+
 	switch n.ShortTag() {
 	case "!!null":
 		return nil, nil
@@ -120,15 +136,18 @@ func scalar(n *yaml.Node, at string) (any, error) {
 		if err := n.Decode(&b); err != nil {
 			return nil, fmt.Errorf("%s: %w", where(at), err)
 		}
+
 		return b, nil
 	case "!!int", "!!float":
 		if jsonNumber.MatchString(n.Value) {
 			return json.Number(n.Value), nil
 		}
+
 		var v any
 		if err := n.Decode(&v); err != nil {
 			return nil, fmt.Errorf("%s: %w", where(at), err)
 		}
+
 		switch t := v.(type) {
 		case int:
 			return json.Number(strconv.Itoa(t)), nil
@@ -140,8 +159,10 @@ func scalar(n *yaml.Node, at string) (any, error) {
 			if math.IsNaN(t) || math.IsInf(t, 0) {
 				return nil, fmt.Errorf("%s: %s is not a number JSON can hold", where(at), n.Value)
 			}
+
 			return json.Number(strconv.FormatFloat(t, 'g', -1, 64)), nil
 		}
+
 		return nil, fmt.Errorf("%s: %s is not a number", where(at), n.Value)
 	case "!!str", "!!timestamp", "!!binary":
 		return n.Value, nil
@@ -164,20 +185,25 @@ var revisionLine = regexp.MustCompile(`^#\s*revision:\s*([0-9]+)\s*$`)
 // ParseHeader reads the revision from the leading comment lines.
 func ParseHeader(data []byte) (Header, bool) {
 	var h Header
+
 	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if !strings.HasPrefix(line, "#") {
 			break
 		}
+
 		if m := revisionLine.FindStringSubmatch(line); m != nil {
 			n, err := strconv.ParseInt(m[1], 10, 32)
 			if err != nil {
 				return h, false
 			}
+
 			h.Revision = int32(n)
+
 			return h, true
 		}
 	}
+
 	return h, false
 }
 
@@ -186,15 +212,20 @@ func ParseHeader(data []byte) (Header, bool) {
 func Render(tree map[string]any, h Header) ([]byte, error) {
 	var b bytes.Buffer
 	fmt.Fprintf(&b, "# changeset: %s\n# component: %s\n# revision: %d\n", h.ChangeSet, h.Component, h.Revision)
+
 	if h.BaseDigest != "" {
 		fmt.Fprintf(&b, "# base: %s\n", h.BaseDigest)
 	}
+
 	b.WriteString("# Edit and upload with: admiral cs values " + h.ChangeSet + " " + h.Component + " --values <file>\n")
+
 	body, err := Encode(tree)
 	if err != nil {
 		return nil, err
 	}
+
 	b.Write(body)
+
 	return b.Bytes(), nil
 }
 
@@ -203,19 +234,25 @@ func Encode(tree map[string]any) ([]byte, error) {
 	if len(tree) == 0 {
 		return []byte("{}\n"), nil
 	}
+
 	node, err := toNode(tree)
 	if err != nil {
 		return nil, err
 	}
+
 	var b bytes.Buffer
+
 	enc := yaml.NewEncoder(&b)
 	enc.SetIndent(2)
+
 	if err := enc.Encode(node); err != nil {
 		return nil, err
 	}
+
 	if err := enc.Close(); err != nil {
 		return nil, err
 	}
+
 	return b.Bytes(), nil
 }
 
@@ -226,20 +263,27 @@ func EncodeLabeled(tree map[string]any, labels map[string]string) ([]byte, error
 	if len(tree) == 0 {
 		return []byte("{}\n"), nil
 	}
+
 	node, err := toNode(tree)
 	if err != nil {
 		return nil, err
 	}
+
 	label(node, nil, labels)
+
 	var b bytes.Buffer
+
 	enc := yaml.NewEncoder(&b)
 	enc.SetIndent(2)
+
 	if err := enc.Encode(node); err != nil {
 		return nil, err
 	}
+
 	if err := enc.Close(); err != nil {
 		return nil, err
 	}
+
 	return b.Bytes(), nil
 }
 
@@ -253,8 +297,10 @@ func label(n *yaml.Node, at []string, labels map[string]string) {
 	if n.Kind != yaml.MappingNode {
 		return
 	}
+
 	for i := 0; i+1 < len(n.Content); i += 2 {
 		k, v := n.Content[i], n.Content[i+1]
+
 		path := append(append([]string(nil), at...), k.Value)
 		if l, ok := labels[strings.Join(path, PathSep)]; ok {
 			switch {
@@ -268,6 +314,7 @@ func label(n *yaml.Node, at []string, labels map[string]string) {
 				k.LineComment = l
 			}
 		}
+
 		label(v, path, labels)
 	}
 }
@@ -285,41 +332,52 @@ func toNode(v any) (*yaml.Node, error) {
 		if _, err := strconv.ParseInt(string(t), 10, 64); err == nil || !strings.ContainsAny(string(t), ".eE") {
 			tag = "!!int"
 		}
+
 		return &yaml.Node{Kind: yaml.ScalarNode, Tag: tag, Value: string(t)}, nil
 	case []any:
 		n := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+
 		for _, e := range t {
 			c, err := toNode(e)
 			if err != nil {
 				return nil, err
 			}
+
 			n.Content = append(n.Content, c)
 		}
+
 		return n, nil
 	case map[string]any:
 		if len(t) == 1 {
 			if target, ok := t["$ref"].(string); ok {
 				return &yaml.Node{Kind: yaml.ScalarNode, Tag: refTag, Value: target}, nil
 			}
+
 			for k, e := range t {
 				if strings.HasPrefix(k, "$$") && refKey.MatchString(k) {
 					t = map[string]any{k[1:]: e}
 				}
 			}
 		}
+
 		keys := make([]string, 0, len(t))
 		for k := range t {
 			keys = append(keys, k)
 		}
+
 		sort.Strings(keys)
+
 		n := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+
 		for _, k := range keys {
 			c, err := toNode(t[k])
 			if err != nil {
 				return nil, err
 			}
+
 			n.Content = append(n.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: k}, c)
 		}
+
 		return n, nil
 	default:
 		return nil, fmt.Errorf("values: unsupported type %T", v)
@@ -330,13 +388,16 @@ func toNode(v any) (*yaml.Node, error) {
 func DecodeJSON(s string) (map[string]any, error) {
 	dec := json.NewDecoder(strings.NewReader(s))
 	dec.UseNumber()
+
 	var m map[string]any
 	if err := dec.Decode(&m); err != nil {
 		return nil, err
 	}
+
 	if m == nil {
 		m = map[string]any{}
 	}
+
 	return m, nil
 }
 
@@ -344,11 +405,14 @@ func DecodeJSON(s string) (map[string]any, error) {
 // verbatim, so digits survive.
 func EncodeJSON(v any) (string, error) {
 	var b bytes.Buffer
+
 	enc := json.NewEncoder(&b)
 	enc.SetEscapeHTML(false)
+
 	if err := enc.Encode(v); err != nil {
 		return "", err
 	}
+
 	return strings.TrimSuffix(b.String(), "\n"), nil
 }
 
@@ -356,6 +420,7 @@ func join(at, key string) string {
 	if at == "" {
 		return key
 	}
+
 	return at + "." + key
 }
 
@@ -363,5 +428,6 @@ func where(at string) string {
 	if at == "" {
 		return "values"
 	}
+
 	return at
 }

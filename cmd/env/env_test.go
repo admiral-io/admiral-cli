@@ -30,12 +30,15 @@ import (
 func run(t *testing.T, args ...string) (string, error) {
 	t.Helper()
 	os.Unsetenv(credentials.EnvAPIKey)
+
 	root := NewEnvCmd(&client.Options{ConfigDir: t.TempDir()})
+
 	var out, errOut bytes.Buffer
 	root.Cmd.SetOut(&out)
 	root.Cmd.SetErr(&errOut)
 	root.Cmd.SetArgs(args)
 	err := root.Cmd.Execute()
+
 	return out.String() + errOut.String(), err
 }
 
@@ -77,6 +80,7 @@ func TestPathAndAppFlagIsUsageError(t *testing.T) {
 			require.Equal(t, "Give the environment as project/environment or with --project, not both.", cmderr.Hint(err))
 		})
 	}
+
 	_, err := run(t, "update", "shop/prod", "--project", "shop", "--description", "x")
 	require.EqualError(t, err, "--project cannot be combined with a path")
 }
@@ -121,10 +125,12 @@ func TestWellFormedTargetsAreAccepted(t *testing.T) {
 			if verb == "delete" {
 				args = append(args, "--yes") // a piped run cannot confirm
 			}
+
 			_, err := run(t, args...)
 			require.ErrorIs(t, err, credentials.ErrNotAuthenticated, "%v: should fail at client creation, not usage", args)
 		}
 	}
+
 	_, err := run(t, "update", envID, "--description", "x")
 	require.ErrorIs(t, err, credentials.ErrNotAuthenticated)
 	_, err = run(t, "create", "shop/staging")
@@ -175,6 +181,7 @@ func TestTargetFlags(t *testing.T) {
 			require.ErrorIs(t, err, credentials.ErrNotAuthenticated, "%v: should fail at client creation, not usage", args)
 		}
 	}
+
 	// Create has no assignment to put a namespace on without --agent.
 	_, err := run(t, "create", "shop/prod", "--namespace", "shop")
 	require.EqualError(t, err, "--namespace needs exactly one --agent, got 0")
@@ -185,12 +192,15 @@ func TestTargetFlags(t *testing.T) {
 // no lookup is made.
 func TestTargetFlagsApply(t *testing.T) {
 	const kept, added = "agt-aaaaaaaaaaaa", "agt-bbbbbbbbbbbb"
+
 	parse := func(e *environmentv1.Environment, args ...string) ([]string, error) {
 		cmd := &cobra.Command{Use: "x"}
+
 		var f targetFlags
 		f.register(cmd, "", "")
 		require.NoError(t, cmd.ParseFlags(args))
 		require.NoError(t, f.check(cmd, false))
+
 		return f.apply(context.Background(), cmd, nil, e)
 	}
 	current := func() *environmentv1.Environment {
@@ -256,7 +266,9 @@ func TestDescribeEnv(t *testing.T) {
 		holdRun:      &runv1.Run{Id: "run-held00000001"},
 		lastApplyRun: &runv1.Run{Apply: &runv1.ApplyPhase{AppliedBy: &commonv1.ActorRef{Id: "usr-s0jg9fam3x0x", DisplayName: "Ada Lovelace"}}},
 	}
+
 	var b bytes.Buffer
+
 	d := describeEnv(e, &projectv1.Project{Name: "shop"}, sec)
 	require.NoError(t, d.Render(&b))
 	out := b.String()
@@ -275,6 +287,7 @@ func TestDescribeEnv(t *testing.T) {
 	require.Contains(t, out, "Showing the 5 most recent runs. To list them all, run: admiral run list shop/prod")
 
 	sec.moreRuns = false
+
 	b.Reset()
 	require.NoError(t, describeEnv(e, &projectv1.Project{Name: "shop"}, sec).Render(&b))
 	require.NotContains(t, b.String(), "most recent runs")
@@ -322,9 +335,11 @@ func TestUpdateSaysWhatChanged(t *testing.T) {
 func TestInfraFlagsApply(t *testing.T) {
 	parse := func(e *environmentv1.Environment, args ...string) ([]string, error) {
 		cmd := &cobra.Command{Use: "x"}
+
 		var f infraFlags
 		f.register(cmd)
 		require.NoError(t, cmd.ParseFlags(args))
+
 		return f.apply(cmd, e)
 	}
 
@@ -359,6 +374,7 @@ func TestDescribeShowsTerraformSettings(t *testing.T) {
 	render := func(e *environmentv1.Environment) string {
 		var b bytes.Buffer
 		require.NoError(t, describeEnv(e, &projectv1.Project{Name: "net"}, envSections{}).Render(&b))
+
 		return b.String()
 	}
 	require.Regexp(t, `Backend:\s+hosted`, render(&environmentv1.Environment{Name: "prod"}), "no backend means hosted state")
@@ -369,9 +385,12 @@ func TestDescribeShowsTerraformSettings(t *testing.T) {
 	e := &environmentv1.Environment{Name: "prod",
 		InfraEngine: &registryv1.InfraEngineVersion{Engine: registryv1.InfraEngine_INFRA_ENGINE_TERRAFORM, Version: "1.9.8"},
 	}
+
 	var err error
+
 	e.InfraBackend, err = parseBackend("s3", []string{"region=us-east-1", "bucket=acme"})
 	require.NoError(t, err)
+
 	out := render(e)
 	require.Regexp(t, `Engine:\s+terraform@1.9.8`, out)
 	require.Regexp(t, `Backend:\s+s3 bucket=acme region=us-east-1`, out)
@@ -387,6 +406,7 @@ func TestDescribeNamesTheValuesEachComponentSets(t *testing.T) {
 		"web": {},
 		"db":  {err: status.Error(codes.PermissionDenied, "missing required scope env:read")},
 	}}
+
 	var b bytes.Buffer
 	require.NoError(t, describeEnv(&environmentv1.Environment{Name: "prod"}, &projectv1.Project{Name: "shop"}, sec).Render(&b))
 	out := b.String()
@@ -406,9 +426,11 @@ func TestDescribeNamesTheValuesEachComponentSets(t *testing.T) {
 func TestTrackFlagApply(t *testing.T) {
 	parse := func(e *environmentv1.Environment, args ...string) ([]string, error) {
 		cmd := &cobra.Command{Use: "x"}
+
 		var f trackFlag
 		f.register(cmd)
 		require.NoError(t, cmd.ParseFlags(args))
+
 		return f.apply(cmd, e)
 	}
 
@@ -454,6 +476,7 @@ func TestTrackFlagApply(t *testing.T) {
 	require.Equal(t, []string{"tracking"}, paths)
 	require.Equal(t, environmentv1.Tracking_AFTER_MERGE_APPLY, e.GetTracking().GetAfterMerge())
 	require.Equal(t, "main", e.GetTracking().GetPattern(), "the policy itself is kept")
+
 	_, err = parse(&environmentv1.Environment{}, "--after-merge", "wait")
 	require.Error(t, err, "nothing merges into a pin")
 	_, err = parse(&environmentv1.Environment{}, "--track", "branch=main", "--after-merge", "later")

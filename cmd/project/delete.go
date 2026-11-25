@@ -39,6 +39,7 @@ name to confirm, or pass --yes to skip the prompt.`,
 			if err := input.RequireInteractiveOrYes(cmd, yes); err != nil {
 				return err
 			}
+
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
 				return err
@@ -58,6 +59,7 @@ name to confirm, or pass --yes to skip the prompt.`,
 				if err != nil {
 					return err
 				}
+
 				name = resp.Project.Name
 			}
 
@@ -73,6 +75,7 @@ name to confirm, or pass --yes to skip the prompt.`,
 			}
 
 			output.Confirmed(cmd.ErrOrStderr(), "project", name, "deleted")
+
 			return nil
 		},
 	}

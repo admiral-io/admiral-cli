@@ -33,11 +33,13 @@ func (m *envClient) ListEnvironmentComponents(_ context.Context, req *environmen
 	if req.GetEnvironmentId() != "env-1" {
 		return &environmentv1.ListEnvironmentComponentsResponse{}, nil
 	}
+
 	return &environmentv1.ListEnvironmentComponentsResponse{Components: []*environmentv1.EnvironmentComponent{{Name: "api"}, {Name: "web"}}}, nil
 }
 
 func useShop(t *testing.T) {
 	t.Helper()
+
 	apps, envs := shopWithEnvs()
 	envs.envs[0].Id = "env-1"
 	useAll(t, &fakeClient{apps: apps, envs: envs, css: &changeSetClient{}}, nil)
@@ -49,6 +51,7 @@ func TestPositions_CompletesEachArgumentWithItsOwnFunction(t *testing.T) {
 			return []string{v}, cobra.ShellCompDirectiveNoFileComp
 		}
 	}
+
 	f := Positions(offer("first"), nil, offer("third"))
 	for _, tc := range []struct {
 		args []string
@@ -75,6 +78,7 @@ func TestThenEach_RepeatsTheSecondFunction(t *testing.T) {
 
 func TestComponentsOf_AnEnvironmentOffersItsLiveComponents(t *testing.T) {
 	useShop(t)
+
 	got, directive := ComponentsOf(&client.Options{}, false)(&cobra.Command{}, []string{"shop/prod"}, "")
 	require.Equal(t, []string{"api", "web"}, got)
 	require.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
@@ -82,6 +86,7 @@ func TestComponentsOf_AnEnvironmentOffersItsLiveComponents(t *testing.T) {
 
 func TestComponentsOf_AChangeSetAddsWhatItsHeadAdds(t *testing.T) {
 	useShop(t)
+
 	got, _ := ComponentsOf(&client.Options{}, false)(&cobra.Command{}, []string{"cs-000000000001"}, "")
 	require.Equal(t, []string{"api", "web", "worker"}, got)
 }
@@ -90,6 +95,7 @@ func TestComponentsOf_AChangeSetAddsWhatItsHeadAdds(t *testing.T) {
 // its dot and no space, and nothing is offered once the dot is there.
 func TestComponentsOf_DottedOffersThePathStart(t *testing.T) {
 	useShop(t)
+
 	f := ComponentsOf(&client.Options{}, true)
 	got, directive := f(&cobra.Command{}, []string{"shop/prod"}, "a")
 	require.Equal(t, []string{"api."}, got)
@@ -101,6 +107,7 @@ func TestComponentsOf_DottedOffersThePathStart(t *testing.T) {
 
 func TestScopes(t *testing.T) {
 	useShop(t)
+
 	f := Scopes(&client.Options{})
 
 	got, directive := f(&cobra.Command{}, nil, "")

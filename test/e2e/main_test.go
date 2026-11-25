@@ -32,10 +32,12 @@ func TestMain(m *testing.M) {
 		fmt.Fprintln(os.Stderr, "e2e: failed to build admiral CLI:", err)
 		os.Exit(1)
 	}
+
 	binary = dir + "/admiral"
 
 	code := m.Run()
 
 	_ = os.RemoveAll(dir)
+
 	os.Exit(code)
 }

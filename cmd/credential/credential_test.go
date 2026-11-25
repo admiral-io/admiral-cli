@@ -18,11 +18,13 @@ import (
 // prompt is an error naming its flag.
 func run(t *testing.T, args ...string) error {
 	t.Helper()
+
 	root := NewCredentialCmd(&client.Options{})
 	root.Cmd.SetIn(strings.NewReader(""))
 	root.Cmd.SetOut(io.Discard)
 	root.Cmd.SetErr(io.Discard)
 	root.Cmd.SetArgs(args)
+
 	return root.Cmd.Execute()
 }
 
@@ -87,6 +89,7 @@ func TestPrivateKeyIsReadWhole(t *testing.T) {
 	got, err := checkPEM(key)
 	require.NoError(t, err)
 	assert.Equal(t, strings.TrimRight(key, "\r\n")+"\n", got, "one trailing newline, the body intact")
+
 	_, err = checkPEM("")
 	require.Error(t, err)
 }
