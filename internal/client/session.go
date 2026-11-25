@@ -63,6 +63,7 @@ func newBearerToken(tok *admcreds.TokenResult, plaintext bool, renew func(contex
 func (b *bearerToken) set(tok *admcreds.TokenResult) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
 	b.token, b.expiry = tok.Token, tok.Expiry
 }
 
@@ -74,6 +75,7 @@ func (b *bearerToken) set(tok *admcreds.TokenResult) {
 func (b *bearerToken) GetRequestMetadata(ctx context.Context, _ ...string) (map[string]string, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
 	if b.renew != nil && !b.expiry.IsZero() && time.Until(b.expiry) <= admcreds.RefreshWindow {
 		fresh, err := b.renew(ctx)
 		switch {
@@ -85,6 +87,7 @@ func (b *bearerToken) GetRequestMetadata(ctx context.Context, _ ...string) (map[
 			slog.Debug("session renewal failed; using the current token", "error", err)
 		}
 	}
+
 	return map[string]string{"authorization": sdkclient.AuthSchemeBearer.String() + " " + b.token}, nil
 }
 
@@ -113,6 +116,7 @@ func newSessionClient(hostPort string, tok *bearerToken, mode transportMode, int
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to %s: %w", hostPort, err)
 	}
+
 	return &sessionClient{conn: conn}, nil
 }
 

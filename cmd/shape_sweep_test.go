@@ -62,6 +62,7 @@ func sweepArgs(files map[string]string) map[string][]string {
 		cs  = "cs-000000000001"
 		run = "run-000000000001"
 	)
+
 	return map[string][]string{
 		"agent create":         {"agent", "create", "x", "--kind", "kubernetes"},
 		"agent delete":         {"agent", "delete", "x"},
@@ -161,13 +162,16 @@ func sweepFiles(t *testing.T) map[string]string {
 		p := filepath.Join(dir, name)
 		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o750))
 		require.NoError(t, os.WriteFile(p, []byte(body), 0o600))
+
 		return p
 	}
 	write("manifests/cm.yaml", "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: x\n")
+
 	_, key, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
 	der, err := x509.MarshalPKCS8PrivateKey(key)
 	require.NoError(t, err)
+
 	return map[string]string{
 		"values":    write("values.yaml", "a: 1\n"),
 		"key":       write("key.pem", string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}))),
@@ -180,12 +184,15 @@ func leafCommands(c *cobra.Command) []string {
 	if !c.HasSubCommands() && c.Runnable() {
 		out = append(out, strings.TrimPrefix(c.CommandPath(), "admiral "))
 	}
+
 	for _, s := range c.Commands() {
 		if s.Name() == "help" {
 			continue
 		}
+
 		out = append(out, leafCommands(s)...)
 	}
+
 	return out
 }
 
@@ -194,14 +201,19 @@ func leafCommands(c *cobra.Command) []string {
 func TestShapeSweepCoversEveryCommand(t *testing.T) {
 	root, err := newRootCmd(version.GetVersion(), func(int) {})
 	require.NoError(t, err)
+
 	args := sweepArgs(map[string]string{})
+
 	var missing []string
+
 	for _, c := range leafCommands(root.cmd) {
 		if _, ok := args[c]; !ok && sweepOffline[c] == "" {
 			missing = append(missing, c)
 		}
 	}
+
 	require.Empty(t, missing, "add these commands to sweepArgs, or to sweepOffline with the reason")
+
 	for c := range args {
 		require.NotContains(t, sweepOffline, c)
 	}
@@ -227,8 +239,10 @@ func interactiveRun(t *testing.T, addr, stdin string, args []string) sweepResult
 
 func runAgainst(t *testing.T, addr, stdin string, args []string) (r sweepResult) {
 	t.Helper()
+
 	root, err := newRootCmd(version.GetVersion(), func(int) {})
 	require.NoError(t, err)
+
 	var out, errOut bytes.Buffer
 	root.cmd.SetOut(&out)
 	root.cmd.SetErr(&errOut)
@@ -240,15 +254,19 @@ func runAgainst(t *testing.T, addr, stdin string, args []string) (r sweepResult)
 	// the sweep is after panics, not after what a wait settles on.
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
+
 	func() {
 		defer func() {
 			if p := recover(); p != nil {
 				r.panicked = fmt.Sprintf("%v\n%s", p, debug.Stack())
 			}
 		}()
+
 		r.err = root.cmd.ExecuteContext(ctx)
 	}()
+
 	r.stdout, r.stderr = out.String(), errOut.String()
+
 	return r
 }
 
@@ -256,15 +274,18 @@ func runAgainst(t *testing.T, addr, stdin string, args []string) (r sweepResult)
 // HTTP and not in the Admiral API admiraltest serves.
 func stateServer(t *testing.T) string {
 	t.Helper()
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/download") {
 			_, _ = io.WriteString(w, `{"version":4,"serial":3}`)
 			return
 		}
+
 		_, _ = io.WriteString(w, `{"data":[{"id":"stv-1","type":"state-versions","attributes":{"serial":3,"size":2048,"created-at":"2026-10-25T12:00:00Z","status":"finalized"},"relationships":{"created-by":{"data":{"type":"users","id":"usr-1"}}}},`+
 			`{"id":"stv-0","type":"state-versions","attributes":{"serial":2,"size":10,"forced":true,"created-at":"2026-10-24T12:00:00Z","status":"finalized"},"relationships":{"created-by":{"data":{"type":"jobs","id":"job-1"},"meta":{"attempt":1}}}}],"meta":{"pagination":{"current-page":1,"next-page":null}}}`)
 	}))
 	t.Cleanup(srv.Close)
+
 	return strings.TrimPrefix(srv.URL, "http://")
 }
 
@@ -272,29 +293,37 @@ func TestShapeSweep(t *testing.T) {
 	if testing.Short() {
 		t.Skip("the shape sweep runs every command against every response shape")
 	}
+
 	t.Setenv(credentials.EnvAPIKey, "admp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopq1ZqpkG")
 	t.Setenv("ADMIRAL_NO_INPUT", "1")
 	srv := admiraltest.Start(t)
 	t.Setenv(client.EnvStateHost, stateServer(t))
 	invocations := sweepArgs(sweepFiles(t))
+
 	names := make([]string, 0, len(invocations))
 	for n := range invocations {
 		names = append(names, n)
 	}
+
 	sort.Strings(names)
 
 	for _, name := range names {
 		t.Run(strings.ReplaceAll(name, " ", "_"), func(t *testing.T) {
 			reached, succeeded := false, false
+
 			var refused, failed error
+
 			for _, s := range admiraltest.Shapes() {
 				srv.Respond(s)
+
 				for _, format := range []string{"table", "wide", "json", "yaml", "name"} {
 					args := append([]string{"-o", format}, invocations[name]...)
+
 					r := sweepRun(t, srv.Addr(), args)
 					if r.panicked != "" {
 						t.Fatalf("admiral %s with a %s response panicked:\n%s", strings.Join(args, " "), s, r.panicked)
 					}
+
 					if format == "table" {
 						switch {
 						case r.err == nil:
@@ -305,6 +334,7 @@ func TestShapeSweep(t *testing.T) {
 							reached, failed = true, r.err
 						}
 					}
+
 					if r.err == nil && (format == "table" || format == "wide") && sweepDocuments[name] == "" {
 						for _, out := range []string{r.stdout, r.stderr} {
 							for _, v := range blankLineViolations(out) {
@@ -312,6 +342,7 @@ func TestShapeSweep(t *testing.T) {
 							}
 						}
 					}
+
 					if r.err == nil && format == "json" {
 						if trimmed := strings.TrimSpace(r.stdout); strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
 							require.True(t, json.Valid([]byte(trimmed)),
@@ -320,6 +351,7 @@ func TestShapeSweep(t *testing.T) {
 					}
 				}
 			}
+
 			// A command may refuse some responses as usage errors, as rotate
 			// does for a type its flags do not fit, but one refused every
 			// time never reaches the API and its arguments need fixing.
@@ -349,7 +381,9 @@ func blankLineViolations(out string) []string {
 		return t != "" && strings.Trim(t, "- ") == ""
 	}
 	indent := func(l string) int { return len(l) - len(strings.TrimLeft(l, " ")) }
+
 	var out2 []string
+
 	for i, l := range lines {
 		switch {
 		case l != "" && strings.TrimSpace(l) == "":
@@ -365,6 +399,7 @@ func blankLineViolations(out string) []string {
 			out2 = append(out2, fmt.Sprintf("the section %q at line %d has no blank line before it", l, i+1))
 		}
 	}
+
 	return out2
 }
 

@@ -50,6 +50,7 @@ describe is a human view. Use 'changeset get -o json' for the raw record and
 			if err != nil {
 				return err
 			}
+
 			c, csID, err := dial(cmd, opts, ref)
 			if err != nil {
 				return err
@@ -57,15 +58,18 @@ describe is a human view. Use 'changeset get -o json' for the raw record and
 			defer c.Close() //nolint:errcheck
 
 			ctx := cmd.Context()
+
 			resp, err := c.ChangeSet().GetChangeSet(ctx, &changesetv1.GetChangeSetRequest{ChangeSetId: csID})
 			if err != nil {
 				return err
 			}
+
 			cs := resp.ChangeSet
 
 			// Each section keeps its own error, so a read the credential
 			// may not make renders as unavailable without failing the rest.
 			var sec csSections
+
 			g, gctx := errgroup.WithContext(ctx)
 			g.Go(func() error {
 				sec.diff, sec.diffErr = c.ChangeSet().DiffChangeSet(gctx, &changesetv1.DiffChangeSetRequest{ChangeSetId: csID})
@@ -82,9 +86,11 @@ describe is a human view. Use 'changeset get -o json' for the raw record and
 			_ = g.Wait() // nothing returns an error
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+
 			return p.PrintDescribe(describeChangeSet(cs, sec), "admiral changeset get "+cs.Id)
 		},
 	}
+
 	return cmd
 }
 
@@ -104,10 +110,12 @@ func listChangeSetRuns(ctx context.Context, c sdkclient.AdmiralClient, cs *chang
 	if err != nil {
 		return nil, false, err
 	}
+
 	resp, err := c.Run().ListRuns(ctx, &runv1.ListRunsRequest{Filter: f, PageSize: recentRunsLimit})
 	if err != nil {
 		return nil, false, err
 	}
+
 	return resp.Runs, resp.NextPageToken != "", nil
 }
 
@@ -118,10 +126,12 @@ func changeSetRunsFilter(cs *changesetv1.ChangeSet) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	id, err := filter.Eq("change_set_id", cs.Id)
 	if err != nil {
 		return "", err
 	}
+
 	return filter.And(env, id), nil
 }
 
@@ -132,10 +142,12 @@ func environmentPath(ctx context.Context, c sdkclient.AdmiralClient, cs *changes
 	if err != nil {
 		return cs.EnvironmentId
 	}
+
 	app, err := c.Project().GetProject(ctx, &projectv1.GetProjectRequest{ProjectId: cs.ProjectId})
 	if err != nil {
 		return cs.EnvironmentId
 	}
+
 	return app.GetProject().GetName() + "/" + env.GetEnvironment().GetName()
 }
 
@@ -147,19 +159,24 @@ func describeChangeSet(cs *changesetv1.ChangeSet, sec csSections) *output.Descri
 	d.Field("Description", cs.Description)
 	d.Field("Status", output.FormatEnum(cs.Status))
 	d.Field("Revision", strconv.Itoa(int(cs.HeadRevision)))
+
 	if cs.Behind {
 		d.Field("Behind", "the environment changed since this revision was made; rebase it: admiral changeset rebase "+cs.Id)
 	}
+
 	if cs.RevertsChangeSetId != "" {
 		d.Field("Reverts", cs.RevertsChangeSetId)
 	}
+
 	if cs.RevertedByChangeSetId != "" {
 		d.Field("Reverted by", cs.RevertedByChangeSetId)
 	}
+
 	var latest *runv1.Run
 	if len(sec.runs) > 0 {
 		latest = sec.runs[0]
 	}
+
 	switch {
 	case latest != nil:
 		d.Field("Last Run", fmt.Sprintf("%s %s %s ago", latest.Id, output.FormatEnum(latest.Status), output.FormatAge(latest.CreatedAt)))
@@ -168,6 +185,7 @@ func describeChangeSet(cs *changesetv1.ChangeSet, sec csSections) *output.Descri
 	default:
 		d.Field("Last Run", "")
 	}
+
 	d.Field("Created", output.FormatDescribeTime(cs.CreatedAt))
 	d.Field("Created By", output.FormatActorWithID(cs.CreatedBy))
 
@@ -180,11 +198,13 @@ func describeChangeSet(cs *changesetv1.ChangeSet, sec csSections) *output.Descri
 				b.Field("Count", "0")
 				return
 			}
+
 			rows := make([][]string, 0, len(comps))
 			for _, c := range comps {
 				rows = append(rows, []string{c.Component, output.FormatEnumKebab(c.Action),
 					strings.TrimSpace(versionChange(c.OldVersion, c.NewVersion)), changesInBrief(c)})
 			}
+
 			b.Table([]string{"Name", "Action", "Version", "Changes"}, rows)
 		})
 	}
@@ -196,15 +216,18 @@ func describeChangeSet(cs *changesetv1.ChangeSet, sec csSections) *output.Descri
 		for _, r := range sec.runs {
 			rows = append(rows, []string{r.Id, output.FormatEnum(r.Status), output.FormatActor(r.CreatedBy), output.FormatAge(r.CreatedAt)})
 		}
+
 		d.Table("Runs", []string{"ID", "Status", "Created By", "Age"}, rows)
 	}
 
 	for _, h := range nextSteps(cs, latest, sec) {
 		d.Hint(h)
 	}
+
 	if status.Code(sec.diffErr) == codes.PermissionDenied || status.Code(sec.runsErr) == codes.PermissionDenied {
 		d.Hint(cmderr.ScopeHint)
 	}
+
 	return d
 }
 
@@ -215,11 +238,14 @@ func changesInBrief(c *changesetv1.ComponentDiff) string {
 	for _, pd := range c.Paths {
 		leaves = append(leaves, output.Leaves(pd.DisplayPath, pd.BeforePresent, pd.BeforeJson, pd.AfterPresent, pd.AfterJson)...)
 	}
+
 	var out string
+
 	switch len(leaves) {
 	case 0:
 	case 1:
 		l := leaves[0]
+
 		out = fmt.Sprintf("%s: %s -> %s", l.Path, l.Before, l.After)
 		if len(out) > 60 {
 			out = "1 value"
@@ -227,16 +253,20 @@ func changesInBrief(c *changesetv1.ComponentDiff) string {
 	default:
 		out = fmt.Sprintf("%d values", len(leaves))
 	}
+
 	if n := len(c.Violations); n > 0 {
 		v := fmt.Sprintf("%d violations", n)
 		if n == 1 {
 			v = "1 violation"
 		}
+
 		if out != "" {
 			out += ", "
 		}
+
 		out += v
 	}
+
 	return out
 }
 
@@ -246,13 +276,16 @@ func nextSteps(cs *changesetv1.ChangeSet, latest *runv1.Run, sec csSections) []s
 	if n := len(sec.diff.GetComponents()); n > 0 {
 		hints = append(hints, "To see every value, run: admiral changeset diff "+cs.Id)
 	}
+
 	if sec.moreRuns {
 		hints = append(hints, fmt.Sprintf("Showing the %d most recent runs. To list them all, run: admiral run list %s --changeset %s",
 			recentRunsLimit, sec.where, cs.Id))
 	}
+
 	if cs.Status != changesetv1.ChangeSet_STATUS_OPEN {
 		return hints
 	}
+
 	switch {
 	case latest == nil && cs.LatestRunId == "":
 		hints = append(hints, "To plan it, run: admiral changeset plan "+cs.Id)
@@ -263,5 +296,6 @@ func nextSteps(cs *changesetv1.ChangeSet, latest *runv1.Run, sec csSections) []s
 		hints = append(hints, "To see why the last run failed, run: admiral run describe "+latest.Id,
 			"To plan it again, run: admiral changeset plan "+cs.Id)
 	}
+
 	return hints
 }

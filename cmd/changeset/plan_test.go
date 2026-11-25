@@ -38,6 +38,7 @@ func TestPlanArguments(t *testing.T) {
 // nothing without it.
 func TestPlanFlagOnEachEditVerb(t *testing.T) {
 	values := downloaded(t, valuesfileHeader(3), map[string]any{})
+
 	verbs := [][]string{
 		{"create", "shop/prod", "--set", "api.replicas=3"},
 		{"add", csID, "cloud-sql:v1"},
@@ -54,6 +55,7 @@ func TestPlanFlagOnEachEditVerb(t *testing.T) {
 			_, err := run(t, a...)
 			requireAccepted(t, err, a...)
 		}
+
 		for _, extra := range []string{"--no-wait", "--wait-timeout=1m"} {
 			a := append(append([]string{}, args...), extra)
 			_, err := run(t, a...)

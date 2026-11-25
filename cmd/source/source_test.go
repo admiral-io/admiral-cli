@@ -17,11 +17,13 @@ import (
 // prompt is an error naming its flag.
 func run(t *testing.T, args ...string) error {
 	t.Helper()
+
 	root := NewSourceCmd(&client.Options{})
 	root.Cmd.SetIn(strings.NewReader(""))
 	root.Cmd.SetOut(io.Discard)
 	root.Cmd.SetErr(io.Discard)
 	root.Cmd.SetArgs(args)
+
 	return root.Cmd.Execute()
 }
 

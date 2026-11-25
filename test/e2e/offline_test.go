@@ -46,6 +46,7 @@ func TestUsageErrors(t *testing.T) {
 			if tc.hint != "" {
 				r.StderrContains(tc.hint)
 			}
+
 			if r.Stdout != "" {
 				t.Fatalf("usage error must not write to stdout, got:\n%s", r.Stdout)
 			}
@@ -129,5 +130,6 @@ func TestCompletionScripts(t *testing.T) {
 	for _, shell := range []string{"bash", "zsh", "fish", "powershell"} {
 		cli.Run("completion", shell).Succeeds().NoStderr().StdoutContains("admiral")
 	}
+
 	cli.Run("completion", "zsh").StdoutContains("#compdef admiral")
 }

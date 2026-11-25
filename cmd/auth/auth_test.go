@@ -31,14 +31,17 @@ func stubOp(t *testing.T, out string, fail bool) func() int {
 	t.Helper()
 	bin := t.TempDir()
 	counter := filepath.Join(bin, "calls")
+
 	script := "#!/bin/sh\necho x >> " + counter + "\n"
 	if fail {
 		script += "echo 'vault is locked' >&2; exit 1\n"
 	} else {
 		script += "printf '%s' '" + out + "'\n"
 	}
+
 	require.NoError(t, os.WriteFile(filepath.Join(bin, "op"), []byte(script), 0755)) //nolint:gosec // test stub
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
 	return func() int {
 		b, _ := os.ReadFile(counter)
 		return strings.Count(string(b), "x")
@@ -47,18 +50,22 @@ func stubOp(t *testing.T, out string, fail bool) func() int {
 
 func run(t *testing.T, opts *client.Options, stdin string, args ...string) (stdout string, err error) {
 	t.Helper()
+
 	root := NewAuthCmd(opts).Cmd
+
 	var out bytes.Buffer
 	root.SetOut(&out)
 	root.SetErr(&bytes.Buffer{})
 	root.SetIn(strings.NewReader(stdin))
 	root.SetArgs(args)
 	err = root.Execute()
+
 	return out.String(), err
 }
 
 func TestLoginWithAPIKey_StoresKey(t *testing.T) {
 	os.Unsetenv(credentials.EnvAPIKey)
+
 	opts := &client.Options{ConfigDir: t.TempDir()}
 
 	stdout, err := run(t, opts, validKey+"\n", "login", "--with-token")
@@ -78,6 +85,7 @@ func TestLoginWithAPIKey_StoresKey(t *testing.T) {
 
 func TestLoginWithAPIKey_RejectsMalformed(t *testing.T) {
 	os.Unsetenv(credentials.EnvAPIKey)
+
 	opts := &client.Options{ConfigDir: t.TempDir()}
 
 	_, err := run(t, opts, "not-a-key\n", "login", "--with-token")
@@ -91,6 +99,7 @@ func TestLoginWithAPIKey_RejectsMalformed(t *testing.T) {
 // naming stdin, not a complaint about the key's format.
 func TestLoginWithAPIKey_EmptyInput(t *testing.T) {
 	os.Unsetenv(credentials.EnvAPIKey)
+
 	opts := &client.Options{ConfigDir: t.TempDir()}
 
 	_, err := run(t, opts, "", "login", "--with-token")
@@ -100,6 +109,7 @@ func TestLoginWithAPIKey_EmptyInput(t *testing.T) {
 
 func TestLoginWithAPIKey_ReplacesSession(t *testing.T) {
 	os.Unsetenv(credentials.EnvAPIKey)
+
 	opts := &client.Options{ConfigDir: t.TempDir()}
 	require.NoError(t, credentials.Save(opts.ConfigDir, &credentials.Credential{
 		Kind: credentials.KindSession, AccessToken: "jwt",
@@ -193,6 +203,7 @@ func TestStatus(t *testing.T) {
 			} else {
 				os.Unsetenv(credentials.EnvAPIKey)
 			}
+
 			opts := &client.Options{ConfigDir: t.TempDir(), OutputFormat: output.FormatJSON}
 			if tc.stored != nil {
 				require.NoError(t, credentials.Save(opts.ConfigDir, tc.stored))
@@ -204,9 +215,11 @@ func TestStatus(t *testing.T) {
 			var got authStatus
 			require.NoError(t, json.Unmarshal([]byte(stdout), &got))
 			got.Error = "" // wording is asserted elsewhere
+
 			if tc.want.Path == "FILE" {
 				tc.want.Path = credentials.FilePath(opts.ConfigDir)
 			}
+
 			require.Equal(t, tc.want, got)
 		})
 	}
@@ -214,6 +227,7 @@ func TestStatus(t *testing.T) {
 
 func TestLoginWithToken_StoresReference(t *testing.T) {
 	os.Unsetenv(credentials.EnvAPIKey)
+
 	opts := &client.Options{ConfigDir: t.TempDir()}
 	calls := stubOp(t, validKey, false)
 
@@ -231,6 +245,7 @@ func TestLoginWithToken_StoresReference(t *testing.T) {
 
 func TestLoginWithToken_ReferenceResolvesToBadKey(t *testing.T) {
 	os.Unsetenv(credentials.EnvAPIKey)
+
 	opts := &client.Options{ConfigDir: t.TempDir()}
 	stubOp(t, "not-a-key", false)
 
@@ -243,6 +258,7 @@ func TestLoginWithToken_ReferenceResolvesToBadKey(t *testing.T) {
 
 func TestLoginWithToken_ReferenceUnresolvable(t *testing.T) {
 	os.Unsetenv(credentials.EnvAPIKey)
+
 	opts := &client.Options{ConfigDir: t.TempDir()}
 	stubOp(t, "", true)
 
@@ -254,6 +270,7 @@ func TestLoginWithToken_ReferenceUnresolvable(t *testing.T) {
 // --no-verify must never prompt for 1Password.
 func TestStatus_ShowsReferenceWithoutResolvingIt(t *testing.T) {
 	os.Unsetenv(credentials.EnvAPIKey)
+
 	opts := &client.Options{ConfigDir: t.TempDir(), OutputFormat: output.FormatJSON}
 	calls := stubOp(t, validKey, false)
 	require.NoError(t, credentials.Save(opts.ConfigDir, &credentials.Credential{
@@ -262,6 +279,7 @@ func TestStatus_ShowsReferenceWithoutResolvingIt(t *testing.T) {
 
 	stdout, err := run(t, opts, "", "status", "--no-verify")
 	require.NoError(t, err)
+
 	var got authStatus
 	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
 	require.True(t, got.Authenticated)
@@ -276,16 +294,20 @@ func TestStatus_ShowsReferenceWithoutResolvingIt(t *testing.T) {
 // stubVerify answers for the server: user when err is nil, else err.
 func stubVerify(t *testing.T, user *userv1.User, err error) {
 	t.Helper()
+
 	prev := verifyIdentity
 	verifyIdentity = func(context.Context, *client.Options) (*userv1.User, error) { return user, err }
+
 	t.Cleanup(func() { verifyIdentity = prev })
 }
 
 func storeKey(t *testing.T) *client.Options {
 	t.Helper()
 	os.Unsetenv(credentials.EnvAPIKey)
+
 	opts := &client.Options{ConfigDir: t.TempDir(), OutputFormat: output.FormatJSON, ServerAddr: "api.example:443"}
 	require.NoError(t, credentials.Save(opts.ConfigDir, &credentials.Credential{Kind: credentials.KindAPIKey, APIKey: validKey}))
+
 	return opts
 }
 
@@ -296,6 +318,7 @@ func TestStatus_VerifiesWithServer(t *testing.T) {
 
 	stdout, err := run(t, opts, "", "status")
 	require.NoError(t, err)
+
 	var got authStatus
 	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
 	require.True(t, got.Authenticated)
@@ -316,6 +339,7 @@ func TestStatus_VerifiesWithServer(t *testing.T) {
 // the one it read before contacting the server.
 func TestStatus_ShowsExpiryAfterRefresh(t *testing.T) {
 	os.Unsetenv(credentials.EnvAPIKey)
+
 	opts := &client.Options{ConfigDir: t.TempDir(), OutputFormat: output.FormatJSON}
 	stale := &credentials.Credential{Kind: credentials.KindSession, AccessToken: "jwt-1", Expiry: time.Now().Add(-time.Hour)}
 	require.NoError(t, credentials.Save(opts.ConfigDir, stale))
@@ -325,12 +349,15 @@ func TestStatus_ShowsExpiryAfterRefresh(t *testing.T) {
 	verifyIdentity = func(context.Context, *client.Options) (*userv1.User, error) {
 		next := *stale
 		next.AccessToken, next.Expiry = "jwt-2", fresh
+
 		return &userv1.User{Id: "u-1"}, credentials.Save(opts.ConfigDir, &next)
 	}
+
 	t.Cleanup(func() { verifyIdentity = prev })
 
 	stdout, err := run(t, opts, "", "status")
 	require.NoError(t, err)
+
 	var got authStatus
 	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
 	require.True(t, got.Verified)
@@ -350,6 +377,7 @@ func TestStatus_ServerRejectsCredential(t *testing.T) {
 
 	stdout, err := run(t, opts, "", "status")
 	require.NoError(t, err, "-o json: the document carries the outcome")
+
 	var got authStatus
 	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
 	require.False(t, got.Authenticated)
@@ -374,6 +402,7 @@ func TestStatus_ServerUnreachable(t *testing.T) {
 
 	stdout, err := run(t, opts, "", "status")
 	require.NoError(t, err)
+
 	var got authStatus
 	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
 	require.True(t, got.Authenticated)
@@ -395,6 +424,7 @@ func TestStatus_NoVerifySkipsTheServer(t *testing.T) {
 
 	stdout, err := run(t, opts, "", "status", "--no-verify")
 	require.NoError(t, err)
+
 	var got authStatus
 	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
 	require.True(t, got.Authenticated)
@@ -415,6 +445,7 @@ func TestLogout_StoredReference(t *testing.T) {
 
 func TestLogin_ScopeFlagValidation(t *testing.T) {
 	os.Unsetenv(credentials.EnvAPIKey)
+
 	opts := &client.Options{ConfigDir: t.TempDir()}
 
 	_, err := run(t, opts, "", "login", "--scope", "bogus:read")
@@ -428,6 +459,7 @@ func TestLogin_ScopeFlagValidation(t *testing.T) {
 
 func TestStatus_ShowsScopes(t *testing.T) {
 	os.Unsetenv(credentials.EnvAPIKey)
+
 	opts := &client.Options{ConfigDir: t.TempDir(), OutputFormat: output.FormatJSON}
 	require.NoError(t, credentials.Save(opts.ConfigDir, &credentials.Credential{
 		Kind: credentials.KindSession, AccessToken: "jwt", Scopes: []string{"project:read"},
@@ -435,6 +467,7 @@ func TestStatus_ShowsScopes(t *testing.T) {
 
 	stdout, err := run(t, opts, "", "status", "--no-verify")
 	require.NoError(t, err)
+
 	var got authStatus
 	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
 	require.Equal(t, []string{"project:read"}, got.Scopes)

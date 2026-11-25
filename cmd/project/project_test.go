@@ -19,12 +19,15 @@ import (
 
 func run(t *testing.T, args ...string) (string, error) {
 	t.Helper()
+
 	root := NewAppCmd(&client.Options{})
+
 	var out, errOut bytes.Buffer
 	root.Cmd.SetOut(&out)
 	root.Cmd.SetErr(&errOut)
 	root.Cmd.SetArgs(args)
 	err := root.Cmd.Execute()
+
 	return out.String() + errOut.String(), err
 }
 
@@ -63,6 +66,7 @@ func TestIDPositionalIsAccepted(t *testing.T) {
 		case "delete":
 			args = append(args, "--yes") // a piped run cannot confirm
 		}
+
 		_, err := run(t, args...)
 		require.Error(t, err)
 		require.NotEqual(t, cmderr.ExitUsage, cmderr.Code(err), "%s: should fail at client creation, not usage", verb)

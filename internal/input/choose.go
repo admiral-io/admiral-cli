@@ -39,13 +39,16 @@ func Choose(cmd *cobra.Command, flag, what string, options []Option) (Option, er
 	if len(options) == 0 {
 		return Option{}, cmderr.Usage("no %s to choose from", what)
 	}
+
 	ios := iostreams.FromCommand(cmd)
 	if !ios.Interactive() {
 		return Option{}, cmderr.UsageHint(
 			fmt.Sprintf("Pass %s as one of: %s", flag, names(options, listed)),
 			"%s required when not running interactively", flag)
 	}
+
 	numbered := min(len(options), shown)
+
 	width := len(strconv.Itoa(numbered))
 	for i, o := range options[:numbered] {
 		if o.Detail != "" {
@@ -54,44 +57,56 @@ func Choose(cmd *cobra.Command, flag, what string, options []Option) (Option, er
 			fmt.Fprintf(ios.Err, "  %*d. %s\n", width, i+1, o.Name)
 		}
 	}
+
 	if rest := len(options) - numbered; rest > 0 {
 		fmt.Fprintf(ios.Err, "  and %d more, by name\n", rest)
 	}
+
 	fmt.Fprintf(ios.Err, "Choose the %s [number or name]: ", what)
+
 	reply, err := readLine(ios)
 	if err != nil {
 		return Option{}, fmt.Errorf("read %s: %w", what, err)
 	}
+
 	if reply == "" {
 		fmt.Fprintln(ios.Err, "canceled")
 		return Option{}, ErrCanceled
 	}
+
 	for _, o := range options {
 		if o.Name == reply {
 			return o, nil
 		}
 	}
+
 	if n, err := strconv.Atoi(reply); err == nil {
 		if n < 1 || n > numbered {
 			return Option{}, cmderr.Usage("%d is not between 1 and %d", n, numbered)
 		}
+
 		return options[n-1], nil
 	}
+
 	return Option{}, cmderr.Usage("%q is not one of the %ss listed", reply, what)
 }
 
 // names is the first n options, comma-separated, with a count of the rest.
 func names(options []Option, n int) string {
 	var b strings.Builder
+
 	for i, o := range options {
 		if i == n {
 			fmt.Fprintf(&b, ", and %d more", len(options)-n)
 			break
 		}
+
 		if i > 0 {
 			b.WriteString(", ")
 		}
+
 		b.WriteString(o.Name)
 	}
+
 	return b.String()
 }

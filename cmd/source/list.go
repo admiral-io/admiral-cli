@@ -34,6 +34,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 				if err != nil {
 					return nil, "", err
 				}
+
 				return resp.Sources, resp.NextPageToken, nil
 			})
 			if err != nil {
@@ -41,6 +42,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 			}
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+
 			return p.PrintList(output.List{
 				Kind:          "sources",
 				Items:         output.Messages(sources),
@@ -51,5 +53,6 @@ func newListCmd(opts *client.Options) *cobra.Command {
 	}
 
 	flags.Paging(cmd, &paging)
+
 	return cmd
 }

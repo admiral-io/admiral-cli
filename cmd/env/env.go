@@ -38,5 +38,6 @@ with --project for the scope. A path and --project are never combined.`,
 	)
 
 	root.Cmd = cmd
+
 	return root
 }

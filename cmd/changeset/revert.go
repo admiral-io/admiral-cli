@@ -45,6 +45,7 @@ The changeset is named by its ID.`,
 				return cmderr.UsageHint("Name the changeset to revert by its ID, as 'admiral changeset list <project>/<environment>' shows it.",
 					"invalid changeset %q: expected cs-xxxxxxxxxxxx", args[0])
 			}
+
 			if err := po.check(cmd); err != nil {
 				return err
 			}
@@ -63,6 +64,7 @@ The changeset is named by its ID.`,
 			if err != nil {
 				return err
 			}
+
 			cs := resp.GetChangeSet()
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
@@ -71,13 +73,16 @@ The changeset is named by its ID.`,
 			} else {
 				output.Confirmed(p.Err(), "changeset", cs.GetId(), "opened to revert "+args[0])
 			}
+
 			if !po.plan {
 				return p.PrintOne(cs, cs.GetId(), changeSetTable.Render(p, cs))
 			}
+
 			got, err := c.ChangeSet().GetChangeSet(cmd.Context(), &changesetv1.GetChangeSetRequest{ChangeSetId: cs.GetId()})
 			if err != nil {
 				return err
 			}
+
 			return planRevision(cmd, opts, c.Run(), got.GetChangeSet(), got.GetHead(), po)
 		},
 	}

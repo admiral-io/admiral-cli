@@ -28,6 +28,7 @@ func openBrowser(url string) error {
 		if _, err := exec.LookPath("xdg-open"); err != nil {
 			return errors.New("no browser opener found (set BROWSER)")
 		}
+
 		return start("xdg-open", url)
 	}
 }
@@ -35,5 +36,6 @@ func openBrowser(url string) error {
 func start(name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Stdout, cmd.Stderr = nil, nil
+
 	return cmd.Start()
 }

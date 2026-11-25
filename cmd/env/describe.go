@@ -80,12 +80,14 @@ describe is a human view. Use 'env get -o json' for the raw record.`,
 			if err != nil {
 				return err
 			}
+
 			e := envResp.Environment
 
 			appResp, err := c.Project().GetProject(ctx, &projectv1.GetProjectRequest{ProjectId: e.ProjectId})
 			if err != nil {
 				return fmt.Errorf("fetching project: %w", err)
 			}
+
 			app := appResp.Project
 
 			// The environment and its project are the view; the
@@ -96,26 +98,32 @@ describe is a human view. Use 'env get -o json' for the raw record.`,
 			// error, so nothing here returns one and the group is only a way
 			// to wait.
 			var sec envSections
+
 			g, gctx := errgroup.WithContext(ctx)
 			g.Go(func() error {
 				compResp, err := c.Environment().ListEnvironmentComponents(gctx, &environmentv1.ListEnvironmentComponentsRequest{
 					EnvironmentId: &envID,
 					PageSize:      100,
 				})
+
 				sec.compsErr = err
 				if err == nil {
 					sec.comps = compResp.Components
 					sec.values = componentValues(gctx, c, envID, sec.comps)
 				}
+
 				return nil
 			})
 			g.Go(func() error {
 				sec.runs, sec.moreRuns, sec.runsErr = listRecentRuns(gctx, c, envID)
+
 				ids := make([]string, 0, len(sec.runs))
 				for _, r := range sec.runs {
 					ids = append(ids, r.ChangeSetId)
 				}
+
 				sec.runTitles = runcmd.ChangeSetTitles(gctx, c.ChangeSet(), ids...)
+
 				return nil
 			})
 			g.Go(func() error {
@@ -126,18 +134,21 @@ describe is a human view. Use 'env get -o json' for the raw record.`,
 				sec.agentNames = agentNames(gctx, c, e.Agents)
 				return nil
 			})
+
 			if e.LastApply != nil {
 				g.Go(func() error {
 					sec.lastApplyRun = runOr(gctx, c, e.LastApply.RunId, e.LastApply.ChangeSetId)
 					return nil
 				})
 			}
+
 			if e.Hold != nil {
 				g.Go(func() error {
 					sec.holdRun = runOr(gctx, c, e.Hold.RunId, e.Hold.ChangeSetId)
 					return nil
 				})
 			}
+
 			_ = g.Wait() // nothing returns an error
 			// Live components whose reference the platform did not record are
 			// named by the registry's tags instead.
@@ -145,15 +156,18 @@ describe is a human view. Use 'env get -o json' for the raw record.`,
 			for _, comp := range sec.comps {
 				refs = append(refs, comp.GetVersion())
 			}
+
 			sec.tags = resolve.VersionTags(ctx, c.Registry(), refs)
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+
 			return p.PrintDescribe(describeEnv(e, app, sec),
 				fmt.Sprintf("admiral env get %s/%s", app.Name, e.Name))
 		},
 	}
 
 	flags.Project(cmd, &appName, opts)
+
 	return cmd
 }
 
@@ -198,19 +212,26 @@ func componentValues(ctx context.Context, c sdkclient.AdmiralClient, envID strin
 	if len(comps) > valuesLimit {
 		return nil
 	}
+
 	var mu sync.Mutex
+
 	out := make(map[string]setValues, len(comps))
+
 	var g errgroup.Group
 	for _, comp := range comps {
 		g.Go(func() error {
 			v := readSetValues(ctx, c, envID, comp.Name)
+
 			mu.Lock()
 			out[comp.Name] = v
 			mu.Unlock()
+
 			return nil
 		})
 	}
+
 	_ = g.Wait() // nothing returns an error
+
 	return out
 }
 
@@ -222,16 +243,20 @@ func readSetValues(ctx context.Context, c sdkclient.AdmiralClient, envID, comp s
 	if err != nil {
 		return setValues{err: err}
 	}
+
 	if resp.TreeJson == "" {
 		return setValues{}
 	}
+
 	tree, err := valuesfile.DecodeJSON(resp.TreeJson)
 	if err != nil {
 		return setValues{err: err}
 	}
+
 	var paths []string
 	leafPaths("", tree, &paths)
 	sort.Strings(paths)
+
 	return setValues{paths: paths}
 }
 
@@ -243,10 +268,12 @@ func leafPaths(prefix string, m map[string]any, out *[]string) {
 		if prefix != "" {
 			path = prefix + "." + k
 		}
+
 		if sub, ok := v.(map[string]any); ok && len(sub) > 0 {
 			leafPaths(path, sub, out)
 			continue
 		}
+
 		*out = append(*out, path)
 	}
 }
@@ -262,6 +289,7 @@ func valuesInBrief(v setValues) string {
 	case len(v.paths) <= shown:
 		return fmt.Sprintf("%d set: %s", len(v.paths), strings.Join(v.paths, ", "))
 	}
+
 	return fmt.Sprintf("%d set: %s, +%d", len(v.paths), strings.Join(v.paths[:shown], ", "), len(v.paths)-shown)
 }
 
@@ -272,11 +300,13 @@ func (s envSections) permissionDenied() bool {
 			return true
 		}
 	}
+
 	for _, v := range s.values {
 		if status.Code(v.err) == codes.PermissionDenied {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -293,9 +323,11 @@ func describeEnv(e *environmentv1.Environment, app *projectv1.Project, sec envSe
 	d.Field("Tracking", trackingName(e.GetTracking()))
 	d.Field("Hold", holdLine(e.Hold, sec.holdRun))
 	d.Field("Last Apply", lastApplyLine(e.LastApply, sec.lastApplyRun))
+
 	if r := applying(runs); r != nil {
 		d.Field("Applying", fmt.Sprintf("%s (%s) since %s ago", r.Id, r.ChangeSetId, output.FormatAge(r.GetApply().GetStartedAt())))
 	}
+
 	switch {
 	case sec.runsErr != nil:
 		d.Field("Last Run", unavailable)
@@ -305,6 +337,7 @@ func describeEnv(e *environmentv1.Environment, app *projectv1.Project, sec envSe
 	default:
 		d.Field("Last Run", "")
 	}
+
 	d.Field("Created", output.FormatDescribeTime(e.CreatedAt))
 	d.Field("Created By", output.FormatActorWithID(e.CreatedBy))
 
@@ -313,21 +346,25 @@ func describeEnv(e *environmentv1.Environment, app *projectv1.Project, sec envSe
 			b.Field("Count", "0")
 			return
 		}
+
 		rows := make([][]string, 0, len(e.Agents))
 		for _, a := range e.Agents {
 			name := sec.agentNames[a.AgentId]
 			if name == "" {
 				name = a.AgentId
 			}
+
 			// An infra agent's assignment has no Kubernetes settings.
 			k := a.GetKubernetes()
 			if k == nil {
 				rows = append(rows, []string{name, a.Id, "", "", ""})
 				continue
 			}
+
 			rows = append(rows, []string{name, a.Id,
 				k.GetDefaultNamespace(), optionalBool(k.CreateNamespaces), optionalBool(k.Prune)})
 		}
+
 		b.Table([]string{"Agent", "Assignment", "Namespace", "Create Namespaces", "Prune"}, rows)
 	})
 
@@ -338,10 +375,12 @@ func describeEnv(e *environmentv1.Environment, app *projectv1.Project, sec envSe
 
 	d.Section("Approval", func(b *output.Block) {
 		b.Field("Required Approvals", approvals(e))
+
 		groups := make([]string, 0, len(e.GetApproval().GetGroups()))
 		for _, g := range e.GetApproval().GetGroups() {
 			groups = append(groups, fmt.Sprintf("%s: %d", g.GroupId, g.Approvals))
 		}
+
 		b.Fields("Groups", groups)
 	})
 
@@ -353,32 +392,40 @@ func describeEnv(e *environmentv1.Environment, app *projectv1.Project, sec envSe
 				b.Field("Count", "0")
 				return
 			}
+
 			rows := make([][]string, 0, len(comps))
 			for _, c := range comps {
 				applied := ""
 				if c.LastApply != nil {
 					applied = output.FormatAge(c.LastApply.AppliedAt) + " ago"
 				}
+
 				behind := ""
 				if n := c.GetNewestMatching(); n != nil {
 					behind = n.GetReference()
 				}
+
 				rows = append(rows, []string{c.Name, output.FormatEnumKebab(c.Kind), resolve.VersionLabel(c.Version, sec.tags), applied, behind})
 			}
+
 			b.Table([]string{"Name", "Kind", "Version", "Applied", "Behind"}, rows)
+
 			for _, c := range comps {
 				v, ok := sec.values[c.Name]
 				if !ok {
 					continue
 				}
+
 				b.Block(c.Name, func(b *output.Block) { b.Field("Values", valuesInBrief(v)) })
 			}
 		})
+
 		if len(comps) > 0 {
 			name := "<component>"
 			if len(comps) == 1 {
 				name = comps[0].Name
 			}
+
 			d.Hint(fmt.Sprintf("To see a component's values, run: admiral env values %s/%s %s", app.Name, e.Name, name))
 		}
 	}
@@ -391,11 +438,13 @@ func describeEnv(e *environmentv1.Environment, app *projectv1.Project, sec envSe
 				b.Field("Count", "0")
 				return
 			}
+
 			rows := make([][]string, 0, len(openCS))
 			for _, cs := range openCS {
 				rows = append(rows, []string{cs.Id, cs.Title, strconv.Itoa(int(cs.HeadRevision)),
 					output.FormatActor(cs.CreatedBy), output.FormatAge(cs.CreatedAt)})
 			}
+
 			b.Table([]string{"ID", "Title", "Revision", "Created By", "Age"}, rows)
 		})
 	}
@@ -408,7 +457,9 @@ func describeEnv(e *environmentv1.Environment, app *projectv1.Project, sec envSe
 			rows = append(rows, []string{r.Id, output.FormatEnum(r.Status), r.ChangeSetId, sec.runTitles[r.ChangeSetId],
 				output.FormatActor(r.CreatedBy), output.FormatAge(r.CreatedAt)})
 		}
+
 		d.Table("Recent Runs", []string{"ID", "Status", "Changeset", "Title", "Created By", "Age"}, rows)
+
 		if sec.moreRuns {
 			d.Hint(fmt.Sprintf("Showing the %d most recent runs. To list them all, run: admiral run list %s/%s",
 				recentRunsLimit, app.Name, e.Name))
@@ -418,9 +469,11 @@ func describeEnv(e *environmentv1.Environment, app *projectv1.Project, sec envSe
 	if e.Hold != nil {
 		d.Hint(runcmd.HoldHint(e.Hold.ChangeSetId, sec.holdRun.GetId()))
 	}
+
 	if sec.permissionDenied() {
 		d.Hint(cmderr.ScopeHint)
 	}
+
 	return d
 }
 
@@ -431,10 +484,12 @@ func holdLine(h *environmentv1.Hold, r *runv1.Run) string {
 	if h == nil {
 		return ""
 	}
+
 	by := h.ChangeSetId
 	if r != nil {
 		by += " (" + r.Id + ")"
 	}
+
 	return fmt.Sprintf("held by %s since %s ago", by, output.FormatAge(h.HeldAt))
 }
 
@@ -442,10 +497,12 @@ func lastApplyLine(l *environmentv1.LastApply, r *runv1.Run) string {
 	if l == nil {
 		return ""
 	}
+
 	line := fmt.Sprintf("%s %s %s ago", l.ChangeSetId, l.RevisionId, output.FormatAge(l.AppliedAt))
 	if by := r.GetApply().GetAppliedBy(); by != nil {
 		line += " by " + output.FormatActorWithID(by)
 	}
+
 	return line
 }
 
@@ -456,6 +513,7 @@ func applying(runs []*runv1.Run) *runv1.Run {
 			return r
 		}
 	}
+
 	return nil
 }
 
@@ -466,10 +524,12 @@ func runOr(ctx context.Context, c sdkclient.AdmiralClient, runID, changeSetID st
 	if runID == "" {
 		return latestRun(ctx, c, changeSetID)
 	}
+
 	r, err := c.Run().GetRun(ctx, &runv1.GetRunRequest{RunId: runID})
 	if err != nil {
 		return nil
 	}
+
 	return r.GetRun()
 }
 
@@ -480,10 +540,12 @@ func latestRun(ctx context.Context, c sdkclient.AdmiralClient, changeSetID strin
 	if err != nil || cs.GetChangeSet().GetLatestRunId() == "" {
 		return nil
 	}
+
 	r, err := c.Run().GetRun(ctx, &runv1.GetRunRequest{RunId: cs.GetChangeSet().GetLatestRunId()})
 	if err != nil {
 		return nil
 	}
+
 	return r.GetRun()
 }
 
@@ -491,6 +553,7 @@ func optionalBool(b *bool) string {
 	if b == nil {
 		return ""
 	}
+
 	return strconv.FormatBool(*b)
 }
 
@@ -504,6 +567,7 @@ func agentNames(ctx context.Context, c sdkclient.AdmiralClient, assigned []*envi
 			names[a.AgentId] = resp.Agent.GetName()
 		}
 	}
+
 	return names
 }
 
@@ -514,6 +578,7 @@ func listRecentRuns(ctx context.Context, c sdkclient.AdmiralClient, envID string
 	if err != nil {
 		return nil, false, err
 	}
+
 	resp, err := c.Run().ListRuns(ctx, &runv1.ListRunsRequest{
 		Filter:   f,
 		PageSize: recentRunsLimit,
@@ -521,6 +586,7 @@ func listRecentRuns(ctx context.Context, c sdkclient.AdmiralClient, envID string
 	if err != nil {
 		return nil, false, err
 	}
+
 	return resp.Runs, resp.NextPageToken != "", nil
 }
 
@@ -529,6 +595,7 @@ func listOpenChangeSets(ctx context.Context, c sdkclient.AdmiralClient, envID st
 	if err != nil {
 		return nil, err
 	}
+
 	resp, err := c.ChangeSet().ListChangeSets(ctx, &changesetv1.ListChangeSetsRequest{
 		EnvironmentId: envID,
 		Filter:        f,
@@ -537,5 +604,6 @@ func listOpenChangeSets(ctx context.Context, c sdkclient.AdmiralClient, envID st
 	if err != nil {
 		return nil, err
 	}
+
 	return resp.ChangeSets, nil
 }

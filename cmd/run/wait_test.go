@@ -31,6 +31,7 @@ func (s *stubRuns) GetRun(context.Context, *runv1.GetRunRequest, ...grpc.CallOpt
 	if s.err != nil {
 		return nil, s.err
 	}
+
 	return &runv1.GetRunResponse{Run: s.next}, nil
 }
 
@@ -102,6 +103,7 @@ func TestWaitKeepsWaitingOnAnOfflineAgent(t *testing.T) {
 func noPollDelay(t *testing.T) {
 	old := pollFirst
 	pollFirst = 0
+
 	t.Cleanup(func() { pollFirst = old })
 }
 
@@ -110,6 +112,7 @@ func noPollDelay(t *testing.T) {
 // printed there is nothing to set apart.
 func TestProgressSetsTheRecordApart(t *testing.T) {
 	var b bytes.Buffer
+
 	p := NewProgress(&b, false)
 	p.End()
 	assert.Empty(t, b.String())

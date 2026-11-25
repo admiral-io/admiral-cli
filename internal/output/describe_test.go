@@ -26,6 +26,7 @@ func TestDescribe_Layout(t *testing.T) {
 
 	var buf bytes.Buffer
 	require.NoError(t, d.Render(&buf))
+
 	want := `Name:         prod
 Project:      shop
 Description:  <none>
@@ -51,6 +52,7 @@ To see the transcript, run: admiral run logs run-1
 func TestDescribe_EmptyFieldsIsNone(t *testing.T) {
 	d := NewDescribe()
 	d.Fields("Labels", nil)
+
 	var buf bytes.Buffer
 	require.NoError(t, d.Render(&buf))
 	require.Equal(t, "Labels:  <none>\n", buf.String())
@@ -65,6 +67,7 @@ func TestDescribe_UnavailableSection(t *testing.T) {
 
 	var buf bytes.Buffer
 	require.NoError(t, d.Render(&buf))
+
 	want := `Name:  shop
 
 Environments:
@@ -82,6 +85,7 @@ To see the active credential and its scopes, run: admiral auth status
 
 func TestPrintDescribe_RejectsMachineFormats(t *testing.T) {
 	var out bytes.Buffer
+
 	err := testPrinter(FormatJSON, &out).PrintDescribe(NewDescribe(), "admiral env get prod --project shop")
 	require.EqualError(t, err, "describe has no -o json output")
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
@@ -104,6 +108,7 @@ func TestDescribe_TablesAreSetApart(t *testing.T) {
 
 	var buf bytes.Buffer
 	require.NoError(t, d.Render(&buf))
+
 	want := `Plan:
   Digest:  sha256:1
 

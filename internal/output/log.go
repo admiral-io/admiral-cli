@@ -26,17 +26,21 @@ func (h *plainHandler) Enabled(_ context.Context, l slog.Level) bool { return l 
 
 func (h *plainHandler) Handle(_ context.Context, r slog.Record) error {
 	var b strings.Builder
+
 	switch {
 	case r.Level >= slog.LevelError:
 		b.WriteString("Error: ")
 	case r.Level >= slog.LevelWarn:
 		b.WriteString("Warning: ")
 	}
+
 	b.WriteString(r.Message)
+
 	write := func(a slog.Attr) {
 		if a.Key == "" {
 			return
 		}
+
 		b.WriteString(" ")
 		b.WriteString(a.Key)
 		b.WriteString("=")
@@ -45,9 +49,11 @@ func (h *plainHandler) Handle(_ context.Context, r slog.Record) error {
 	for _, a := range h.attrs {
 		write(a)
 	}
+
 	r.Attrs(func(a slog.Attr) bool { write(a); return true })
 	b.WriteString("\n")
 	_, err := io.WriteString(h.w, b.String())
+
 	return err
 }
 

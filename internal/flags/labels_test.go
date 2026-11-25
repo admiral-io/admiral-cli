@@ -13,12 +13,14 @@ import (
 
 func TestLabelFlag_Type(t *testing.T) {
 	var vals []string
+
 	f := &labelFlag{values: &vals}
 	require.Equal(t, "string", f.Type())
 }
 
 func TestLabelFlag_Set(t *testing.T) {
 	var vals []string
+
 	f := &labelFlag{values: &vals}
 
 	require.NoError(t, f.Set("a=1"))
@@ -51,6 +53,7 @@ func TestLabelFlag_String(t *testing.T) {
 
 func TestLabel(t *testing.T) {
 	var labels []string
+
 	cmd := &cobra.Command{Use: "test"}
 	Label(cmd, &labels, "test usage")
 
@@ -62,6 +65,7 @@ func TestLabel(t *testing.T) {
 
 func TestAddLabelFlag_Repeatable(t *testing.T) {
 	var labels []string
+
 	cmd := &cobra.Command{Use: "test", RunE: func(cmd *cobra.Command, args []string) error { return nil }}
 	Label(cmd, &labels, "usage")
 
@@ -129,6 +133,7 @@ func TestParseLabels(t *testing.T) {
 				require.EqualError(t, err, tc.wantErr)
 				return
 			}
+
 			require.NoError(t, err)
 			require.Equal(t, tc.want, got)
 		})
@@ -247,6 +252,7 @@ func TestApplyLabelPatch(t *testing.T) {
 				require.EqualError(t, err, tc.wantErr)
 				return
 			}
+
 			require.NoError(t, err)
 			require.Equal(t, tc.want, got)
 		})
@@ -299,6 +305,7 @@ func TestLabelFilter(t *testing.T) {
 				require.EqualError(t, err, tc.wantErr)
 				return
 			}
+
 			require.NoError(t, err)
 			require.Equal(t, tc.want, got)
 		})
@@ -311,6 +318,7 @@ func TestLabelFilter(t *testing.T) {
 
 func TestAddLabelFlag_HelpShowsString(t *testing.T) {
 	var labels []string
+
 	cmd := &cobra.Command{Use: "test"}
 	Label(cmd, &labels, "set a label")
 

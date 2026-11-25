@@ -54,6 +54,7 @@ approve' and 'admiral changeset apply'.`,
 			if err != nil {
 				return err
 			}
+
 			if err := po.check(cmd); err != nil {
 				return err
 			}
@@ -68,14 +69,17 @@ approve' and 'admiral changeset apply'.`,
 			if err != nil {
 				return err
 			}
+
 			if resp.Head == nil {
 				return cmderr.WithHint(fmt.Errorf("%s has no revision to plan", csID),
 					"To edit it, run: admiral changeset set "+csID+" <component>.<path>=<value>")
 			}
+
 			if want := ifRevision(cmd, ifRev); want != nil && *want != resp.Head.Number {
 				return cmderr.WithHint(fmt.Errorf("%s is at revision %d, not %d", csID, resp.Head.Number, *want),
 					"To see the head, run: admiral changeset diff "+csID)
 			}
+
 			return planRevision(cmd, opts, c.Run(), resp.ChangeSet, resp.Head, po)
 		},
 	}
@@ -119,9 +123,11 @@ func (po *planOptions) check(cmd *cobra.Command) error {
 	if !po.plan && (cmd.Flags().Changed("no-wait") || cmd.Flags().Changed("wait-timeout") || po.full) {
 		return cmderr.Usage("--no-wait, --wait-timeout and --full need --plan")
 	}
+
 	if po.waitTimeout <= 0 {
 		return cmderr.Usage("--wait-timeout must be positive")
 	}
+
 	return nil
 }
 
@@ -131,6 +137,7 @@ func planRevision(cmd *cobra.Command, opts *client.Options, runs runv1.RunAPICli
 	if rev == nil {
 		return fmt.Errorf("the server returned no revision for %s", cs.GetId())
 	}
+
 	resp, err := runs.CreateRun(cmd.Context(), &runv1.CreateRunRequest{
 		EnvironmentId: cs.EnvironmentId,
 		Run: &runv1.Run{
@@ -141,6 +148,7 @@ func planRevision(cmd *cobra.Command, opts *client.Options, runs runv1.RunAPICli
 	if err != nil {
 		return err
 	}
+
 	r := resp.Run
 	p := output.NewPrinter(cmd, opts.OutputFormat)
 	progress := runcmd.NewProgress(p.Err(), false)
@@ -151,8 +159,10 @@ func planRevision(cmd *cobra.Command, opts *client.Options, runs runv1.RunAPICli
 		if err != nil {
 			return runcmd.WaitError(err, r)
 		}
+
 		r = done
 	}
+
 	progress.End()
 	// Under -o json|yaml the run is the whole answer; 'run diff' has the rest.
 	withDiff := r.GetStatus() == runv1.Run_STATUS_PLANNED && opts.OutputFormat.IsTable()
@@ -160,17 +170,21 @@ func planRevision(cmd *cobra.Command, opts *client.Options, runs runv1.RunAPICli
 		if err := runcmd.Print(p, r, cs.GetTitle()); err != nil {
 			return err
 		}
+
 		return runcmd.Outcome(r)
 	}
+
 	diff, err := runs.GetRunPlanDiff(cmd.Context(), &runv1.GetRunPlanDiffRequest{RunId: r.GetId()})
 	if err != nil {
 		return err
 	}
+
 	if err := runcmd.PrintWithDiff(p, r, cs.GetTitle(), func(w io.Writer) {
 		writePlan(w, diff.GetDiff(), r, po.full)
 	}); err != nil {
 		return err
 	}
+
 	return runcmd.Outcome(r)
 }
 
@@ -178,5 +192,6 @@ func shortArtifact(d string) string {
 	if d == "" {
 		return ""
 	}
+
 	return "sha256:" + shortDigest(d)
 }

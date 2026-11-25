@@ -20,7 +20,9 @@ func isAuthError(err error) bool {
 	if errors.Is(err, credentials.ErrNotAuthenticated) || errors.Is(err, credentials.ErrSessionExpired) {
 		return true
 	}
+
 	s, ok := status.FromError(err)
+
 	return ok && s.Code() == codes.Unauthenticated
 }
 
@@ -30,6 +32,7 @@ func isAuthError(err error) bool {
 // MarkFlagsRequiredTogether and MarkFlagsOneRequired.
 func isCobraFlagError(err error) bool {
 	msg := err.Error()
+
 	return strings.HasPrefix(msg, "required flag(s)") ||
 		strings.HasPrefix(msg, "if any flags in the group") ||
 		strings.HasPrefix(msg, "at least one of the flags in the group")
@@ -42,9 +45,11 @@ func exitCode(err error) int {
 	if isAuthError(err) {
 		return cmderr.ExitAuth
 	}
+
 	if isCobraFlagError(err) {
 		return cmderr.ExitUsage
 	}
+
 	return cmderr.Code(err)
 }
 
@@ -53,11 +58,14 @@ func errorHint(err error) string {
 	if h := cmderr.Hint(err); h != "" {
 		return h
 	}
+
 	if isAuthError(err) {
 		return "To sign in, run: admiral auth login\nOr set " + credentials.EnvAPIKey + " to an API key."
 	}
+
 	if status.Code(err) == codes.PermissionDenied {
 		return cmderr.ScopeHint
 	}
+
 	return ""
 }

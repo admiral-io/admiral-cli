@@ -25,15 +25,18 @@ const maxDiffCells = 4_000_000
 // WriteDiff writes it.
 func WriteFullDiff(w io.Writer, d *agentv1.PlanDiff, plan *runv1.PlanPhase) {
 	w = &noLeadingBlank{w: w}
+
 	for _, rd := range d.GetResources() {
 		a := rd.GetAction()
 		output.Writef(w, "\n%s %s: %s (%s)%s\n", actionMark[a], rd.GetComponent(),
 			ResourceName(rd.GetResource()), actionWords(a), terraformNote(rd.GetTerraform()))
+
 		before, after := resourceYAML(rd)
 		for _, l := range lineDiff(before, after) {
 			output.Writef(w, "  %s\n", strings.TrimRight(l, " "))
 		}
 	}
+
 	writeTail(w, d, plan)
 }
 
@@ -44,20 +47,26 @@ func resourceYAML(rd *agentv1.ResourceDiff) (before, after []string) {
 	if rd.GetBefore() != nil {
 		bt = rd.GetBefore().AsInterface()
 	}
+
 	if rd.GetAfter() != nil {
 		at = rd.GetAfter().AsInterface()
 	}
+
 	for _, sp := range rd.GetSensitivePaths() {
 		bt = setAt(bt, sp.GetPath().GetSegments(), "<sensitive>")
+
 		mark := "<sensitive>"
 		if sp.GetChanged() {
 			mark = "<sensitive, changed>"
 		}
+
 		at = setAt(at, sp.GetPath().GetSegments(), mark)
 	}
+
 	for _, p := range rd.GetUnknownPaths() {
 		at = setAt(at, p.GetSegments(), "<known after apply>")
 	}
+
 	return yamlLines(bt, rd.GetBefore() != nil), yamlLines(at, rd.GetAfter() != nil)
 }
 
@@ -66,7 +75,9 @@ func setAt(v any, path []*agentv1.DiffPathSegment, s string) any {
 	if len(path) == 0 {
 		return s
 	}
+
 	seg := path[0]
+
 	switch t := v.(type) {
 	case map[string]any:
 		if _, ok := seg.GetSegment().(*agentv1.DiffPathSegment_Key); ok {
@@ -81,6 +92,7 @@ func setAt(v any, path []*agentv1.DiffPathSegment, s string) any {
 			}
 		}
 	}
+
 	return v
 }
 
@@ -88,13 +100,18 @@ func yamlLines(v any, present bool) []string {
 	if !present {
 		return nil
 	}
+
 	var b bytes.Buffer
+
 	enc := yaml.NewEncoder(&b)
 	enc.SetIndent(2)
+
 	if err := enc.Encode(v); err != nil {
 		return []string{"<unprintable: " + err.Error() + ">"}
 	}
+
 	_ = enc.Close()
+
 	return strings.Split(strings.TrimRight(b.String(), "\n"), "\n")
 }
 
@@ -106,16 +123,20 @@ func lineDiff(a, b []string) []string {
 		for _, l := range a {
 			out = append(out, "- "+l)
 		}
+
 		for _, l := range b {
 			out = append(out, "+ "+l)
 		}
+
 		return out
 	}
+
 	// lcs[i][j] is the longest common subsequence of a[i:] and b[j:].
 	lcs := make([][]int32, len(a)+1)
 	for i := range lcs {
 		lcs[i] = make([]int32, len(b)+1)
 	}
+
 	for i := len(a) - 1; i >= 0; i-- {
 		for j := len(b) - 1; j >= 0; j-- {
 			if a[i] == b[j] {
@@ -125,7 +146,9 @@ func lineDiff(a, b []string) []string {
 			}
 		}
 	}
+
 	out := make([]string, 0, len(a)+len(b))
+
 	i, j := 0, 0
 	for i < len(a) && j < len(b) {
 		switch {
@@ -141,11 +164,14 @@ func lineDiff(a, b []string) []string {
 			j++
 		}
 	}
+
 	for ; i < len(a); i++ {
 		out = append(out, "- "+a[i])
 	}
+
 	for ; j < len(b); j++ {
 		out = append(out, "+ "+b[j])
 	}
+
 	return out
 }

@@ -18,6 +18,7 @@ func source(origin changesetv1.ValueSource_Origin, keys ...string) *changesetv1.
 	for _, k := range keys {
 		segs = append(segs, &changesetv1.PathSegment{Segment: &changesetv1.PathSegment_Key{Key: k}})
 	}
+
 	return &changesetv1.ValueSource{Path: segs, Origin: origin}
 }
 
@@ -40,6 +41,7 @@ func TestEffectiveValuesLabelEachValueWithItsLayer(t *testing.T) {
 		source(changesetv1.ValueSource_ORIGIN_COMPONENT_DEFAULT, "envFrom"),
 	})
 	require.NoError(t, err)
+
 	got := string(out)
 	assert.Contains(t, got, "replicas: 3 # environment\n")
 	assert.Contains(t, got, "  tag: 1.4.2 # changeset\n")

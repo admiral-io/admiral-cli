@@ -64,5 +64,6 @@ func applyTags(ctx context.Context, p *output.Printer, c sdkclient.AdmiralClient
 			output.Writef(p.Err(), "%s: could not tag %s: %v\n", comp.Name, v, err)
 		}
 	}
+
 	return tags
 }

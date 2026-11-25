@@ -38,5 +38,6 @@ Commands accept a project name or ID as the positional argument.`,
 	)
 
 	root.Cmd = cmd
+
 	return root
 }

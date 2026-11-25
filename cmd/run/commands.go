@@ -26,6 +26,7 @@ func runID(s string) (string, error) {
 	if !resolve.IsID("run", s) {
 		return "", cmderr.Usage("%q is not a run ID (run-xxxxxxxxxxxx)", s)
 	}
+
 	return s, nil
 }
 
@@ -50,15 +51,19 @@ func (w waitOptions) finish(cmd *cobra.Command, opts *client.Options, c sdkclien
 	p := output.NewPrinter(cmd, opts.OutputFormat)
 	if w.wait {
 		progress := NewProgress(p.Err(), false)
+
 		var err error
 		if r, err = Wait(cmd.Context(), c.Run(), r, w.timeout, !w.follow, progress); err != nil {
 			return WaitError(err, r)
 		}
+
 		progress.End()
 	}
+
 	if err := printTitled(cmd, p, c, r); err != nil {
 		return err
 	}
+
 	return Outcome(r)
 }
 
@@ -67,6 +72,7 @@ func printTitled(cmd *cobra.Command, p *output.Printer, c sdkclient.AdmiralClien
 	if p.Format != output.FormatTable && p.Format != output.FormatWide {
 		return Print(p, r, "")
 	}
+
 	return Print(p, r, ChangeSetTitles(cmd.Context(), c.ChangeSet(), r.GetChangeSetId())[r.GetChangeSetId()])
 }
 
@@ -78,12 +84,15 @@ func ChangeSetTitles(ctx context.Context, c changesetv1.ChangeSetAPIClient, ids 
 		if _, seen := titles[id]; seen || id == "" {
 			continue
 		}
+
 		resp, err := c.GetChangeSet(ctx, &changesetv1.GetChangeSetRequest{ChangeSetId: id})
 		if err != nil {
 			continue
 		}
+
 		titles[id] = resp.GetChangeSet().GetTitle()
 	}
+
 	return titles
 }
 
@@ -97,6 +106,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 		changeSet string
 		paging    flags.PagingOptions
 	)
+
 	cmd := &cobra.Command{
 		Use:               "list [project/environment]",
 		ValidArgsFunction: complete.First(complete.Envs(opts)),
@@ -111,26 +121,33 @@ or every run you can see.`,
 			if len(args) == 1 {
 				env = args[0]
 			}
+
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
 				return err
 			}
 			defer c.Close() //nolint:errcheck // best-effort cleanup
+
 			var filters []string
+
 			if env != "" {
 				app, name, err := flags.EnvTarget(cmd, "", env)
 				if err != nil {
 					return err
 				}
+
 				id, err := resolve.Environment(cmd.Context(), c.Environment(), c.Project(), app, name)
 				if err != nil {
 					return err
 				}
+
 				filters = append(filters, fmt.Sprintf("field['environment_id'] = '%s'", id))
 			}
+
 			if changeSet != "" {
 				filters = append(filters, fmt.Sprintf("field['change_set_id'] = '%s'", changeSet))
 			}
+
 			runs, next, err := flags.Pages(paging, func(token string) ([]*runv1.Run, string, error) {
 				resp, err := c.Run().ListRuns(cmd.Context(), &runv1.ListRunsRequest{
 					Filter: strings.Join(filters, " AND "), PageSize: paging.PageSize, PageToken: token,
@@ -138,12 +155,15 @@ or every run you can see.`,
 				if err != nil {
 					return nil, "", err
 				}
+
 				return resp.GetRuns(), resp.GetNextPageToken(), nil
 			})
 			if err != nil {
 				return err
 			}
+
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+
 			return p.PrintList(output.List{
 				Kind: "runs", Items: output.Messages(runs), NextPageToken: next,
 				Name: func(i int) string { return runs[i].GetId() },
@@ -152,6 +172,7 @@ or every run you can see.`,
 	}
 	cmd.Flags().StringVar(&changeSet, "changeset", "", "runs of one changeset")
 	flags.Paging(cmd, &paging)
+
 	return cmd
 }
 
@@ -167,19 +188,24 @@ and apply, and '-o json' for the raw record.`,
 			if err != nil {
 				return err
 			}
+
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
 				return err
 			}
 			defer c.Close() //nolint:errcheck // best-effort cleanup
+
 			r, err := getRun(cmd.Context(), c.Run(), id)
 			if err != nil {
 				return err
 			}
+
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+
 			return p.PrintOne(r, r.GetId(), runTable.Render(p, r))
 		},
 	}
+
 	return cmd
 }
 
@@ -197,27 +223,33 @@ superseded.`,
 			if err != nil {
 				return err
 			}
+
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
 				return err
 			}
 			defer c.Close() //nolint:errcheck // best-effort cleanup
+
 			r, err := getRun(cmd.Context(), c.Run(), id)
 			if err != nil {
 				return err
 			}
+
 			if !w.wait {
 				return printTitled(cmd, output.NewPrinter(cmd, opts.OutputFormat), c, r)
 			}
+
 			return w.finish(cmd, opts, c, r)
 		},
 	}
 	w.register(cmd, false, "the run settles")
+
 	return cmd
 }
 
 func newApproveCmd(opts *client.Options) *cobra.Command {
 	var reason string
+
 	cmd := &cobra.Command{
 		Use:   "approve <run>",
 		Short: "Approve a run's plan",
@@ -229,30 +261,37 @@ so a newer plan of the same run is not approved by it.`,
 			if err != nil {
 				return err
 			}
+
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
 				return err
 			}
 			defer c.Close() //nolint:errcheck // best-effort cleanup
+
 			r, err := getRun(cmd.Context(), c.Run(), id)
 			if err != nil {
 				return err
 			}
+
 			if _, err := c.Run().ApproveRun(cmd.Context(), &runv1.ApproveRunRequest{
 				RunId: id, PlanDigest: r.GetPlan().GetPlanDigest(), Reason: reason,
 			}); err != nil {
 				return Refusal(err, "admiral run", id)
 			}
+
 			fmt.Fprintf(cmd.OutOrStdout(), "run %s approved\n", id)
+
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&reason, "reason", "", "why, recorded with the approval")
+
 	return cmd
 }
 
 func newApplyCmd(opts *client.Options) *cobra.Command {
 	var w waitOptions
+
 	cmd := &cobra.Command{
 		Use:   "apply <run>",
 		Short: "Apply a planned run",
@@ -265,23 +304,28 @@ failed or applied partway.`,
 			if err != nil {
 				return err
 			}
+
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
 				return err
 			}
 			defer c.Close() //nolint:errcheck // best-effort cleanup
+
 			r, err := getRun(cmd.Context(), c.Run(), id)
 			if err != nil {
 				return err
 			}
+
 			resp, err := c.Run().ApplyRun(cmd.Context(), &runv1.ApplyRunRequest{RunId: id, PlanDigest: r.GetPlan().GetPlanDigest()})
 			if err != nil {
 				return Refusal(err, "admiral run", id)
 			}
+
 			return w.finish(cmd, opts, c, resp.GetRun())
 		},
 	}
 	w.register(cmd, true, "the apply ends")
+
 	return cmd
 }
 
@@ -290,6 +334,7 @@ func newAcceptCmd(opts *client.Options) *cobra.Command {
 		reason string
 		yes    bool
 	)
+
 	cmd := &cobra.Command{
 		Use:   "accept <run>",
 		Short: "Accept a partial apply as the environment's state (break-glass)",
@@ -309,27 +354,33 @@ The command asks first; --yes skips the question.`,
 			if err != nil {
 				return err
 			}
+
 			if err := input.RequireInteractiveOrYes(cmd, yes); err != nil {
 				return err
 			}
+
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
 				return err
 			}
 			defer c.Close() //nolint:errcheck // best-effort cleanup
+
 			if err := input.Confirm(cmd, yes, "Accept what "+id+" applied as the environment's state"); err != nil {
 				return err
 			}
+
 			resp, err := c.Run().AcceptRun(cmd.Context(), &runv1.AcceptRunRequest{RunId: id, Reason: reason})
 			if err != nil {
 				return err
 			}
+
 			return printTitled(cmd, output.NewPrinter(cmd, opts.OutputFormat), c, resp.GetRun())
 		},
 	}
 	cmd.Flags().StringVar(&reason, "reason", "", "why, recorded with the acceptance")
 	_ = cmd.MarkFlagRequired("reason")
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip the confirmation prompt")
+
 	return cmd
 }
 
@@ -343,15 +394,19 @@ func newCancelCmd(opts *client.Options) *cobra.Command {
 			if err != nil {
 				return err
 			}
+
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
 				return err
 			}
 			defer c.Close() //nolint:errcheck // best-effort cleanup
+
 			if _, err := c.Run().CancelRun(cmd.Context(), &runv1.CancelRunRequest{RunId: id}); err != nil {
 				return err
 			}
+
 			fmt.Fprintf(cmd.OutOrStdout(), "run %s canceled\n", id)
+
 			return nil
 		},
 	}
@@ -359,6 +414,7 @@ func newCancelCmd(opts *client.Options) *cobra.Command {
 
 func newDiffCmd(opts *client.Options) *cobra.Command {
 	var full bool
+
 	cmd := &cobra.Command{
 		Use:   "diff <run>",
 		Short: "Show what a run's plan changes, resource by resource",
@@ -379,37 +435,46 @@ the plan leaves alone are not in it.`,
 			if err != nil {
 				return err
 			}
+
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
 				return err
 			}
 			defer c.Close() //nolint:errcheck // best-effort cleanup
+
 			resp, err := c.Run().GetRunPlanDiff(cmd.Context(), &runv1.GetRunPlanDiffRequest{RunId: id})
 			if err != nil {
 				return err
 			}
+
 			p := output.NewPrinter(cmd, opts.OutputFormat)
 			if !opts.OutputFormat.IsTable() {
 				return p.PrintResource(resp, nil)
 			}
+
 			r, err := getRun(cmd.Context(), c.Run(), id)
 			if err != nil {
 				return err
 			}
+
 			if full {
 				WriteFullDiff(p.Out(), resp.GetDiff(), r.GetPlan())
 				return nil
 			}
+
 			WriteDiff(p.Out(), resp.GetDiff(), r.GetPlan())
+
 			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&full, "full", false, "show each changed resource whole, as YAML, with its changed lines marked")
+
 	return cmd
 }
 
 func newLogsCmd(opts *client.Options) *cobra.Command {
 	var follow bool
+
 	cmd := &cobra.Command{
 		Use:   "logs <run>",
 		Short: "Print the output of a run's jobs",
@@ -421,26 +486,32 @@ With --follow, keep printing until every job has ended.`,
 			if err != nil {
 				return err
 			}
+
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
 				return err
 			}
 			defer c.Close() //nolint:errcheck // best-effort cleanup
+
 			r, err := getRun(cmd.Context(), c.Run(), id)
 			if err != nil {
 				return err
 			}
+
 			jobs := append(r.GetPlan().GetJobs(), r.GetApply().GetJobs()...)
 			for _, j := range jobs {
 				output.Writef(cmd.OutOrStdout(), "==> job %s (%s)\n", j.GetJobId(), strings.Join(j.GetComponents(), ", "))
+
 				if err := streamLog(cmd.Context(), c.Job(), j.GetJobId(), follow, cmd.OutOrStdout()); err != nil {
 					return err
 				}
 			}
+
 			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "keep printing until every job ends")
+
 	return cmd
 }
 
@@ -451,16 +522,20 @@ func streamLog(ctx context.Context, c agentv1.JobAPIClient, jobID string, follow
 		if err != nil {
 			return err
 		}
+
 		if _, err := w.Write(resp.GetChunk()); err != nil {
 			return err
 		}
+
 		if resp.GetTruncated() {
 			output.Writef(w, "[log truncated]\n")
 		}
+
 		offset = resp.GetNextOffset()
 		if resp.GetComplete() || (!follow && len(resp.GetChunk()) == 0) {
 			return nil
 		}
+
 		if len(resp.GetChunk()) == 0 {
 			select {
 			case <-ctx.Done():

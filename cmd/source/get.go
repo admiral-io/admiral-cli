@@ -31,9 +31,12 @@ func newGetCmd(opts *client.Options) *cobra.Command {
 			if err != nil {
 				return err
 			}
+
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+
 			return p.PrintOne(src, src.Name, sourceTable.Render(p, src))
 		},
 	}
+
 	return cmd
 }

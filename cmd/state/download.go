@@ -18,6 +18,7 @@ func newDownloadCmd(opts *client.Options) *cobra.Command {
 		out   string
 		force bool
 	)
+
 	cmd := &cobra.Command{
 		Use:   "download <version-id>",
 		Short: "Download one state version",
@@ -35,24 +36,30 @@ existing file is kept unless --force.`,
 			if err != nil {
 				return err
 			}
+
 			body, err := sc.DownloadStateVersion(cmd.Context(), args[0])
 			if err != nil {
 				return err
 			}
 			defer body.Close() //nolint:errcheck
+
 			if out == "" {
 				_, err = io.Copy(cmd.OutOrStdout(), body)
 				return err
 			}
+
 			if err := writeState(out, force, body); err != nil {
 				return err
 			}
+
 			fmt.Fprintf(cmd.ErrOrStderr(), "Wrote %s\n", out)
+
 			return nil
 		},
 	}
 	cmd.Flags().StringVarP(&out, "output-file", "f", "", "write to this file instead of stdout")
 	cmd.Flags().BoolVar(&force, "force", false, "overwrite the file if it exists")
+
 	return cmd
 }
 
@@ -63,16 +70,20 @@ func writeState(path string, force bool, body io.Reader) error {
 	if force {
 		mode = os.O_WRONLY | os.O_CREATE | os.O_TRUNC
 	}
+
 	f, err := os.OpenFile(path, mode, 0o600)
 	if errors.Is(err, os.ErrExist) {
 		return cmderr.Usage("%s exists; pass --force to overwrite it", path)
 	}
+
 	if err != nil {
 		return err
 	}
+
 	if _, err := io.Copy(f, body); err != nil {
 		_ = f.Close()
 		return err
 	}
+
 	return f.Close()
 }

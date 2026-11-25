@@ -34,6 +34,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 			if err != nil {
 				return err
 			}
+
 			// Checked before the client is built: dialing first would
 			// report a missing credential for what is a missing argument.
 			if app == "" {
@@ -61,6 +62,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 				if err != nil {
 					return nil, "", err
 				}
+
 				return resp.Environments, resp.NextPageToken, nil
 			})
 			if err != nil {
@@ -68,6 +70,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 			}
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+
 			return p.PrintList(output.List{
 				Kind:          "environments",
 				Items:         output.Messages(envs),

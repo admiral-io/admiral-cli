@@ -35,11 +35,14 @@ func render(t *testing.T, printer func(*output.Printer, *runv1.Run, string) erro
 
 func renderTitled(t *testing.T, printer func(*output.Printer, *runv1.Run, string) error, r *runv1.Run, title string) string {
 	t.Helper()
+
 	cmd := &cobra.Command{}
+
 	var out, errOut bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&errOut)
 	require.NoError(t, printer(output.NewPrinter(cmd, output.FormatTable), r, title))
+
 	return out.String() + errOut.String()
 }
 
@@ -77,6 +80,7 @@ func TestPlannedRunHints(t *testing.T) {
 	}
 	out = render(t, withDiff, planned(&environmentv1.ApprovalRule{RequiredApprovals: 1}))
 	assert.NotContains(t, out, "run diff", "the diff is shown")
+
 	hint := "It needs 1 approval(s) from someone other than the changeset's author: admiral changeset approve " + csID
 	assert.Contains(t, out, hint)
 	assert.Contains(t, out, "\n\n+ podinfo: the diff\n\n"+hint, "the diff, set apart once, then the next steps")
@@ -206,18 +210,22 @@ func TestWriteDiffListsAFailedPlansErrors(t *testing.T) {
 func writeDiff(d *agentv1.PlanDiff, plan *runv1.PlanPhase) string {
 	var b bytes.Buffer
 	WriteDiff(&b, d, plan)
+
 	return b.String()
 }
 
 func obj(t *testing.T, js string) *structpb.Value {
 	t.Helper()
+
 	var v structpb.Value
 	require.NoError(t, protojson.Unmarshal([]byte(js), &v))
+
 	return &v
 }
 
 func path(segs ...any) *agentv1.DiffPath {
 	p := &agentv1.DiffPath{}
+
 	for _, s := range segs {
 		switch s := s.(type) {
 		case string:
@@ -226,6 +234,7 @@ func path(segs ...any) *agentv1.DiffPath {
 			p.Segments = append(p.Segments, &agentv1.DiffPathSegment{Segment: &agentv1.DiffPathSegment_Index{Index: int32(s)}})
 		}
 	}
+
 	return p
 }
 
@@ -317,10 +326,12 @@ func execRun(t *testing.T, args ...string) error {
 	t.Helper()
 	t.Setenv(credentials.EnvAPIKey, "")
 	root := NewRunCmd(&client.Options{ConfigDir: t.TempDir()})
+
 	var out bytes.Buffer
 	root.Cmd.SetOut(&out)
 	root.Cmd.SetErr(&out)
 	root.Cmd.SetArgs(args)
+
 	return root.Cmd.Execute()
 }
 
@@ -361,6 +372,7 @@ func TestWriteBriefDiffFoldsWhatRepeats(t *testing.T) {
 		for _, p := range paths {
 			k.Taken = append(k.Taken, &agentv1.TakenField{Manager: "helm", Path: path("spec", p)})
 		}
+
 		return &agentv1.ResourceDiff_Kubernetes{Kubernetes: k}
 	}
 	takeOver := agentv1.ResourceChange_ACTION_TAKE_OVER
@@ -376,6 +388,7 @@ func TestWriteBriefDiffFoldsWhatRepeats(t *testing.T) {
 		{Component: "web", Resource: k8sRef("ConfigMap", "web"), Action: takeOver,
 			Before: obj(t, helmOff), After: obj(t, admiralOn), Change: taken("data")},
 	}}
+
 	var b bytes.Buffer
 	WriteBriefDiff(&b, d, nil, testRunID)
 	out := b.String()
@@ -405,6 +418,7 @@ func TestWriteBriefDiffPointsAtTheWholeDiffOnlyWhenItCutsSomething(t *testing.T)
 		{Component: "web", Resource: k8sRef("ConfigMap", "web"), Action: agentv1.ResourceChange_ACTION_UPDATE,
 			Before: obj(t, `{"data":{"a":"1"}}`), After: obj(t, `{"data":{"a":"2"}}`)},
 	}}
+
 	var b bytes.Buffer
 	WriteBriefDiff(&b, d, nil, testRunID)
 	assert.Equal(t, writeDiff(d, nil), b.String())

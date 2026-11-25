@@ -18,30 +18,37 @@ func Source(ctx context.Context, c sourcev1.SourceAPIClient, nameOrID string) (*
 		if err != nil {
 			return nil, err
 		}
+
 		return resp.Sources, nil
 	}
 	id, err := byName(ctx, "source", nameOrID, "", "", "", list,
 		func(s *sourcev1.Source) string { return s.Name },
 		func(s *sourcev1.Source) string { return s.Id },
 	)
+
 	var notFound *NotFoundError
 	if errors.As(err, &notFound) {
 		all, lerr := list(ctx, "")
 		if lerr != nil || len(all) == 0 {
 			return nil, err
 		}
+
 		names := make([]string, 0, len(all))
 		for _, s := range all {
 			names = append(names, s.Name)
 		}
+
 		return nil, cmderr.WithHint(err, fmt.Sprintf("Sources: %s", strings.Join(names, ", ")))
 	}
+
 	if err != nil {
 		return nil, err
 	}
+
 	resp, err := c.GetSource(ctx, &sourcev1.GetSourceRequest{SourceId: id})
 	if err != nil {
 		return nil, fmt.Errorf("looking up source %q: %w", nameOrID, err)
 	}
+
 	return resp.Source, nil
 }

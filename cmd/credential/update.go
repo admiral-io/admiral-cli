@@ -42,15 +42,19 @@ rotate'; the type cannot change.`,
 			if cmd.Flags().Changed("description") {
 				paths = append(paths, "description")
 			}
+
 			if cmd.Flags().Changed("label") {
 				paths = append(paths, "labels")
 			}
+
 			if cmd.Flags().Changed("allowed-host") || clearAllowedHosts {
 				if cmd.Flags().Changed("allowed-host") && clearAllowedHosts {
 					return cmderr.Usage("pass either --allowed-host or --clear-allowed-hosts, not both")
 				}
+
 				paths = append(paths, "allowed_hosts")
 			}
+
 			if len(paths) == 0 {
 				return cmderr.Usage("at least one of --description, --label, --allowed-host or --clear-allowed-hosts must be specified")
 			}
@@ -65,26 +69,32 @@ rotate'; the type cannot change.`,
 			if err != nil {
 				return err
 			}
+
 			// Read-modify-write so untouched fields keep their values.
 			current, err := c.Credential().GetCredential(cmd.Context(), &credentialv1.GetCredentialRequest{CredentialId: id})
 			if err != nil {
 				return err
 			}
+
 			cred := current.Credential
 
 			if cmd.Flags().Changed("description") {
 				cred.Description = description
 			}
+
 			if cmd.Flags().Changed("label") {
 				labels, err := flags.ApplyLabelPatch(cred.Labels, labelStrs)
 				if err != nil {
 					return err
 				}
+
 				cred.Labels = labels
 			}
+
 			if cmd.Flags().Changed("allowed-host") {
 				cred.AllowedHosts = allowedHosts
 			}
+
 			if clearAllowedHosts {
 				cred.AllowedHosts = nil
 			}
@@ -96,7 +106,9 @@ rotate'; the type cannot change.`,
 			if err != nil {
 				return err
 			}
+
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+
 			return p.PrintOne(resp.Credential, resp.Credential.Name, credentialTable.Render(p, resp.Credential))
 		},
 	}

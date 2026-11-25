@@ -15,6 +15,7 @@ func env(kv ...string) func(string) string {
 	for i := 0; i+1 < len(kv); i += 2 {
 		m[kv[i]] = kv[i+1]
 	}
+
 	return func(k string) string { return m[k] }
 }
 
@@ -53,6 +54,7 @@ func TestNonInteractiveEnv(t *testing.T) {
 			require.True(t, nonInteractiveEnv(getenv))
 		})
 	}
+
 	require.False(t, nonInteractiveEnv(env("CI", "false")), "CI=false is unset")
 	require.False(t, nonInteractiveEnv(env("ADMIRAL_NO_INPUT", "0")))
 	require.False(t, nonInteractiveEnv(env()))

@@ -34,6 +34,7 @@ func Settled(s runv1.Run_Status) bool {
 		runv1.Run_STATUS_APPLYING, runv1.Run_STATUS_UNSPECIFIED:
 		return false
 	}
+
 	return true
 }
 
@@ -43,6 +44,7 @@ func settled(r *runv1.Run) bool {
 	if r.GetStatus() == runv1.Run_STATUS_PLANNED && r.GetPlan().GetPlanDigest() == "" {
 		return false
 	}
+
 	return Settled(r.GetStatus())
 }
 
@@ -98,16 +100,20 @@ func Wait(ctx context.Context, c runv1.RunAPIClient, cur *runv1.Run, timeout tim
 	if !Settled(cur.GetStatus()) {
 		output.Writef(progress, "Run %s is %s\n", cur.GetId(), progressStatus(cur))
 	}
+
 	deadline := time.Now().Add(timeout)
 	delay := pollFirst
+
 	for !settled(cur) {
 		if stopUnenrolled && notEnrolled(cur) {
 			return cur, errNotEnrolled{last: cur}
 		}
+
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
 			return cur, errWaitElapsed{last: cur}
 		}
+
 		t := time.NewTimer(min(delay, remaining))
 		select {
 		case <-ctx.Done():
@@ -115,20 +121,25 @@ func Wait(ctx context.Context, c runv1.RunAPIClient, cur *runv1.Run, timeout tim
 			return cur, ctx.Err()
 		case <-t.C:
 		}
+
 		resp, err := c.GetRun(ctx, &runv1.GetRunRequest{RunId: cur.GetId()})
 		if err != nil {
 			if ctx.Err() != nil {
 				return cur, err
 			}
+
 			return cur, errWaitBroken{last: cur, err: err}
 		}
+
 		next := resp.GetRun()
 		if progressStatus(next) != progressStatus(cur) && !Settled(next.GetStatus()) {
 			output.Writef(progress, "Run %s is %s\n", next.GetId(), progressStatus(next))
 		}
+
 		cur = next
 		delay = min(delay*3/2, pollMax)
 	}
+
 	return cur, nil
 }
 
@@ -154,6 +165,7 @@ func WaitError(err error, r *runv1.Run) error {
 		if id := notEnrolledAgent(e.last); id != "" {
 			agent, key = "agent "+id, "admiral agent enrollment-key "+id
 		}
+
 		return &cmderr.Error{
 			Err:  fmt.Errorf("run %s is queued: %s has never enrolled", r.GetId(), agent),
 			Code: cmderr.ExitError,
@@ -162,6 +174,7 @@ func WaitError(err error, r *runv1.Run) error {
 				"To follow the run, run: admiral run describe " + r.GetId() + " --wait",
 		}
 	}
+
 	return err
 }
 
@@ -176,6 +189,7 @@ func notEnrolledAgent(r *runv1.Run) string {
 			return j.GetAgentId()
 		}
 	}
+
 	return ""
 }
 
@@ -188,6 +202,7 @@ func Outcome(r *runv1.Run) error {
 		if r.GetApply() == nil {
 			msg = r.GetPlan().GetMessage()
 		}
+
 		return cmderr.Reported(fmt.Errorf("run %s failed: %s", r.GetId(), msg))
 	case runv1.Run_STATUS_PARTIAL:
 		return cmderr.Reported(&cmderr.Error{
@@ -211,17 +226,20 @@ func Outcome(r *runv1.Run) error {
 	case runv1.Run_STATUS_SUPERSEDED:
 		return cmderr.Reported(fmt.Errorf("run %s was superseded by a newer plan", r.GetId()))
 	}
+
 	return nil
 }
 
 // unhealthy names the components of r's apply that did not become healthy.
 func unhealthy(r *runv1.Run) []string {
 	var out []string
+
 	for _, c := range r.GetApply().GetComponents() {
 		if c.GetStatus() == runv1.ComponentApply_STATUS_UNHEALTHY {
 			out = append(out, c.GetComponent())
 		}
 	}
+
 	return out
 }
 
@@ -236,6 +254,7 @@ func UnhealthyHint(r *runv1.Run) string {
 			hint += "\nTo put " + c + " back, run: admiral changeset revert " + cs + " --component " + c
 		}
 	}
+
 	return hint
 }
 
@@ -245,6 +264,7 @@ func UnknownHint(changeSetID, runID string) string {
 	if changeSetID == "" {
 		return acceptHint(runID)
 	}
+
 	return "To see what landed and finish it, run: admiral changeset plan " + changeSetID + ", then apply it\n" +
 		undoHint(changeSetID, runID)
 }
@@ -258,6 +278,7 @@ func HoldHint(changeSetID, runID string) string {
 	if changeSetID == "" {
 		return acceptHint(runID)
 	}
+
 	return "To finish it, run: admiral changeset plan " + changeSetID + ", then apply it\n" +
 		"To change it first, run: admiral changeset set " + changeSetID + " <component>.<path>=<value>, then plan and apply it\n" +
 		undoHint(changeSetID, runID)
@@ -271,6 +292,7 @@ func acceptHint(runID string) string {
 	if runID == "" {
 		runID = "<run>"
 	}
+
 	return "As break-glass, an organization admin accepts what landed: admiral run accept " + runID + " --reason ..."
 }
 
@@ -293,9 +315,11 @@ func progressStatus(r *runv1.Run) string {
 	if r.GetStatus() != runv1.Run_STATUS_QUEUED {
 		return output.FormatEnumKebab(r.GetStatus())
 	}
+
 	if w, ok := waitWords[r.GetWaitReason()]; ok {
 		return w
 	}
+
 	return "waiting for an agent"
 }
 
@@ -304,6 +328,7 @@ func describeStatus(r *runv1.Run) string {
 	if r.GetStatus() == runv1.Run_STATUS_QUEUED && r.GetWaitReason() != 0 {
 		s += " (" + output.FormatEnumKebab(r.GetWaitReason()) + ")"
 	}
+
 	return s
 }
 
@@ -326,5 +351,6 @@ func Refusal(err error, verb, target string) error {
 	case status.Code(err) == codes.FailedPrecondition && strings.Contains(msg, "approval"):
 		return cmderr.WithHint(err, "Someone other than the changeset's author must run '"+verb+" approve "+target+"' first.")
 	}
+
 	return err
 }

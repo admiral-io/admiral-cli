@@ -50,6 +50,7 @@ uploaded.`,
 			if err != nil {
 				return err
 			}
+
 			comp := args[1]
 			if err := componentName(comp); err != nil {
 				return err
@@ -59,18 +60,22 @@ uploaded.`,
 				return cmderr.UsageHint("Upload the file you downloaded without --effective.",
 					"--effective prints values; it cannot be combined with --values")
 			}
+
 			if valuesPath != "" {
 				data, err := readValuesFile(cmd, valuesPath)
 				if err != nil {
 					return err
 				}
+
 				upload, rev, fromCS, err := uploadEdit(cmd.ErrOrStderr(), valuesPath, ref, comp, data)
 				if err != nil {
 					return err
 				}
+
 				if err := po.check(cmd); err != nil {
 					return err
 				}
+
 				c, csID, err := dial(cmd, opts, ref)
 				if err != nil {
 					return err
@@ -81,6 +86,7 @@ uploaded.`,
 				if csID != fromCS {
 					return cmderr.Usage("%s was downloaded from changeset %s, not %s (%s)", valuesPath, fromCS, csID, ref)
 				}
+
 				return send(cmd, opts, c, csID, &rev, po, upload)
 			}
 
@@ -103,22 +109,28 @@ uploaded.`,
 			if err != nil {
 				return err
 			}
+
 			p := output.NewPrinter(cmd, opts.OutputFormat)
 			if p.Format.IsMachine() {
 				return p.PrintResource(resp, nil)
 			}
+
 			tree, err := valuesfile.DecodeJSON(resp.TreeJson)
 			if err != nil {
 				return err
 			}
+
 			if effective {
 				out, err := renderEffective(tree, csID, comp, resp.GetSources())
 				if err != nil {
 					return err
 				}
+
 				_, err = p.Out().Write(out)
+
 				return err
 			}
+
 			out, err := valuesfile.Render(tree, valuesfile.Header{
 				ChangeSet:  csID,
 				Component:  comp,
@@ -128,7 +140,9 @@ uploaded.`,
 			if err != nil {
 				return err
 			}
+
 			_, err = p.Out().Write(out)
+
 			return err
 		},
 	}
@@ -147,15 +161,18 @@ uploaded.`,
 // a stale revision can only be judged by the server, which refuses it.
 func uploadEdit(stderr io.Writer, path string, ref changeSetRef, comp string, data []byte) (*changesetv1.Edit, int32, string, error) {
 	h, ok := valuesfile.ParseHeader(data)
+
 	fromCS, fromComp := headerNames(data)
 	if !ok || fromCS == "" || fromComp == "" {
 		return nil, 0, "", cmderr.UsageHint(
 			"Download the values first ('admiral changeset values "+ref.String()+" "+comp+" > "+comp+".yaml'), edit that file, then upload it.",
 			"%s has no changeset, component and revision header", path)
 	}
+
 	if ref.id != "" && fromCS != ref.id {
 		return nil, 0, "", cmderr.Usage("%s was downloaded from changeset %s, not %s", path, fromCS, ref.id)
 	}
+
 	if fromComp != comp {
 		return nil, 0, "", cmderr.Usage("%s holds the values of %s, not %s", path, fromComp, comp)
 	}
@@ -164,13 +181,16 @@ func uploadEdit(stderr io.Writer, path string, ref changeSetRef, comp string, da
 	if err != nil {
 		return nil, 0, "", cmderr.Usage("%s: %v", path, err)
 	}
+
 	for _, w := range warnings {
 		output.Writef(stderr, "Warning: %s: %s\n", path, w)
 	}
+
 	js, err := valuesfile.EncodeJSON(tree)
 	if err != nil {
 		return nil, 0, "", err
 	}
+
 	return &changesetv1.Edit{Edit: &changesetv1.Edit_ReplaceValues{ReplaceValues: &changesetv1.ReplaceValues{
 		Component: comp,
 		TreeJson:  js,
@@ -185,14 +205,17 @@ func headerNames(data []byte) (changeSet, component string) {
 		if !strings.HasPrefix(line, "#") {
 			break
 		}
+
 		line = strings.TrimSpace(strings.TrimPrefix(line, "#"))
 		if v, ok := strings.CutPrefix(line, "changeset:"); ok {
 			changeSet = strings.TrimSpace(v)
 		}
+
 		if v, ok := strings.CutPrefix(line, "component:"); ok {
 			component = strings.TrimSpace(v)
 		}
 	}
+
 	return changeSet, component
 }
 
@@ -208,29 +231,38 @@ var layerLabels = map[changesetv1.ValueSource_Origin]string{
 // layer. Its header has no revision line, so an upload refuses the file.
 func renderEffective(tree map[string]any, csID, comp string, sources []*changesetv1.ValueSource) ([]byte, error) {
 	labels := map[string]string{}
+
 	for _, src := range sources {
 		keys := make([]string, 0, len(src.GetPath()))
 		for _, seg := range src.GetPath() {
 			keys = append(keys, seg.GetKey())
 		}
+
 		l, ok := layerLabels[src.GetOrigin()]
 		if !ok {
 			l = "unknown layer"
 		}
+
 		labels[strings.Join(keys, valuesfile.PathSep)] = l
 	}
+
 	var b strings.Builder
 	fmt.Fprintf(&b, "# changeset: %s\n# component: %s\n", csID, comp)
 	b.WriteString("# The values this component will receive, each labeled with its layer:\n")
 	b.WriteString("# component default, then baseline, environment and changeset over it.\n")
+
 	if l, ok := labels[""]; ok {
 		fmt.Fprintf(&b, "# Every value comes from: %s\n", l)
 	}
+
 	b.WriteString("# For reading only. Upload a file downloaded without --effective.\n")
+
 	body, err := valuesfile.EncodeLabeled(tree, labels)
 	if err != nil {
 		return nil, err
 	}
+
 	b.Write(body)
+
 	return []byte(b.String()), nil
 }

@@ -45,18 +45,23 @@ type fakeAPI struct {
 
 func (f *fakeAPI) record(ctx context.Context, method string) error {
 	md, _ := metadata.FromIncomingContext(ctx)
+
 	_, hasDL := ctx.Deadline()
 	if f.requestID != "" {
 		_ = grpc.SetHeader(ctx, metadata.Pairs("x-request-id", f.requestID))
 	}
+
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
 	f.calls = append(f.calls, recordedCall{method: method, authz: md.Get("authorization"), hasDeadline: hasDL})
 	if errs := f.script[method]; len(errs) > 0 {
 		err := errs[0]
 		f.script[method] = errs[1:]
+
 		return err
 	}
+
 	return nil
 }
 
@@ -64,6 +69,7 @@ func (f *fakeAPI) ListProjects(ctx context.Context, _ *projectv1.ListProjectsReq
 	if err := f.record(ctx, "ListProjects"); err != nil {
 		return nil, err
 	}
+
 	return &projectv1.ListProjectsResponse{}, nil
 }
 
@@ -71,28 +77,34 @@ func (f *fakeAPI) CreateProject(ctx context.Context, _ *projectv1.CreateProjectR
 	if err := f.record(ctx, "CreateProject"); err != nil {
 		return nil, err
 	}
+
 	return &projectv1.CreateProjectResponse{}, nil
 }
 
 // startServer runs fakeAPI on a bufconn listener and points CreateClient at it.
 func startServer(t *testing.T, api *fakeAPI) {
 	t.Helper()
+
 	lis := bufconn.Listen(1 << 20)
 	srv := grpc.NewServer()
+
 	projectv1.RegisterProjectAPIServer(srv, api)
 	go func() { _ = srv.Serve(lis) }()
+
 	t.Cleanup(srv.Stop)
 
 	prev := testDialOptions
 	testDialOptions = []grpc.DialOption{grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
 		return lis.Dial()
 	})}
+
 	t.Cleanup(func() { testDialOptions = prev })
 }
 
 // refreshServer answers refresh_token grants with a fixed new access token.
 func refreshServer(t *testing.T, newAccess string) *httptest.Server {
 	t.Helper()
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -100,17 +112,20 @@ func refreshServer(t *testing.T, newAccess string) *httptest.Server {
 		})
 	}))
 	t.Cleanup(srv.Close)
+
 	return srv
 }
 
 func sessionOpts(t *testing.T, tokenURL string) *Options {
 	t.Helper()
 	dir := t.TempDir()
+
 	os.Unsetenv(credentials.EnvAPIKey)
 	require.NoError(t, credentials.Save(dir, &credentials.Credential{
 		Kind: credentials.KindSession, AccessToken: "jwt-1", RefreshToken: "r1",
 		Expiry: time.Now().Add(time.Hour), TokenURL: tokenURL, ClientID: "admiral-cli",
 	}))
+
 	return &Options{ServerAddr: "passthrough:///bufconn", PlainText: true, ConfigDir: dir}
 }
 
@@ -124,6 +139,7 @@ func TestCreateClient_SessionRefreshOn401(t *testing.T) {
 
 	c, err := CreateClient(context.Background(), opts)
 	require.NoError(t, err)
+
 	defer c.Close() //nolint:errcheck
 
 	_, err = c.Project().ListProjects(context.Background(), &projectv1.ListProjectsRequest{})
@@ -132,6 +148,7 @@ func TestCreateClient_SessionRefreshOn401(t *testing.T) {
 	require.Len(t, api.calls, 2)
 	require.Equal(t, []string{"Bearer jwt-1"}, api.calls[0].authz, "first attempt carries the stored session token")
 	require.Equal(t, []string{"Bearer jwt-2"}, api.calls[1].authz, "retry carries exactly one header, the refreshed token")
+
 	for _, call := range api.calls {
 		require.True(t, call.hasDeadline, "every call reaches the server with a deadline")
 	}
@@ -156,6 +173,7 @@ func TestCreateClient_SessionRefreshOnlyOnce(t *testing.T) {
 
 	c, err := CreateClient(context.Background(), opts)
 	require.NoError(t, err)
+
 	defer c.Close() //nolint:errcheck
 
 	_, err = c.Project().ListProjects(context.Background(), &projectv1.ListProjectsRequest{})
@@ -171,6 +189,7 @@ func TestCreateClient_APIKeyUsesTokenScheme(t *testing.T) {
 
 	c, err := CreateClient(context.Background(), opts)
 	require.NoError(t, err)
+
 	defer c.Close() //nolint:errcheck
 
 	_, err = c.Project().ListProjects(context.Background(), &projectv1.ListProjectsRequest{})
@@ -182,6 +201,7 @@ func TestCreateClient_APIKeyUsesTokenScheme(t *testing.T) {
 func TestCreateClient_TransientRetryReadsOnly(t *testing.T) {
 	prev := retryBackoff
 	retryBackoff = []time.Duration{time.Millisecond, time.Millisecond}
+
 	t.Cleanup(func() { retryBackoff = prev })
 
 	api := &fakeAPI{script: map[string][]error{
@@ -194,6 +214,7 @@ func TestCreateClient_TransientRetryReadsOnly(t *testing.T) {
 
 	c, err := CreateClient(context.Background(), opts)
 	require.NoError(t, err)
+
 	defer c.Close() //nolint:errcheck
 
 	_, err = c.Project().ListProjects(context.Background(), &projectv1.ListProjectsRequest{})
@@ -203,6 +224,7 @@ func TestCreateClient_TransientRetryReadsOnly(t *testing.T) {
 	require.Equal(t, codes.Unavailable, status.Code(err), "a mutation is never retried")
 
 	var lists, creates int
+
 	for _, call := range api.calls {
 		switch call.method {
 		case "ListProjects":
@@ -211,6 +233,7 @@ func TestCreateClient_TransientRetryReadsOnly(t *testing.T) {
 			creates++
 		}
 	}
+
 	require.Equal(t, 2, lists)
 	require.Equal(t, 1, creates)
 }
@@ -223,6 +246,7 @@ func TestCreateClient_TimeoutOptionIsApplied(t *testing.T) {
 
 	c, err := CreateClient(context.Background(), opts)
 	require.NoError(t, err)
+
 	defer c.Close() //nolint:errcheck
 
 	_, err = c.Project().ListProjects(context.Background(), &projectv1.ListProjectsRequest{})
@@ -235,10 +259,13 @@ func TestCreateClient_TimeoutOptionIsApplied(t *testing.T) {
 func TestCreateClient_VerboseLogsEveryAttemptOnBothPaths(t *testing.T) {
 	prev := retryBackoff
 	retryBackoff = []time.Duration{time.Millisecond}
+
 	t.Cleanup(func() { retryBackoff = prev })
 
 	var buf strings.Builder
+
 	prevLog := slog.Default()
+
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	t.Cleanup(func() { slog.SetDefault(prevLog) })
 
@@ -250,15 +277,18 @@ func TestCreateClient_VerboseLogsEveryAttemptOnBothPaths(t *testing.T) {
 		"session": func(t *testing.T) *Options {
 			o := sessionOpts(t, "")
 			o.Verbose = true
+
 			return o
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			buf.Reset()
+
 			api := &fakeAPI{script: map[string][]error{"ListProjects": {status.Error(codes.Unavailable, "blip")}}}
 			startServer(t, api)
 			c, err := CreateClient(context.Background(), mk(t))
 			require.NoError(t, err)
+
 			defer c.Close() //nolint:errcheck
 
 			_, err = c.Project().ListProjects(context.Background(), &projectv1.ListProjectsRequest{})
@@ -286,6 +316,7 @@ func TestAServerFaultNamesItsRequest(t *testing.T) {
 
 	c, err := CreateClient(context.Background(), sessionOpts(t, refreshServer(t, "unused").URL))
 	require.NoError(t, err)
+
 	defer c.Close() //nolint:errcheck
 
 	_, err = c.Project().ListProjects(context.Background(), &projectv1.ListProjectsRequest{})
@@ -300,8 +331,10 @@ func TestAServerFaultNamesItsRequest(t *testing.T) {
 // wait, but not when the client is created.
 func expireSoon(t *testing.T, opts *Options, wait time.Duration) {
 	t.Helper()
+
 	cred, err := credentials.Load(opts.ConfigDir)
 	require.NoError(t, err)
+
 	cred.Expiry = time.Now().Add(credentials.RefreshWindow + wait)
 	require.NoError(t, credentials.Save(opts.ConfigDir, cred))
 }
@@ -314,9 +347,11 @@ func TestASessionNearExpiryIsRenewedBeforeTheCall(t *testing.T) {
 
 	c, err := CreateClient(context.Background(), opts)
 	require.NoError(t, err)
+
 	defer c.Close() //nolint:errcheck
 
 	time.Sleep(1500 * time.Millisecond) // the session is now inside RefreshWindow
+
 	_, err = c.Project().ListProjects(context.Background(), &projectv1.ListProjectsRequest{})
 	require.NoError(t, err)
 	require.Len(t, api.calls, 1, "no 401 round trip")
@@ -332,6 +367,7 @@ func TestALongWaitRecoversFromEachRejectedToken(t *testing.T) {
 
 	c, err := CreateClient(context.Background(), opts)
 	require.NoError(t, err)
+
 	defer c.Close() //nolint:errcheck
 
 	for i := range 3 {
@@ -347,6 +383,7 @@ func TestARefusedRenewalEndsTheCallSignedOut(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"error": "invalid_grant"})
 	}))
 	t.Cleanup(refused.Close)
+
 	api := &fakeAPI{}
 	startServer(t, api)
 	opts := sessionOpts(t, refused.URL)
@@ -354,9 +391,11 @@ func TestARefusedRenewalEndsTheCallSignedOut(t *testing.T) {
 
 	c, err := CreateClient(context.Background(), opts)
 	require.NoError(t, err)
+
 	defer c.Close() //nolint:errcheck
 
 	time.Sleep(1500 * time.Millisecond)
+
 	_, err = c.Project().ListProjects(context.Background(), &projectv1.ListProjectsRequest{})
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
 	require.Empty(t, api.calls, "a token the server would refuse is not sent")

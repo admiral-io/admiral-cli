@@ -37,6 +37,7 @@ func typeName(t credentialv1.Credential_Type) string {
 			return name
 		}
 	}
+
 	return t.String()
 }
 
@@ -82,6 +83,7 @@ func (f *secretFlags) registerPrivateKey(cmd *cobra.Command, what string) {
 	if cmd.Flags().Lookup("private-key-file") != nil {
 		return
 	}
+
 	cmd.Flags().StringVar(&f.privateKeyFile, "private-key-file", "", "read "+what+" from this file")
 	cmd.Flags().BoolVar(&f.privateKeyStdin, "private-key-stdin", false, "read "+what+" from stdin")
 }
@@ -94,10 +96,12 @@ func (f *secretFlags) authConfig(cmd *cobra.Command, typ string) (*credentialv1.
 		if f.username == "" {
 			return nil, cmderr.Usage("--username is required")
 		}
+
 		password, err := input.Secret(cmd, "password", f.passwordStdin)
 		if err != nil {
 			return nil, err
 		}
+
 		return &credentialv1.AuthConfig{Variant: &credentialv1.AuthConfig_BasicAuth{
 			BasicAuth: &credentialv1.BasicAuth{Username: f.username, Password: password},
 		}}, nil
@@ -106,6 +110,7 @@ func (f *secretFlags) authConfig(cmd *cobra.Command, typ string) (*credentialv1.
 		if err != nil {
 			return nil, err
 		}
+
 		return &credentialv1.AuthConfig{Variant: &credentialv1.AuthConfig_BearerToken{
 			BearerToken: &credentialv1.BearerTokenAuth{Token: token},
 		}}, nil
@@ -113,16 +118,19 @@ func (f *secretFlags) authConfig(cmd *cobra.Command, typ string) (*credentialv1.
 		if f.privateKeyStdin && f.passphraseStdin {
 			return nil, cmderr.Usage("--private-key-stdin and --passphrase-stdin cannot both read stdin; pass the key with --private-key-file")
 		}
+
 		key, err := f.privateKey(cmd)
 		if err != nil {
 			return nil, err
 		}
+
 		var passphrase string
 		if f.passphraseStdin {
 			if passphrase, err = input.Secret(cmd, "passphrase", true); err != nil {
 				return nil, err
 			}
 		}
+
 		return &credentialv1.AuthConfig{Variant: &credentialv1.AuthConfig_SshKey{
 			SshKey: &credentialv1.SSHKeyAuth{PrivateKey: key, Passphrase: passphrase},
 		}}, nil
@@ -130,16 +138,19 @@ func (f *secretFlags) authConfig(cmd *cobra.Command, typ string) (*credentialv1.
 		if f.appID <= 0 || f.installationID <= 0 {
 			return nil, cmderr.Usage("--app-id and --installation-id are required")
 		}
+
 		key, err := f.privateKey(cmd)
 		if err != nil {
 			return nil, err
 		}
+
 		return &credentialv1.AuthConfig{Variant: &credentialv1.AuthConfig_GithubApp{
 			GithubApp: &credentialv1.GitHubAppAuth{
 				AppId: f.appID, InstallationId: f.installationID, PrivateKey: key, ApiUrl: f.apiURL,
 			},
 		}}, nil
 	}
+
 	return nil, fmt.Errorf("unknown credential type %q", typ)
 }
 
@@ -154,22 +165,27 @@ func (f *secretFlags) privateKey(cmd *cobra.Command) (string, error) {
 		if err != nil {
 			return "", err
 		}
+
 		b, err := os.ReadFile(path)
 		if err != nil {
 			return "", fmt.Errorf("read private key: %w", err)
 		}
+
 		return checkPEM(string(b))
 	case f.privateKeyStdin:
 		ios := iostreams.FromCommand(cmd)
 		if ios.IsStdinTTY() {
 			return "", cmderr.Usage("--private-key-stdin reads a pipe; a key is not typed")
 		}
+
 		b, err := io.ReadAll(ios.In)
 		if err != nil {
 			return "", fmt.Errorf("read private key from stdin: %w", err)
 		}
+
 		return checkPEM(string(b))
 	}
+
 	return "", cmderr.Usage("--private-key-file or --private-key-stdin is required")
 }
 
@@ -180,5 +196,6 @@ func checkPEM(s string) (string, error) {
 	if !strings.HasPrefix(strings.TrimSpace(s), "-----BEGIN ") {
 		return "", cmderr.Usage("the private key is not PEM (expected -----BEGIN ...)")
 	}
+
 	return s + "\n", nil
 }

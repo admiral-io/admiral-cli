@@ -68,6 +68,7 @@ var verifyIdentity = func(ctx context.Context, opts *client.Options) (*userv1.Us
 	if err != nil {
 		return nil, err
 	}
+
 	return resp.GetUser(), nil
 }
 
@@ -77,11 +78,14 @@ func (s authStatus) expiresHuman() string {
 	if s.expiry.IsZero() {
 		return ""
 	}
+
 	when := s.expiry.Local().Format(output.DescribeTimeLayout)
+
 	left := time.Until(s.expiry).Truncate(time.Second)
 	if left <= 0 {
 		return when + " (expired; refreshed on next use)"
 	}
+
 	return when + " (in " + left.String() + ")"
 }
 
@@ -111,6 +115,7 @@ it, so a script can gate on it.`,
 			st := localStatus(opts)
 
 			var verifyErr error
+
 			if st.Authenticated && !noVerify {
 				user, err := verifyIdentity(cmd.Context(), opts)
 				switch {
@@ -141,16 +146,19 @@ it, so a script can gate on it.`,
 				d.Field("Method", st.Method)
 				d.Field("Stored In", storedIn(st))
 				d.Field("Server", st.Server)
+
 				if st.Method == "session" {
 					d.Field("Account", st.Account)
 					d.Field("Auth Server", st.Issuer)
 					d.Field("Expires", st.expiresHuman())
+
 					if len(st.Scopes) > 0 {
 						d.Field("Scopes", strings.Join(st.Scopes, ", "))
 					} else {
 						d.Field("Scopes", "full access")
 					}
 				}
+
 				switch {
 				case st.Verified:
 					d.Section("User", func(b *output.Block) {
@@ -164,6 +172,7 @@ it, so a script can gate on it.`,
 					d.Field("Verified", "no ("+st.Error+")")
 				}
 			}
+
 			if !st.Authenticated && !opts.OutputFormat.IsMachine() {
 				d.Hint("To sign in, run: admiral auth login\nOr set " + credentials.EnvAPIKey + " to an API key.")
 			}
@@ -172,6 +181,7 @@ it, so a script can gate on it.`,
 			if err := p.PrintStatus(st, d); err != nil {
 				return err
 			}
+
 			// The document is the answer for -o json|yaml; its fields carry
 			// the outcome. In human mode the exit code does, and the
 			// document has already said why, so the error is not printed
@@ -179,17 +189,21 @@ it, so a script can gate on it.`,
 			if opts.OutputFormat.IsMachine() {
 				return nil
 			}
+
 			if verifyErr != nil {
 				return cmderr.Reported(verifyErr)
 			}
+
 			if !st.Authenticated {
 				return cmderr.Reported(cmderr.Auth("", errors.New("not signed in")))
 			}
+
 			return nil
 		},
 	}
 
 	cmd.Flags().BoolVar(&noVerify, "no-verify", false, "report the stored credential without contacting the server")
+
 	return cmd
 }
 
@@ -199,10 +213,12 @@ func (s *authStatus) reloadExpiry(opts *client.Options) {
 	if s.Method != "session" || s.Storage != "file" {
 		return
 	}
+
 	cred, err := credentials.Load(opts.ConfigDir)
 	if err != nil || cred.Kind != credentials.KindSession || cred.Expiry.IsZero() {
 		return
 	}
+
 	s.expiry = cred.Expiry
 	s.Expires = cred.Expiry.Local().Format(time.RFC3339)
 }
@@ -225,6 +241,7 @@ func isAuthError(err error) bool {
 	if errors.Is(err, credentials.ErrNotAuthenticated) || errors.Is(err, credentials.ErrSessionExpired) {
 		return true
 	}
+
 	return status.Code(err) == codes.Unauthenticated
 }
 
@@ -252,29 +269,35 @@ func localStatus(opts *client.Options) authStatus {
 		default:
 			st.Error = "reading credentials: " + err.Error()
 		}
+
 		return st
 	}
 
 	path := credentials.FilePath(opts.ConfigDir)
+
 	switch cred.Kind {
 	case credentials.KindAPIKey:
 		if cred.APIKey == "" {
 			st.Error = credentials.ErrNotAuthenticated.Error()
 			return st
 		}
+
 		st.Authenticated, st.Method, st.Storage, st.Path = true, "api-key", "file", path
 	case credentials.KindAPIKeyRef:
 		if cred.Ref == "" {
 			st.Error = credentials.ErrNotAuthenticated.Error()
 			return st
 		}
+
 		st.Authenticated, st.Method, st.Storage, st.Ref = true, "api-key", "1password", cred.Ref
 	case credentials.KindSession:
 		if cred.AccessToken == "" {
 			st.Error = credentials.ErrNotAuthenticated.Error()
 			return st
 		}
+
 		st.Authenticated, st.Method, st.Storage, st.Path = true, "session", "file", path
+
 		st.Issuer, st.Account, st.Scopes = cred.Issuer, cred.Email, cred.Scopes
 		if !cred.Expiry.IsZero() {
 			st.expiry = cred.Expiry
@@ -283,5 +306,6 @@ func localStatus(opts *client.Options) authStatus {
 	default:
 		st.Error = fmt.Sprintf("credentials file has unknown kind %q; run 'admiral auth login' again", cred.Kind)
 	}
+
 	return st
 }

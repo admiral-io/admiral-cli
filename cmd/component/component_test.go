@@ -15,12 +15,15 @@ import (
 
 func run(t *testing.T, args ...string) (string, error) {
 	t.Helper()
+
 	root := NewComponentCmd(&client.Options{})
+
 	var out, errOut bytes.Buffer
 	root.Cmd.SetOut(&out)
 	root.Cmd.SetErr(&errOut)
 	root.Cmd.SetArgs(args)
 	err := root.Cmd.Execute()
+
 	return out.String() + errOut.String(), err
 }
 
@@ -96,6 +99,7 @@ func TestSplitRef(t *testing.T) {
 		assert.Equal(t, tc.name, name, tc.in)
 		assert.Equal(t, tc.ref, ref, tc.in)
 	}
+
 	for _, bad := range []string{":v1", "@sha256:ab", "cloud-sql:", "cloud-sql@"} {
 		_, _, err := splitRef(bad)
 		require.Error(t, err, bad)

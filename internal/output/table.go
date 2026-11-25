@@ -28,6 +28,7 @@ func FormatAge(ts *timestamppb.Timestamp) string {
 	if ts == nil {
 		return None
 	}
+
 	return HumanDuration(time.Since(ts.AsTime()))
 }
 
@@ -37,6 +38,7 @@ func FormatTimestamp(ts *timestamppb.Timestamp) string {
 	if ts == nil {
 		return None
 	}
+
 	return ts.AsTime().UTC().Format(time.RFC3339)
 }
 
@@ -46,6 +48,7 @@ func FormatDescribeTime(ts *timestamppb.Timestamp) string {
 	if ts == nil {
 		return None
 	}
+
 	return ts.AsTime().Local().Format(DescribeTimeLayout)
 }
 
@@ -59,16 +62,19 @@ func FormatElapsed(start, end *timestamppb.Timestamp) string {
 	if start == nil {
 		return None
 	}
+
 	var e time.Time
 	if end == nil {
 		e = time.Now()
 	} else {
 		e = end.AsTime()
 	}
+
 	d := e.Sub(start.AsTime())
 	if d < 0 {
 		d = 0
 	}
+
 	return d.Truncate(time.Second).String()
 }
 
@@ -84,22 +90,26 @@ func HumanDuration(d time.Duration) string {
 	} else if seconds < 60*2 {
 		return fmt.Sprintf("%ds", seconds)
 	}
+
 	minutes := int(d / time.Minute)
 	if minutes < 10 {
 		s := int(d/time.Second) % 60
 		if s == 0 {
 			return fmt.Sprintf("%dm", minutes)
 		}
+
 		return fmt.Sprintf("%dm%ds", minutes, s)
 	} else if minutes < 60*3 {
 		return fmt.Sprintf("%dm", minutes)
 	}
+
 	hours := int(d / time.Hour)
 	if hours < 8 {
 		m := int(d/time.Minute) % 60
 		if m == 0 {
 			return fmt.Sprintf("%dh", hours)
 		}
+
 		return fmt.Sprintf("%dh%dm", hours, m)
 	} else if hours < 48 {
 		return fmt.Sprintf("%dh", hours)
@@ -108,6 +118,7 @@ func HumanDuration(d time.Duration) string {
 		if h == 0 {
 			return fmt.Sprintf("%dd", hours/24)
 		}
+
 		return fmt.Sprintf("%dd%dh", hours/24, h)
 	} else if hours < 24*365*2 {
 		return fmt.Sprintf("%dd", hours/24)
@@ -116,8 +127,10 @@ func HumanDuration(d time.Duration) string {
 		if dy == 0 {
 			return fmt.Sprintf("%dy", hours/24/365)
 		}
+
 		return fmt.Sprintf("%dy%dd", hours/24/365, dy)
 	}
+
 	return fmt.Sprintf("%dy", hours/24/365)
 }
 
@@ -127,17 +140,22 @@ func FormatLabels(labels map[string]string) string {
 	if len(labels) == 0 {
 		return None
 	}
+
 	parts := make([]string, 0, len(labels))
 	for k, v := range labels {
 		if k == "" {
 			continue
 		}
+
 		parts = append(parts, fmt.Sprintf("%s=%s", k, v))
 	}
+
 	if len(parts) == 0 {
 		return None
 	}
+
 	slices.Sort(parts)
+
 	return strings.Join(parts, ",")
 }
 
@@ -147,11 +165,14 @@ func LabelLines(labels map[string]string) []string {
 	for k := range labels {
 		keys = append(keys, k)
 	}
+
 	sort.Strings(keys)
+
 	out := make([]string, 0, len(keys))
 	for _, k := range keys {
 		out = append(out, k+"="+labels[k])
 	}
+
 	return out
 }
 
@@ -161,15 +182,19 @@ func FormatActor(a *commonv1.ActorRef) string {
 	if a == nil {
 		return None
 	}
+
 	if a.DisplayName != "" {
 		return a.DisplayName
 	}
+
 	if a.Email != "" {
 		return a.Email
 	}
+
 	if a.Id != "" {
 		return a.Id
 	}
+
 	return None
 }
 
@@ -180,6 +205,7 @@ func FormatActorWithID(a *commonv1.ActorRef) string {
 	if a.GetId() == "" || name == a.GetId() {
 		return name
 	}
+
 	return name + " (" + a.GetId() + ")"
 }
 
@@ -189,13 +215,16 @@ func Truncate(s string, width int) string {
 	if width < 0 {
 		width = 0
 	}
+
 	r := []rune(s)
 	if len(r) <= width {
 		return s
 	}
+
 	if width <= 1 {
 		return string(r[:width])
 	}
+
 	return string(r[:width-1]) + "…"
 }
 
@@ -206,6 +235,7 @@ func OrEmpty(s string) string {
 	if strings.TrimSpace(s) == "" {
 		return None
 	}
+
 	return s
 }
 
@@ -214,5 +244,6 @@ func Tildify(p string) string {
 	if home, err := os.UserHomeDir(); err == nil && home != "" && strings.HasPrefix(p, home+string(os.PathSeparator)) {
 		return "~" + p[len(home):]
 	}
+
 	return p
 }

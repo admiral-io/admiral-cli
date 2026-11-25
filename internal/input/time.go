@@ -13,8 +13,10 @@ func ParseTime(flag, value string, now time.Time) (time.Time, error) {
 	if d, err := time.ParseDuration(value); err == nil {
 		return now.Add(-d), nil
 	}
+
 	if t, err := time.Parse(time.RFC3339, value); err == nil {
 		return t, nil
 	}
+
 	return time.Time{}, cmderr.Usage("invalid value %q for --%s: use a duration like 10m or an RFC3339 timestamp", value, flag)
 }

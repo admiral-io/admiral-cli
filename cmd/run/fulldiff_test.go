@@ -13,8 +13,10 @@ import (
 
 func value(t *testing.T, v map[string]any) *structpb.Value {
 	t.Helper()
+
 	sv, err := structpb.NewValue(v)
 	require.NoError(t, err)
+
 	return sv
 }
 
@@ -23,6 +25,7 @@ func keyPath(keys ...string) *agentv1.DiffPath {
 	for _, k := range keys {
 		p.Segments = append(p.Segments, &agentv1.DiffPathSegment{Segment: &agentv1.DiffPathSegment_Key{Key: k}})
 	}
+
 	return p
 }
 
@@ -43,6 +46,7 @@ func TestFullDiffShowsTheWholeResourceWithItsChangeMarked(t *testing.T) {
 		Component: "api", Action: agentv1.ResourceChange_ACTION_UPDATE, Resource: k8sRef("Deployment", "api"),
 		Before: value(t, deployment("35bd16b")), After: value(t, deployment("15df5e1")),
 	}}}
+
 	var b bytes.Buffer
 	WriteFullDiff(&b, d, nil)
 	assert.Equal(t, `~ api: v1 Deployment podinfo-dev/api (update)
@@ -85,6 +89,7 @@ func TestFullDiffMarksCreatesDeletesAndWhatItCannotShow(t *testing.T) {
 			UnknownPaths: []*agentv1.DiffPath{keyPath("arn")},
 		},
 	}}
+
 	var b bytes.Buffer
 	WriteFullDiff(&b, d, nil)
 	out := b.String()

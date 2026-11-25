@@ -47,15 +47,19 @@ old configuration is read back.`,
 			if err != nil {
 				return err
 			}
+
 			current, err := c.Credential().GetCredential(cmd.Context(), &credentialv1.GetCredentialRequest{CredentialId: id})
 			if err != nil {
 				return err
 			}
+
 			cred := current.Credential
+
 			auth, err := secret.authConfig(cmd, typeName(cred.Type))
 			if err != nil {
 				return err
 			}
+
 			cred.AuthConfig = auth
 
 			resp, err := c.Credential().UpdateCredential(cmd.Context(), &credentialv1.UpdateCredentialRequest{
@@ -65,8 +69,10 @@ old configuration is read back.`,
 			if err != nil {
 				return err
 			}
+
 			output.Confirmed(cmd.ErrOrStderr(), "credential", cred.Name, "rotated")
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+
 			return p.PrintOne(resp.Credential, resp.Credential.Name, credentialTable.Render(p, resp.Credential))
 		},
 	}

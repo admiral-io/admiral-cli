@@ -62,8 +62,10 @@ func Execute(version version.Version, exit func(int), args []string) {
 	if err != nil {
 		output.Writef(os.Stderr, "Error: %s\n", err)
 		exit(cmderr.ExitError)
+
 		return
 	}
+
 	root.Execute(args)
 }
 
@@ -90,14 +92,18 @@ func (cmd *rootCmd) Execute(args []string) {
 		if errors.Is(err, context.Canceled) || ctx.Err() != nil {
 			output.Writef(stderr, "\nInterrupted.\n")
 			cmd.exit(cmderr.ExitInterrupted)
+
 			return
 		}
+
 		if !cmderr.IsReported(err) {
 			output.Writef(stderr, "Error: %s\n", formatError(err))
+
 			if hint := errorHint(err); hint != "" {
 				output.Writef(stderr, "%s\n", hint)
 			}
 		}
+
 		cmd.exit(exitCode(err))
 	}
 }
@@ -130,6 +136,7 @@ Documentation: https://admiral.io/docs`,
 			if root.noInput {
 				streams.DisableInput()
 			}
+
 			cmd.SetContext(iostreams.WithStreams(cmd.Context(), streams))
 
 			if root.verbose {
@@ -151,6 +158,7 @@ Documentation: https://admiral.io/docs`,
 				// silently drop a `config set server …` the user relies on.
 				output.Writef(cmd.ErrOrStderr(), "Warning: %v; using defaults for the settings it holds.\n", err)
 			}
+
 			if settings.Get("token") != "" {
 				output.Writef(cmd.ErrOrStderr(), "Warning: config.json contains a 'token' entry that is no longer read. Remove it; credentials belong in credentials.json via 'admiral auth login'.\n")
 			}
@@ -162,25 +170,30 @@ Documentation: https://admiral.io/docs`,
 					clientOpts.ServerAddr = v
 				}
 			}
+
 			if !cmd.Flags().Changed("auth-server") {
 				if v := os.Getenv(envAuthServer); v != "" {
 					clientOpts.Issuer = v
 				}
 			}
+
 			if !cmd.Flags().Changed("client-id") {
 				if v := os.Getenv(envClientID); v != "" {
 					clientOpts.ClientID = v
 				}
 			}
+
 			if !cmd.Flags().Changed("timeout") {
 				if v := os.Getenv(envTimeout); v != "" {
 					d, err := time.ParseDuration(v)
 					if err != nil {
 						return cmderr.Usage("invalid %s %q: %v", envTimeout, v, err)
 					}
+
 					clientOpts.Timeout = d
 				}
 			}
+
 			// TLS can be weakened from the file as well as by flag. A flag
 			// is typed each time; a file entry is easy to forget, so say
 			// so unless the target is the local machine anyway.
@@ -190,12 +203,14 @@ Documentation: https://admiral.io/docs`,
 					warnWeakTLS(cmd, "insecure", clientOpts.ServerAddr)
 				}
 			}
+
 			if !cmd.Flags().Changed("plaintext") {
 				if v := settings.Get("plaintext"); v == "true" {
 					clientOpts.PlainText = true
 					warnWeakTLS(cmd, "plaintext", clientOpts.ServerAddr)
 				}
 			}
+
 			if !cmd.Flags().Changed("output") {
 				if v := settings.Get("output"); v != "" {
 					root.outputFormat = v
@@ -206,6 +221,7 @@ Documentation: https://admiral.io/docs`,
 			if err != nil {
 				return cmderr.Usage("%s", err.Error())
 			}
+
 			clientOpts.OutputFormat = f
 
 			return nil
@@ -289,15 +305,19 @@ func warnWeakTLS(cmd *cobra.Command, key, server string) {
 	if err != nil {
 		host = server
 	}
+
 	if host == "localhost" || host == "" {
 		return
 	}
+
 	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
 		return
 	}
+
 	effect := "the certificate of " + server + " is not verified"
 	if key == "plaintext" {
 		effect = "the connection to " + server + " is not encrypted"
 	}
+
 	output.Writef(cmd.ErrOrStderr(), "Warning: config.json sets %s=true, so %s; run 'admiral config unset %s' if that is not intended.\n", key, effect, key)
 }

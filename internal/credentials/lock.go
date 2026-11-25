@@ -20,6 +20,7 @@ func withLock(configDir string, fn func() error) error {
 	if err := os.MkdirAll(configDir, 0700); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
+
 	f, err := os.OpenFile(filepath.Join(configDir, lockFileName), os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return fmt.Errorf("opening credentials lock: %w", err)
@@ -29,6 +30,7 @@ func withLock(configDir string, fn func() error) error {
 	if err := lockFile(f); err != nil {
 		return fmt.Errorf("locking credentials: %w", err)
 	}
+
 	defer unlockFile(f) //nolint:errcheck // released on close regardless
 
 	return fn()

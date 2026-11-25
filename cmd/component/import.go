@@ -87,16 +87,19 @@ A new version imported without --baseline-values keeps the previous one's.`,
 			if !manifest.ValidName(name) {
 				return cmderr.Usage("component name %q must be lowercase letters, digits and hyphens", name)
 			}
+
 			labels, err := flags.ParseLabels(labelStrs)
 			if err != nil {
 				return err
 			}
+
 			var baselineJSON string
 			if baseline != "" {
 				if baselineJSON, err = readBaseline(baseline); err != nil {
 					return err
 				}
 			}
+
 			c, err := client.CreateClient(cmd.Context(), opts)
 			if err != nil {
 				return err
@@ -117,33 +120,42 @@ A new version imported without --baseline-values keeps the previous one's.`,
 				if err != nil {
 					return err
 				}
+
 				source = originSource
+
 				if artifact == "" {
 					artifact = originArtifact
 				}
 			}
+
 			through, err := throughSource(cmd, c.Source(), source, name, artifact, version)
 			if err != nil {
 				return err
 			}
+
 			req.SourceId, req.Artifact, req.Version = through.sourceID, through.artifact, through.version
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
 			output.Writef(p.Err(), "Importing %s\n", through.label)
+
 			resp, err := c.Registry().ImportComponent(cmd.Context(), req)
 			if err != nil {
 				return withMoveHint(err, name)
 			}
+
 			ver := resp.Version
 			// The source's own digest is in the version's provenance; the
 			// digest to pin is the version's, which the next line prints.
 			if prov := ver.Provenance; prov != nil {
 				output.Writef(p.Err(), "Imported %s%s\n", prov.Uri, atRef(prov.Ref))
 			}
+
 			if resp.ResolvedFrom != "" {
 				output.Writef(p.Err(), "Resolved %s to %s\n", resp.ResolvedFrom, ver.Provenance.GetRef())
 			}
+
 			reportPublished(cmd, p, resp.Component, ver, resp.Unchanged)
+
 			return p.PrintOne(ver, resp.Component.Name+"@"+ver.Digest, versionTable.Render(p, ver))
 		},
 	}
@@ -168,14 +180,17 @@ func readBaseline(file string) (string, error) {
 	if err != nil {
 		return "", cmderr.Usage("cannot read --baseline-values: %v", err)
 	}
+
 	tree, _, err := valuesfile.Parse(data)
 	if err != nil {
 		return "", cmderr.Usage("--baseline-values %s: %v", file, err)
 	}
+
 	s, err := valuesfile.EncodeJSON(tree)
 	if err != nil {
 		return "", fmt.Errorf("--baseline-values %s: %w", file, err)
 	}
+
 	return s, nil
 }
 
@@ -183,5 +198,6 @@ func atRef(ref string) string {
 	if ref == "" {
 		return ""
 	}
+
 	return " at " + ref
 }

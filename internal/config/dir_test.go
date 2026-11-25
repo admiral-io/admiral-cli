@@ -12,6 +12,7 @@ func TestConfigDir(t *testing.T) {
 		if orig, ok := os.LookupEnv(key); ok {
 			t.Setenv(key, orig) // restored automatically after test
 		}
+
 		os.Unsetenv(key)
 	}
 
@@ -23,6 +24,7 @@ func TestConfigDir(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
+
 		if got != "/custom/admiral" {
 			t.Fatalf("expected /custom/admiral, got %q", got)
 		}
@@ -36,6 +38,7 @@ func TestConfigDir(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
+
 		want := filepath.Join("/xdg/home", "admiral")
 		if got != want {
 			t.Fatalf("expected %q, got %q", want, got)
@@ -55,6 +58,7 @@ func TestConfigDir(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error getting home dir: %v", err)
 		}
+
 		want := filepath.Join(homeDir, ".config", "admiral")
 		if got != want {
 			t.Fatalf("expected %q, got %q", want, got)

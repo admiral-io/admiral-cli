@@ -77,6 +77,7 @@ func TestApp_NotFound(t *testing.T) {
 	require.EqualError(t, err, `project "nope" not found`)
 	require.Equal(t, "To see projects, run: admiral project list", cmderr.Hint(err))
 	require.Equal(t, cmderr.ExitError, cmderr.Code(err))
+
 	var nf *NotFoundError
 	require.ErrorAs(t, err, &nf)
 }

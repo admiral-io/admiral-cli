@@ -55,6 +55,7 @@ func (e *NotFoundError) Error() string {
 	if e.Scope != "" {
 		return fmt.Sprintf("%s %q not found %s", e.Kind, e.Name, e.Scope)
 	}
+
 	return fmt.Sprintf("%s %q not found", e.Kind, e.Name)
 }
 
@@ -63,6 +64,7 @@ func (e *NotFoundError) Hint() string {
 	if e.ListCommand == "" {
 		return ""
 	}
+
 	return fmt.Sprintf("To see %ss, run: admiral %s", e.Kind, e.ListCommand)
 }
 
@@ -87,12 +89,14 @@ func Project(ctx context.Context, c projectv1.ProjectAPIClient, nameOrID string)
 	if nameOrID == "" {
 		return "", cmderr.UsageHint("Pass --project.", "no project specified")
 	}
+
 	return byName(ctx, "project", nameOrID, "", "project list", "",
 		func(ctx context.Context, f string) ([]*projectv1.Project, error) {
 			resp, err := c.ListProjects(ctx, &projectv1.ListProjectsRequest{Filter: f})
 			if err != nil {
 				return nil, err
 			}
+
 			return resp.Projects, nil
 		},
 		func(a *projectv1.Project) string { return a.Name },
@@ -107,16 +111,20 @@ func Environment(ctx context.Context, envs environmentv1.EnvironmentAPIClient, a
 	if IsID("env", nameOrID) {
 		return nameOrID, nil
 	}
+
 	if nameOrID == "" {
 		return "", cmderr.UsageHint("Pass --env as a name or project/environment.", "no environment specified")
 	}
+
 	if app == "" {
 		return "", cmderr.UsageHint("Pass --project or give the environment as project/environment.", "no project specified")
 	}
+
 	appID, err := Project(ctx, apps, app)
 	if err != nil {
 		return "", err
 	}
+
 	return byName(ctx, "environment", nameOrID,
 		fmt.Sprintf("in project %q", app), "env list --project "+app, "",
 		func(ctx context.Context, f string) ([]*environmentv1.Environment, error) {
@@ -124,6 +132,7 @@ func Environment(ctx context.Context, envs environmentv1.EnvironmentAPIClient, a
 			if err != nil {
 				return nil, err
 			}
+
 			return resp.Environments, nil
 		},
 		func(e *environmentv1.Environment) string { return e.Name },
@@ -139,6 +148,7 @@ func Credential(ctx context.Context, c credentialv1.CredentialAPIClient, nameOrI
 			if err != nil {
 				return nil, err
 			}
+
 			return resp.Credentials, nil
 		},
 		func(c *credentialv1.Credential) string { return c.Name },
@@ -154,6 +164,7 @@ func PersonalAccessToken(ctx context.Context, c apikeyv1.ApiKeyAPIClient, nameOr
 			if err != nil {
 				return nil, err
 			}
+
 			return resp.ApiKeys, nil
 		},
 		func(t *apikeyv1.ApiKey) string { return t.Name },
@@ -175,6 +186,7 @@ func byName[T any](
 	if IsID(prefixOf[kind], nameOrID) {
 		return nameOrID, nil
 	}
+
 	if nameOrID == "" {
 		return "", cmderr.Usage("no %s specified", kind)
 	}
@@ -183,17 +195,20 @@ func byName[T any](
 	if err != nil {
 		return "", err
 	}
+
 	items, err := list(ctx, filter.And(scopeFilter, byName))
 	if err != nil {
 		return "", fmt.Errorf("looking up %s %q: %w", kind, nameOrID, err)
 	}
 
 	var ids []string
+
 	for _, it := range items {
 		if nameOf(it) == nameOrID {
 			ids = append(ids, idOf(it))
 		}
 	}
+
 	switch len(ids) {
 	case 0:
 		return "", &NotFoundError{Kind: kind, Name: nameOrID, Scope: scope, ListCommand: listCommand}
@@ -210,15 +225,19 @@ func Component(ctx context.Context, c registryv1.RegistryAPIClient, nameOrID str
 	if IsID("cmp", nameOrID) {
 		return nameOrID, nil
 	}
+
 	if nameOrID == "" {
 		return "", cmderr.Usage("no component specified")
 	}
+
 	resp, err := c.GetComponent(ctx, &registryv1.GetComponentRequest{Component: nameOrID})
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			return "", &NotFoundError{Kind: "component", Name: nameOrID, ListCommand: "component list"}
 		}
+
 		return "", fmt.Errorf("looking up component %q: %w", nameOrID, err)
 	}
+
 	return resp.Component.Id, nil
 }

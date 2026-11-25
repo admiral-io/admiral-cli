@@ -32,8 +32,10 @@ func newGetCmd(opts *client.Options) *cobra.Command {
 			if err != nil {
 				return err
 			}
+
 			p := output.NewPrinter(cmd, opts.OutputFormat)
 			names := sourceNames(cmd, c.Source(), resp.Component)
+
 			return p.PrintOne(resp.Component, resp.Component.Name, componentTableWith(names).Render(p, resp.Component))
 		},
 	}

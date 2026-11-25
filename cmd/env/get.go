@@ -52,7 +52,9 @@ func newGetCmd(opts *client.Options) *cobra.Command {
 			if err != nil {
 				return err
 			}
+
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+
 			return p.PrintOne(resp.Environment, resp.Environment.Name, envTable.Render(p, resp.Environment))
 		},
 	}

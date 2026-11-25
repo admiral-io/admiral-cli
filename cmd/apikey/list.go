@@ -11,6 +11,7 @@ import (
 
 func newListCmd(opts *client.Options) *cobra.Command {
 	var paging flags.PagingOptions
+
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List your API keys",
@@ -24,6 +25,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 				return err
 			}
 			defer c.Close() //nolint:errcheck
+
 			keys, next, err := flags.Pages(paging, func(token string) ([]*apikeyv1.ApiKey, string, error) {
 				resp, err := c.ApiKey().ListApiKeys(cmd.Context(), &apikeyv1.ListApiKeysRequest{
 					PageSize: paging.PageSize, PageToken: token,
@@ -31,12 +33,15 @@ func newListCmd(opts *client.Options) *cobra.Command {
 				if err != nil {
 					return nil, "", err
 				}
+
 				return resp.ApiKeys, resp.NextPageToken, nil
 			})
 			if err != nil {
 				return err
 			}
+
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+
 			return p.PrintList(output.List{
 				Kind:          "api keys",
 				Items:         output.Messages(keys),
@@ -46,5 +51,6 @@ func newListCmd(opts *client.Options) *cobra.Command {
 		},
 	}
 	flags.Paging(cmd, &paging)
+
 	return cmd
 }

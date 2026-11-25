@@ -57,5 +57,6 @@ an environment names none of them and the command lists them instead.`,
 	)
 
 	root.Cmd = cmd
+
 	return root
 }

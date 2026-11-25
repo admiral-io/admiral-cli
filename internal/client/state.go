@@ -89,14 +89,17 @@ func NewStateClient(ctx context.Context, opts *Options) (*StateClient, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	cred, err := credentials.ResolveToken(ctx, opts.ConfigDir)
 	if err != nil {
 		return nil, err
 	}
+
 	timeout := opts.Timeout
 	if timeout == 0 {
 		timeout = DefaultTimeout
 	}
+
 	return &StateClient{
 		base: base,
 		http: &http.Client{Timeout: timeout, Transport: &http.Transport{
@@ -115,17 +118,21 @@ func StateBaseURL(opts *Options) (string, error) {
 	if modeFor(opts).plaintext() {
 		scheme = "http"
 	}
+
 	if h := os.Getenv(EnvStateHost); h != "" {
 		return scheme + "://" + h, nil
 	}
+
 	host, _, err := net.SplitHostPort(opts.ServerAddr)
 	if err != nil {
 		host = opts.ServerAddr
 	}
+
 	rest, ok := strings.CutPrefix(host, "api.")
 	if !ok {
 		return "", fmt.Errorf("cannot tell the state host from server %q; set %s", opts.ServerAddr, EnvStateHost)
 	}
+
 	return scheme + "://state." + rest, nil
 }
 
@@ -136,21 +143,26 @@ func (c *StateClient) ListStateVersions(ctx context.Context, org, workspace stri
 	q := url.Values{}
 	q.Set("filter[organization][name]", org)
 	q.Set("filter[workspace][name]", workspace)
+
 	if pageSize > 0 {
 		q.Set("page[size]", strconv.Itoa(int(pageSize)))
 	}
+
 	if pageToken != "" {
 		q.Set("page[number]", pageToken)
 	}
+
 	resp, err := c.get(ctx, "/api/v2/state-versions?"+q.Encode())
 	if err != nil {
 		return nil, "", err
 	}
 	defer resp.Body.Close() //nolint:errcheck
+
 	var list stateVersionList
 	if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
 		return nil, "", fmt.Errorf("reading state versions: %w", err)
 	}
+
 	out := make([]*StateVersion, len(list.Data))
 	for i, d := range list.Data {
 		out[i] = &StateVersion{
@@ -162,10 +174,12 @@ func (c *StateClient) ListStateVersions(ctx context.Context, org, workspace stri
 			},
 		}
 	}
+
 	next := ""
 	if n := list.Meta.Pagination.NextPage; n != nil {
 		next = strconv.Itoa(*n)
 	}
+
 	return out, next, nil
 }
 
@@ -175,6 +189,7 @@ func (c *StateClient) DownloadStateVersion(ctx context.Context, versionID string
 	if err != nil {
 		return nil, err
 	}
+
 	return resp.Body, nil
 }
 
@@ -185,8 +200,10 @@ func (c *StateClient) get(ctx context.Context, path string) (*http.Response, err
 	if err != nil {
 		return nil, err
 	}
+
 	if resp.StatusCode == http.StatusUnauthorized && c.session {
 		_ = resp.Body.Close()
+
 		fresh, rerr := credentials.ForceRefresh(ctx, c.configDir)
 		if rerr == nil {
 			c.token = fresh.Token
@@ -195,10 +212,12 @@ func (c *StateClient) get(ctx context.Context, path string) (*http.Response, err
 			}
 		}
 	}
+
 	if resp.StatusCode/100 != 2 {
 		defer resp.Body.Close() //nolint:errcheck
 		return nil, stateError(resp)
 	}
+
 	return resp, nil
 }
 
@@ -207,7 +226,9 @@ func (c *StateClient) do(ctx context.Context, path string) (*http.Response, erro
 	if err != nil {
 		return nil, err
 	}
+
 	req.Header.Set("Authorization", "Bearer "+c.token)
+
 	return c.http.Do(req)
 }
 
@@ -223,8 +244,10 @@ func stateError(resp *http.Response) error {
 			Title  string `json:"title"`
 		} `json:"errors"`
 	}
+
 	_ = json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&body)
 	msg := http.StatusText(resp.StatusCode)
+
 	if len(body.Errors) > 0 {
 		if body.Errors[0].Detail != "" {
 			msg = body.Errors[0].Detail
@@ -232,8 +255,10 @@ func stateError(resp *http.Response) error {
 			msg = body.Errors[0].Title
 		}
 	}
+
 	if resp.StatusCode == http.StatusNotFound {
 		return fmt.Errorf("%w: %s", ErrStateNotFound, msg)
 	}
+
 	return fmt.Errorf("admiral-state: %s", msg)
 }

@@ -33,6 +33,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 			if err != nil {
 				return err
 			}
+
 			var byType string
 			if typ != "" {
 				if byType, err = filter.Eq("type", typeEnum[typ].String()); err != nil {
@@ -55,6 +56,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 				if err != nil {
 					return nil, "", err
 				}
+
 				return resp.Credentials, resp.NextPageToken, nil
 			})
 			if err != nil {
@@ -62,6 +64,7 @@ func newListCmd(opts *client.Options) *cobra.Command {
 			}
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+
 			return p.PrintList(output.List{
 				Kind:          "credentials",
 				Items:         output.Messages(creds),

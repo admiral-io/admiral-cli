@@ -35,6 +35,7 @@ the version's full sha256, as printed by publish or 'version list -o wide'.`,
 			if err != nil {
 				return err
 			}
+
 			if tag == "" {
 				return cmderr.Usage("%q names no tag; use <name>:<tag>", args[0])
 			}
@@ -49,6 +50,7 @@ the version's full sha256, as printed by publish or 'version list -o wide'.`,
 			if err != nil {
 				return err
 			}
+
 			resp, err := c.Registry().SetTag(cmd.Context(), &registryv1.SetTagRequest{
 				ComponentId: componentID, Name: tag, Digest: digest,
 			})
@@ -58,6 +60,7 @@ the version's full sha256, as printed by publish or 'version list -o wide'.`,
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
 			output.Writef(p.Err(), "Tagged %s:%s -> %s\n", name, resp.Tag.Name, shortDigest(resp.Tag.Digest))
+
 			return p.PrintOne(resp.Tag, name+":"+resp.Tag.Name, tagTable.Render(p, resp.Tag))
 		},
 	}

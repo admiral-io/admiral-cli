@@ -49,5 +49,6 @@ Commands accept a credential name or ID as the positional argument.`,
 	)
 
 	root.Cmd = cmd
+
 	return root
 }

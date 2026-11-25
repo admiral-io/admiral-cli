@@ -18,6 +18,7 @@ func Quote(v string) (string, error) {
 	if strings.HasSuffix(v, `\`) {
 		return "", fmt.Errorf("value %q cannot be used in a filter: it ends with a backslash", v)
 	}
+
 	return "'" + strings.ReplaceAll(v, "'", `\'`) + "'", nil
 }
 
@@ -29,10 +30,12 @@ func Eq(field, value string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	v, err := Quote(value)
 	if err != nil {
 		return "", err
 	}
+
 	return "field[" + f + "] = " + v, nil
 }
 
@@ -44,6 +47,7 @@ func And(preds ...string) string {
 			out = append(out, p)
 		}
 	}
+
 	return strings.Join(out, " AND ")
 }
 
@@ -53,11 +57,13 @@ func In(field string, values []string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	quoted := make([]string, len(values))
 	for i, v := range values {
 		if quoted[i], err = Quote(v); err != nil {
 			return "", err
 		}
 	}
+
 	return "field[" + f + "] IN [" + strings.Join(quoted, ", ") + "]", nil
 }

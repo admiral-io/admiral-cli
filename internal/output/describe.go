@@ -87,20 +87,24 @@ func (d *Describe) Render(w io.Writer) error {
 	if err := d.root.render(w, 0); err != nil {
 		return err
 	}
+
 	if d.trailer != nil {
 		var b strings.Builder
 		d.trailer(&b)
+
 		if t := strings.TrimLeft(b.String(), "\n"); t != "" {
 			if _, err := fmt.Fprintf(w, "\n%s", t); err != nil {
 				return err
 			}
 		}
 	}
+
 	for _, h := range d.hints {
 		if _, err := fmt.Fprintf(w, "\n%s\n", h); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -109,6 +113,7 @@ func (b *Block) Field(key, value string) {
 	if strings.TrimSpace(value) == "" {
 		value = None
 	}
+
 	b.items = append(b.items, item{key: key, values: []string{value}})
 }
 
@@ -118,6 +123,7 @@ func (b *Block) Fields(key string, values []string) {
 	if len(values) == 0 {
 		values = []string{None}
 	}
+
 	b.items = append(b.items, item{key: key, values: values})
 }
 
@@ -145,13 +151,17 @@ func (b *Block) Table(headers []string, rows [][]string) {
 // before or after it, are separated by a blank line.
 func (b *Block) render(w io.Writer, indent int) error {
 	pad := strings.Repeat(" ", indent)
+
 	var tw *tabwriter.Writer
+
 	flush := func() error {
 		if tw == nil {
 			return nil
 		}
+
 		err := tw.Flush()
 		tw = nil
+
 		return err
 	}
 
@@ -161,14 +171,17 @@ func (b *Block) render(w io.Writer, indent int) error {
 			if err := flush(); err != nil {
 				return err
 			}
+
 			if i > 0 && (indent == 0 || b.items[i-1].table != nil) {
 				if _, err := fmt.Fprintln(w); err != nil {
 					return err
 				}
 			}
+
 			if _, err := fmt.Fprintf(w, "%s%s:\n", pad, it.key); err != nil {
 				return err
 			}
+
 			if err := it.block.render(w, indent+2); err != nil {
 				return err
 			}
@@ -176,11 +189,13 @@ func (b *Block) render(w io.Writer, indent int) error {
 			if err := flush(); err != nil {
 				return err
 			}
+
 			if i > 0 {
 				if _, err := fmt.Fprintln(w); err != nil {
 					return err
 				}
 			}
+
 			if err := it.table.render(w, indent); err != nil {
 				return err
 			}
@@ -188,6 +203,7 @@ func (b *Block) render(w io.Writer, indent int) error {
 			if err := flush(); err != nil {
 				return err
 			}
+
 			if _, err := fmt.Fprintf(w, "%s%s\n", pad, it.line); err != nil {
 				return err
 			}
@@ -195,12 +211,15 @@ func (b *Block) render(w io.Writer, indent int) error {
 			if tw == nil {
 				tw = tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 			}
+
 			Writef(tw, "%s%s:\t%s\n", pad, it.key, it.values[0])
+
 			for _, v := range it.values[1:] {
 				Writef(tw, "%s\t%s\n", pad, v)
 			}
 		}
 	}
+
 	return flush()
 }
 
@@ -208,11 +227,14 @@ func (t *table) render(w io.Writer, indent int) error {
 	pad := strings.Repeat(" ", indent)
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	Writef(tw, "%s%s\n", pad, strings.Join(t.headers, "\t"))
+
 	under := make([]string, len(t.headers))
 	for i, h := range t.headers {
 		under[i] = strings.Repeat("-", len(h))
 	}
+
 	Writef(tw, "%s%s\n", pad, strings.Join(under, "\t"))
+
 	for _, r := range t.rows {
 		cells := make([]string, len(t.headers))
 		for i := range cells {
@@ -222,8 +244,10 @@ func (t *table) render(w io.Writer, indent int) error {
 				cells[i] = None
 			}
 		}
+
 		Writef(tw, "%s%s\n", pad, strings.Join(cells, "\t"))
 	}
+
 	return tw.Flush()
 }
 
@@ -235,6 +259,7 @@ func (p *Printer) PrintDescribe(d *Describe, getCommand string) error {
 		return cmderr.UsageHint("For machine-readable output, run: "+getCommand+" -o "+p.Format.String(),
 			"describe has no -o %s output", p.Format)
 	}
+
 	return d.Render(p.IO.Out)
 }
 
@@ -249,28 +274,35 @@ func (p *Printer) PrintStatus(v any, d *Describe) error {
 		if msg, ok := v.(proto.Message); ok {
 			return p.printJSON(msg)
 		}
+
 		raw, err := json.Marshal(v)
 		if err != nil {
 			return fmt.Errorf("failed to marshal response: %w", err)
 		}
+
 		b, err := p.normalizeJSON(raw)
 		if err != nil {
 			return err
 		}
+
 		_, err = fmt.Fprintln(p.IO.Out, string(b))
+
 		return err
 	case FormatYAML:
 		if msg, ok := v.(proto.Message); ok {
 			return p.printYAML(msg)
 		}
+
 		raw, err := json.Marshal(v)
 		if err != nil {
 			return fmt.Errorf("failed to marshal response: %w", err)
 		}
+
 		var obj any
 		if err := json.Unmarshal(raw, &obj); err != nil {
 			return fmt.Errorf("failed to parse json: %w", err)
 		}
+
 		return p.writeYAML(obj)
 	case FormatTable, FormatWide:
 		return d.Render(p.IO.Out)

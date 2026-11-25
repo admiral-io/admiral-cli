@@ -31,20 +31,24 @@ To clear a default instead, set the path to null.`,
 			if err != nil {
 				return err
 			}
+
 			es := make([]*changesetv1.Edit, 0, len(args)-1)
 			for _, s := range args[1:] {
 				comp, path, err := valuesfile.ParsePath(s)
 				if err != nil {
 					return cmderr.Usage("%v", err)
 				}
+
 				if err := componentName(comp); err != nil {
 					return err
 				}
+
 				es = append(es, &changesetv1.Edit{Edit: &changesetv1.Edit_UnsetValue{UnsetValue: &changesetv1.UnsetValue{
 					Component: comp,
 					Path:      pathSegments(path),
 				}}})
 			}
+
 			return edits(cmd, opts, ref, ifRevision(cmd, ifRev), po, es...)
 		},
 	}

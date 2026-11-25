@@ -15,13 +15,16 @@ import (
 
 func run(t *testing.T, opts *admiralclient.Options, args ...string) (stdout, stderr string, err error) {
 	t.Helper()
+
 	root := NewConfigCmd(opts).Cmd
+
 	var out, errOut bytes.Buffer
 	root.SetOut(&out)
 	root.SetErr(&errOut)
 	root.SetIn(strings.NewReader(""))
 	root.SetArgs(args)
 	err = root.Execute()
+
 	return out.String(), errOut.String(), err
 }
 
@@ -54,6 +57,7 @@ func TestList_ReportsSources(t *testing.T) {
 
 	stdout, _, err := run(t, opts, "list")
 	require.NoError(t, err)
+
 	var got map[string]settingJSON
 	require.NoError(t, json.Unmarshal([]byte(stdout), &got))
 	require.Equal(t, settingJSON{Value: "json", Source: "config file"}, got["output"])
@@ -71,6 +75,7 @@ func TestList_ReportsSources(t *testing.T) {
 // usage errors (exit 2).
 func TestUsageErrors(t *testing.T) {
 	opts := &admiralclient.Options{ConfigDir: t.TempDir(), OutputFormat: output.FormatTable}
+
 	cases := []struct {
 		args []string
 		want string

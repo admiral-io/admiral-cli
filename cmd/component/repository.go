@@ -40,6 +40,7 @@ func publishRepository(cmd *cobra.Command, opts *client.Options, o repositoryOpt
 	if err != nil {
 		return err
 	}
+
 	root := filepath.Dir(o.manifestPath)
 
 	// Explicit --tag applies to every publish as given. Otherwise the branch
@@ -48,12 +49,14 @@ func publishRepository(cmd *cobra.Command, opts *client.Options, o repositoryOpt
 	tags, sha := o.tags, ""
 	if len(tags) == 0 {
 		var skipped string
+
 		tags, sha, skipped = defaultTags(ctx, root)
 		if skipped != "" {
 			what := "no tag"
 			if sha != "" {
 				what = sha + " only"
 			}
+
 			output.Writef(p.Err(), "branch %s is not a valid tag name; tagging %s (use --tag to choose one)\n", skipped, what)
 		}
 	}
@@ -70,14 +73,18 @@ func publishRepository(cmd *cobra.Command, opts *client.Options, o repositoryOpt
 		names    []string
 		failures []string
 	)
+
 	for _, c := range m.Components {
 		abs := filepath.Join(root, filepath.FromSlash(c.Path))
+
 		packed, err := pack(ctx, p, abs, c.Path)
 		if err != nil {
 			output.Writef(p.Err(), "%s: %v\n", c.Name, err)
 			failures = append(failures, c.Name)
+
 			continue
 		}
+
 		resp, err := publishOne(cmd, p, cl, publishRequest{
 			name: c.Name, tags: tags, description: o.description, labels: o.labels,
 			dir: abs, packed: packed,
@@ -85,8 +92,10 @@ func publishRepository(cmd *cobra.Command, opts *client.Options, o repositoryOpt
 		if err != nil {
 			output.Writef(p.Err(), "%s: %v\n", c.Name, err)
 			failures = append(failures, c.Name)
+
 			continue
 		}
+
 		resp.Version.Tags = applyTags(ctx, p, cl, resp, packed, afterPublish{sha: sha})
 		versions = append(versions, resp.Version)
 		rows = append(rows, publishedRow{name: resp.Component.Name, ver: resp.Version, unchanged: resp.Unchanged})
@@ -100,9 +109,11 @@ func publishRepository(cmd *cobra.Command, opts *client.Options, o repositoryOpt
 	}, publishedTable.Render(p, rows...)); err != nil {
 		return err
 	}
+
 	if len(failures) > 0 {
 		return fmt.Errorf("%d of %d components failed to publish: %s", len(failures), len(m.Components), strings.Join(failures, ", "))
 	}
+
 	return nil
 }
 
@@ -118,6 +129,7 @@ func defaultTags(ctx context.Context, root string) (tags []string, sha, skipped 
 	if branch == "HEAD" || branch == "" {
 		branch = os.Getenv("GITHUB_REF_NAME")
 	}
+
 	switch {
 	case branch == "":
 	case strings.Contains(branch, "/"):
@@ -125,9 +137,11 @@ func defaultTags(ctx context.Context, root string) (tags []string, sha, skipped 
 	default:
 		tags = append(tags, branch)
 	}
+
 	if short, err := gitOutput(ctx, root, "rev-parse", "--short=7", "HEAD"); err == nil && short != "" {
 		sha = "sha-" + short
 	}
+
 	return tags, sha, skipped
 }
 
@@ -136,6 +150,7 @@ func gitOutput(ctx context.Context, dir string, args ...string) (string, error) 
 	if err != nil {
 		return "", err
 	}
+
 	return strings.TrimSpace(string(out)), nil
 }
 
@@ -155,6 +170,7 @@ var publishedTable = output.Table[publishedRow]{
 		if r.unchanged {
 			return "unchanged"
 		}
+
 		return "published"
 	}},
 	{Header: "FINDINGS", Cell: func(r publishedRow) string { return formatFindingCount(r.ver.Findings) }},

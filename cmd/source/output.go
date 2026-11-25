@@ -27,6 +27,7 @@ func formatAllows(allows []string) string {
 	if len(allows) == 1 && allows[0] == "*" {
 		return "* (everything)"
 	}
+
 	return strings.Join(allows, ",")
 }
 
@@ -47,6 +48,7 @@ func formatStatus(s *sourcev1.Source) string {
 	if s.Status == sourcev1.Source_STATUS_NEEDS_ATTENTION && s.StatusReason != "" {
 		return "needs-attention: " + s.StatusReason
 	}
+
 	return output.FormatEnumKebab(s.Status)
 }
 
@@ -69,5 +71,6 @@ func kindName(k sourcev1.Source_Kind) string {
 			return k2.flag
 		}
 	}
+
 	return output.FormatEnumKebab(k)
 }

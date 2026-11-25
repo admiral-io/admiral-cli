@@ -30,6 +30,7 @@ func (c *sourceClient) ListSources(_ context.Context, req *sourcev1.ListSourcesR
 	if req.Filter == "" || strings.Contains(req.Filter, c.source.Name) {
 		return &sourcev1.ListSourcesResponse{Sources: []*sourcev1.Source{c.source}}, nil
 	}
+
 	return &sourcev1.ListSourcesResponse{}, nil
 }
 
@@ -54,20 +55,27 @@ func sourceOf(kind sourcev1.Source_Kind, location string) *sourcev1.Source {
 // interactive when answers is not nil.
 func scripted(t *testing.T, answers *string) (*cobra.Command, *bytes.Buffer) {
 	t.Helper()
+
 	cmd := &cobra.Command{}
+
 	var errOut bytes.Buffer
+
 	in := ""
 	env := func(string) string { return "" }
+
 	if answers != nil {
 		in = *answers
 		env = func(k string) string {
 			if k == "ADMIRAL_FORCE_INTERACTIVE" {
 				return "1"
 			}
+
 			return ""
 		}
 	}
+
 	cmd.SetContext(iostreams.WithStreams(context.Background(), iostreams.New(strings.NewReader(in), &bytes.Buffer{}, &errOut, env)))
+
 	return cmd, &errOut
 }
 

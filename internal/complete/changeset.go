@@ -20,6 +20,7 @@ func Positions(fs ...Func) Func {
 		if len(args) >= len(fs) || fs[len(args)] == nil {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
+
 		return fs[len(args)](cmd, args, toComplete)
 	}
 }
@@ -31,6 +32,7 @@ func ThenEach(first, rest Func) Func {
 		if len(args) == 0 {
 			return first(cmd, args, toComplete)
 		}
+
 		return rest(cmd, args, toComplete)
 	}
 }
@@ -45,35 +47,43 @@ func ComponentsOf(opts *client.Options, dotted bool) Func {
 		if len(args) == 0 || (dotted && strings.Contains(toComplete, ".")) {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
+
 		out, directive := withClient(cmd, opts, toComplete, func(ctx context.Context, c sdkclient.AdmiralClient) ([]Candidate, error) {
 			return changeSetComponents(ctx, c, args[0])
 		})
 		if dotted {
 			return withSuffix(out, "."), noSpace(directive)
 		}
+
 		return out, directive
 	}
 }
 
 func changeSetComponents(ctx context.Context, c sdkclient.AdmiralClient, ref string) ([]Candidate, error) {
-	var envID string
-	var added []string
+	var (
+		envID string
+		added []string
+	)
+
 	if app, env, isPath := strings.Cut(ref, "/"); isPath {
 		id, err := resolve.Environment(ctx, c.Environment(), c.Project(), app, env)
 		if err != nil {
 			return nil, err
 		}
+
 		envID = id
 	} else {
 		resp, err := c.ChangeSet().GetChangeSet(ctx, &changesetv1.GetChangeSetRequest{ChangeSetId: ref})
 		if err != nil {
 			return nil, err
 		}
+
 		envID = resp.GetChangeSet().GetEnvironmentId()
 		for _, e := range resp.GetHead().GetEntries() {
 			added = append(added, e.GetComponent())
 		}
 	}
+
 	resp, err := c.Environment().ListEnvironmentComponents(ctx, &environmentv1.ListEnvironmentComponentsRequest{
 		EnvironmentId: &envID,
 		PageSize:      pageSize,
@@ -81,20 +91,25 @@ func changeSetComponents(ctx context.Context, c sdkclient.AdmiralClient, ref str
 	if err != nil {
 		return nil, err
 	}
+
 	seen := map[string]bool{}
+
 	var out []Candidate
+
 	for _, comp := range resp.GetComponents() {
 		if !seen[comp.GetName()] {
 			seen[comp.GetName()] = true
 			out = append(out, Candidate{Name: comp.GetName()})
 		}
 	}
+
 	for _, name := range added {
 		if !seen[name] {
 			seen[name] = true
 			out = append(out, Candidate{Name: name})
 		}
 	}
+
 	return out, nil
 }
 
@@ -107,18 +122,25 @@ func Scopes(opts *client.Options) Func {
 		kind, rest, hasKind := strings.Cut(toComplete, ":")
 		if !hasKind {
 			var out []string
+
 			for _, s := range []string{"org", "app:", "env:", "group:"} {
 				if strings.HasPrefix(s, toComplete) {
 					out = append(out, s)
 				}
 			}
+
 			if len(out) == 1 && out[0] == "org" {
 				return out, cobra.ShellCompDirectiveNoFileComp
 			}
+
 			return out, cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveNoSpace
 		}
-		var out []string
-		var directive cobra.ShellCompDirective
+
+		var (
+			out       []string
+			directive cobra.ShellCompDirective
+		)
+
 		switch kind {
 		case "project":
 			out, directive = Projects(opts)(cmd, args, rest)
@@ -127,9 +149,11 @@ func Scopes(opts *client.Options) Func {
 		default:
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
+
 		for i, s := range out {
 			out[i] = kind + ":" + s
 		}
+
 		return out, directive
 	}
 }

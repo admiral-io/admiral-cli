@@ -7,8 +7,10 @@ func DisplayValue(key, raw string) string {
 	if raw != "" {
 		return raw
 	}
+
 	if d, ok := Defaults[key]; ok {
 		return d
 	}
+
 	return "(not set)"
 }

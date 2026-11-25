@@ -13,19 +13,24 @@ import (
 // version that cannot be read is left out and keeps its digest.
 func VersionTags(ctx context.Context, c registryv1.RegistryAPIClient, refs []*changesetv1.VersionRef) map[string][]string {
 	tags := map[string][]string{}
+
 	for _, v := range refs {
 		if v == nil || v.ComponentId == "" || v.VersionId == "" || isTag(v.Reference) {
 			continue
 		}
+
 		if _, done := tags[v.VersionId]; done {
 			continue
 		}
+
 		resp, err := c.GetVersion(ctx, &registryv1.GetVersionRequest{ComponentId: v.ComponentId, Reference: v.VersionId})
 		if err != nil {
 			continue
 		}
+
 		tags[v.VersionId] = resp.GetVersion().GetTags()
 	}
+
 	return tags
 }
 
@@ -35,8 +40,10 @@ func VersionLabel(v *changesetv1.VersionRef, tags map[string][]string) string {
 	if v == nil {
 		return ""
 	}
+
 	hex := strings.TrimPrefix(v.Digest, "sha256:")
 	short := "sha256:" + hex[:min(len(hex), 12)]
+
 	tag := v.Reference
 	if !isTag(tag) {
 		tag = ""
@@ -44,9 +51,11 @@ func VersionLabel(v *changesetv1.VersionRef, tags map[string][]string) string {
 			tag = ts[0]
 		}
 	}
+
 	if tag == "" {
 		return short
 	}
+
 	return tag + " (" + short + ")"
 }
 

@@ -19,6 +19,7 @@ func TestVersionText(t *testing.T) {
 		WithBuiltBy("test"),
 	)
 	t.Log("\n" + sut.String())
+
 	if sut.String() == "" {
 		t.Fatal("should not be empty")
 	}
@@ -26,6 +27,7 @@ func TestVersionText(t *testing.T) {
 
 func TestVersionJSON(t *testing.T) {
 	sut := GetVersion()
+
 	json, err := sut.JSONString()
 	if err != nil {
 		t.Fatal("expected no error, got", err)
@@ -34,6 +36,7 @@ func TestVersionJSON(t *testing.T) {
 	if json == "" {
 		t.Fatal("should not be empty")
 	}
+
 	t.Log("\n" + json)
 }
 
@@ -110,6 +113,7 @@ func TestGetKey(t *testing.T) {
 	})
 	t.Run("valid", func(t *testing.T) {
 		key := "key"
+
 		expect := "value"
 		if got := getKey(&debug.BuildInfo{
 			Settings: []debug.BuildSetting{

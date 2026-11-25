@@ -88,7 +88,6 @@ func TestVersion(t *testing.T) {
 			},
 		},
 	} {
-
 		t.Run(name, func(t *testing.T) {
 			require.Equal(t, tt.out, buildVersion(tt.version, tt.commit, tt.date, tt.builtBy))
 		})

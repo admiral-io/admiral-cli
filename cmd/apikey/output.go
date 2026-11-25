@@ -23,6 +23,7 @@ func lastUsed(k *apikeyv1.ApiKey) string {
 	if k.GetLastUsedAt() == nil {
 		return "never"
 	}
+
 	return output.FormatAge(k.GetLastUsedAt()) + " ago"
 }
 
@@ -30,5 +31,6 @@ func expires(k *apikeyv1.ApiKey) string {
 	if k.GetExpiresAt() == nil {
 		return "never"
 	}
+
 	return output.FormatTimestamp(k.GetExpiresAt())
 }

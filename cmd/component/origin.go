@@ -51,9 +51,11 @@ empty.`,
 		ValidArgsFunction: complete.First(complete.Components(opts)),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
+
 			if err := checkOriginFlags(source, artifact, published); err != nil {
 				return err
 			}
+
 			if err := input.RequireInteractiveOrYes(cmd, yes); err != nil {
 				return err
 			}
@@ -73,6 +75,7 @@ empty.`,
 			if err != nil {
 				return err
 			}
+
 			to := "published by hand"
 			if source != "" {
 				to = originLabel(origin, names)
@@ -81,14 +84,17 @@ empty.`,
 			if err := input.Confirm(cmd, yes, fmt.Sprintf("Move %s's origin to %s", name, to)); err != nil {
 				return err
 			}
+
 			resp, err := c.Registry().SetComponentOrigin(cmd.Context(), &registryv1.SetComponentOriginRequest{
 				ComponentId: componentID, Origin: origin,
 			})
 			if err != nil {
 				return err
 			}
+
 			p := output.NewPrinter(cmd, opts.OutputFormat)
 			output.Writef(p.Err(), "component %q now comes from %s\n", resp.Component.Name, to)
+
 			return p.PrintOne(resp.Component, resp.Component.Name, componentTableWith(names).Render(p, resp.Component))
 		},
 	}
@@ -111,6 +117,7 @@ func checkOriginFlags(source, artifact string, published bool) error {
 	case published && artifact != "":
 		return cmderr.Usage("--artifact goes with --source")
 	}
+
 	return nil
 }
 
@@ -121,14 +128,18 @@ func originTo(cmd *cobra.Command, c sourcev1.SourceAPIClient, name, source, arti
 	if source == "" {
 		return &registryv1.ComponentOrigin{Kind: &registryv1.ComponentOrigin_Published{Published: &registryv1.PublishedOrigin{}}}, names, nil
 	}
+
 	src, err := resolve.Source(cmd.Context(), c, source)
 	if err != nil {
 		return nil, nil, err
 	}
+
 	if artifact, err = artifactIn(src, name, artifact); err != nil {
 		return nil, nil, err
 	}
+
 	names[src.Id] = src.Name
+
 	return &registryv1.ComponentOrigin{Kind: &registryv1.ComponentOrigin_Source{Source: &registryv1.SourceOrigin{
 		SourceId: src.Id, Artifact: artifact,
 	}}}, names, nil
@@ -140,6 +151,7 @@ func withMoveHint(err error, name string) error {
 	if status.Code(err) != codes.FailedPrecondition || !strings.Contains(status.Convert(err).Message(), "SetComponentOrigin") {
 		return err
 	}
+
 	return cmderr.WithHint(err, fmt.Sprintf(
 		"An organization admin moves it with 'admiral component set-origin %s --source SOURCE', or '--published' for publishing by hand.", name))
 }
@@ -156,11 +168,14 @@ func originLabel(o *registryv1.ComponentOrigin, names map[string]string) string 
 		if n, ok := names[src]; ok {
 			src = n
 		}
+
 		if k.Source.Artifact == "" {
 			return src
 		}
+
 		return src + "/" + k.Source.Artifact
 	}
+
 	return ""
 }
 
@@ -171,18 +186,22 @@ func sourceNames(cmd *cobra.Command, c sourcev1.SourceAPIClient, comps ...*regis
 	if !slices.ContainsFunc(comps, func(comp *registryv1.Component) bool { return comp.GetOrigin().GetSource() != nil }) {
 		return names
 	}
+
 	token := ""
 	for {
 		resp, err := c.ListSources(cmd.Context(), &sourcev1.ListSourcesRequest{PageSize: 100, PageToken: token})
 		if err != nil {
 			return names
 		}
+
 		for _, s := range resp.Sources {
 			names[s.Id] = s.Name
 		}
+
 		if resp.NextPageToken == "" {
 			return names
 		}
+
 		token = resp.NextPageToken
 	}
 }

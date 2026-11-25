@@ -143,10 +143,12 @@ func ResolveToken(ctx context.Context, configDir string) (*TokenResult, error) {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil, ErrNotAuthenticated
 		}
+
 		var perr *ParseError
 		if errors.As(err, &perr) {
 			return nil, fmt.Errorf("%s is not valid (%v); run 'admiral auth login' to replace it", FilePath(configDir), perr.Err)
 		}
+
 		return nil, fmt.Errorf("reading credentials: %w", err)
 	}
 
@@ -155,36 +157,45 @@ func ResolveToken(ctx context.Context, configDir string) (*TokenResult, error) {
 		if cred.APIKey == "" {
 			return nil, ErrNotAuthenticated
 		}
+
 		return &TokenResult{Token: cred.APIKey, AuthScheme: client.AuthSchemeToken, Source: SourceAPIKey}, nil
 
 	case KindAPIKeyRef:
 		if cred.Ref == "" {
 			return nil, ErrNotAuthenticated
 		}
+
 		key, err := ResolveRef(ctx, cred.Ref)
 		if err != nil {
 			return nil, fmt.Errorf("resolving stored credential reference: %w", err)
 		}
+
 		return &TokenResult{Token: key, AuthScheme: client.AuthSchemeToken, Source: SourceAPIKey}, nil
 
 	case KindSession:
 		if cred.AccessToken == "" {
 			return nil, ErrNotAuthenticated
 		}
+
 		if cred.Expiry.IsZero() || time.Until(cred.Expiry) > RefreshWindow {
 			return &TokenResult{Token: cred.AccessToken, AuthScheme: client.AuthSchemeBearer, Source: SourceSession, Expiry: cred.Expiry}, nil
 		}
+
 		refreshed, err := refreshSession(ctx, configDir, cred)
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
+
 			slog.Debug("session refresh failed", "error", err)
+
 			if refreshRefused(err) {
 				return nil, ErrSessionExpired
 			}
+
 			return nil, refreshFailure(err)
 		}
+
 		return &TokenResult{Token: refreshed.AccessToken, AuthScheme: client.AuthSchemeBearer, Source: SourceSession, Expiry: refreshed.Expiry}, nil
 
 	default:
@@ -204,6 +215,7 @@ func ForceRefresh(ctx context.Context, configDir string) (*TokenResult, error) {
 	if err != nil {
 		return nil, ErrNotAuthenticated
 	}
+
 	if cred.Kind != KindSession {
 		return nil, errors.New("active credential is an API key; nothing to refresh")
 	}
@@ -212,6 +224,7 @@ func ForceRefresh(ctx context.Context, configDir string) (*TokenResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("token refresh failed: %w", err)
 	}
+
 	return &TokenResult{Token: refreshed.AccessToken, AuthScheme: client.AuthSchemeBearer, Source: SourceSession, Expiry: refreshed.Expiry}, nil
 }
 
@@ -239,6 +252,7 @@ func Save(configDir string, cred *Credential) error {
 	if err != nil {
 		return fmt.Errorf("failed to write credentials: %w", err)
 	}
+
 	tmpPath := tmp.Name()
 	// On any failure below, remove the temp file so no half-written secret
 	// is left behind.
@@ -248,20 +262,25 @@ func Save(configDir string, cred *Credential) error {
 		_ = tmp.Close()
 		return fmt.Errorf("failed to write credentials: %w", err)
 	}
+
 	if _, err := tmp.Write(data); err != nil {
 		_ = tmp.Close()
 		return fmt.Errorf("failed to write credentials: %w", err)
 	}
+
 	if err := tmp.Sync(); err != nil {
 		_ = tmp.Close()
 		return fmt.Errorf("failed to write credentials: %w", err)
 	}
+
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("failed to write credentials: %w", err)
 	}
+
 	if err := os.Rename(tmpPath, filepath.Join(configDir, credentialsFile)); err != nil {
 		return fmt.Errorf("failed to write credentials: %w", err)
 	}
+
 	return nil
 }
 
@@ -281,10 +300,12 @@ func Load(configDir string) (*Credential, error) {
 	if err := json.Unmarshal(data, &cred); err != nil {
 		return nil, &ParseError{Err: err}
 	}
+
 	// Files written before the kind tag existed hold a session.
 	if cred.Kind == "" && cred.AccessToken != "" {
 		cred.Kind = KindSession
 	}
+
 	return &cred, nil
 }
 
@@ -297,6 +318,7 @@ func Delete(configDir string) error {
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
+
 	return err
 }
 
@@ -308,21 +330,28 @@ func Delete(configDir string) error {
 // token, which the server refuses.
 func refreshSession(ctx context.Context, configDir string, cred *Credential) (*Credential, error) {
 	var out *Credential
+
 	err := withLock(configDir, func() error {
 		current, err := Load(configDir)
 		if err != nil {
 			return err
 		}
+
 		// Someone else refreshed while we waited for the lock: their token
 		// is the live one. A stale AccessToken on our side is the tell.
 		if current.Kind == KindSession && current.AccessToken != cred.AccessToken {
 			slog.Debug("session already refreshed by a concurrent invocation")
+
 			out = current
+
 			return nil
 		}
+
 		out, err = doRefresh(ctx, configDir, current)
+
 		return err
 	})
+
 	return out, err
 }
 
@@ -371,6 +400,7 @@ func doRefresh(ctx context.Context, configDir string, cred *Credential) (*Creden
 	if err := Save(configDir, &next); err != nil {
 		return nil, err
 	}
+
 	return &next, nil
 }
 
@@ -383,11 +413,14 @@ func refreshRefused(err error) bool {
 	if errors.Is(err, errNoRefreshToken) {
 		return true
 	}
+
 	var re *oauth2.RetrieveError
 	if !errors.As(err, &re) || re.Response == nil {
 		return false
 	}
+
 	code := re.Response.StatusCode
+
 	return code >= 400 && code < 500 &&
 		code != http.StatusRequestTimeout && code != http.StatusTooManyRequests
 }
@@ -401,6 +434,7 @@ func refreshFailure(err error) error {
 	if errors.As(err, &re) && re.Response != nil {
 		return fmt.Errorf("could not refresh the session: the auth server answered %s", re.Response.Status)
 	}
+
 	return fmt.Errorf("could not refresh the session: %w", err)
 }
 
@@ -410,16 +444,20 @@ func warnIfPermissive(path string) {
 	if runtime.GOOS == "windows" {
 		return
 	}
+
 	info, err := os.Stat(path)
 	if err != nil {
 		return
 	}
+
 	perm := info.Mode().Perm()
 	if perm&fs.FileMode(0077) == 0 {
 		return
 	}
+
 	if _, already := permissiveWarned.LoadOrStore(path, true); already {
 		return
 	}
+
 	slog.Warn(fmt.Sprintf("%s is readable by other users (mode %04o); run: chmod 600 %s", path, perm, path))
 }

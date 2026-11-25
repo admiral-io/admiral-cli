@@ -46,6 +46,7 @@ func CreateClient(ctx context.Context, opts *Options) (sdkclient.AdmiralClient, 
 	}
 
 	mode := modeFor(opts)
+
 	timeout := opts.Timeout
 	if timeout == 0 {
 		timeout = DefaultTimeout
@@ -65,11 +66,14 @@ func CreateClient(ctx context.Context, opts *Options) (sdkclient.AdmiralClient, 
 			debugLogInterceptor(),
 		)
 		slog.Debug("connecting", "target", opts.ServerAddr, "auth", "session", "transport", mode)
+
 		return newSessionClient(opts.ServerAddr, tok, mode, interceptors)
 	}
 
 	interceptors = append(interceptors, unavailableRetryInterceptor(), debugLogInterceptor())
+
 	slog.Debug("connecting", "target", opts.ServerAddr, "auth", "api-key", "transport", mode)
+
 	cfg := sdkclient.Config{
 		HostPort:   opts.ServerAddr,
 		AuthToken:  cred.Token,
@@ -92,5 +96,6 @@ func CreateClient(ctx context.Context, opts *Options) (sdkclient.AdmiralClient, 
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to %s: %w", opts.ServerAddr, err)
 	}
+
 	return c, nil
 }

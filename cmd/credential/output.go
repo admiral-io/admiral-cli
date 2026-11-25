@@ -26,5 +26,6 @@ func formatHosts(hosts []string) string {
 	if len(hosts) == 0 {
 		return "any"
 	}
+
 	return strings.Join(hosts, ",")
 }

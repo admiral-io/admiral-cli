@@ -52,10 +52,12 @@ the changeset's approvals.`,
 			if err != nil {
 				return err
 			}
+
 			wanted, err := parseKeeps(keepChangeSet, keepEnv)
 			if err != nil {
 				return err
 			}
+
 			if err := po.check(cmd); err != nil {
 				return err
 			}
@@ -70,15 +72,19 @@ the changeset's approvals.`,
 			if err != nil {
 				return err
 			}
+
 			if !got.GetChangeSet().GetBehind() {
 				output.Writef(cmd.ErrOrStderr(), "changeset %q is not behind its environment; nothing to rebase\n", csID)
 				return nil
 			}
+
 			resolutions, err := resolveConflicts(csID, got.GetConflicts(), wanted)
 			if err != nil {
 				return err
 			}
+
 			head := got.GetChangeSet().GetHeadRevision()
+
 			resp, err := c.ChangeSet().RebaseChangeSet(cmd.Context(), &changesetv1.RebaseChangeSetRequest{
 				ChangeSetId: csID,
 				IfRevision:  &head,
@@ -91,9 +97,11 @@ the changeset's approvals.`,
 			p := output.NewPrinter(cmd, opts.OutputFormat)
 			printWarnings(p.Err(), resp.Warnings, resp.Revision.GetViolations())
 			output.Confirmed(p.Err(), "changeset", csID, "rebased as revision "+strconv.Itoa(int(resp.Revision.GetNumber())))
+
 			if po.plan {
 				return planRevision(cmd, opts, c.Run(), resp.ChangeSet, resp.Revision, po)
 			}
+
 			return p.PrintOne(resp.Revision, revisionName(csID, resp.Revision), revisionTable.Render(p, resp.Revision))
 		},
 	}
@@ -117,31 +125,38 @@ func (k keep) target() string { return strings.Join(append([]string{k.component}
 
 func parseKeeps(changeSet, env []string) ([]keep, error) {
 	var out []keep
+
 	add := func(flag string, side changesetv1.Resolution_Keep, vals []string) error {
 		for _, v := range vals {
 			comp, path, err := valuesfile.ParseTarget(v)
 			if err != nil {
 				return cmderr.Usage("--%s: %v", flag, err)
 			}
+
 			if err := componentName(comp); err != nil {
 				return err
 			}
+
 			k := keep{flag: flag, component: comp, path: path, side: side}
 			for _, o := range out {
 				if o.component == k.component && slices.Equal(o.path, k.path) {
 					return cmderr.Usage("%s is resolved twice, by --%s and --%s", k.target(), o.flag, k.flag)
 				}
 			}
+
 			out = append(out, k)
 		}
+
 		return nil
 	}
 	if err := add("keep-changeset", changesetv1.Resolution_KEEP_CHANGE_SET, changeSet); err != nil {
 		return nil, err
 	}
+
 	if err := add("keep-environment", changesetv1.Resolution_KEEP_ENVIRONMENT, env); err != nil {
 		return nil, err
 	}
+
 	return out, nil
 }
 
@@ -150,6 +165,7 @@ func conflictPath(c *changesetv1.Conflict) []string {
 	for _, s := range c.GetPath() {
 		keys = append(keys, s.GetKey())
 	}
+
 	return keys
 }
 
@@ -159,9 +175,11 @@ func (k keep) matches(c *changesetv1.Conflict) bool {
 	if k.component != c.GetComponent() {
 		return false
 	}
+
 	if c.GetKind() == changesetv1.Conflict_KIND_VALUE {
 		return len(k.path) > 0 && slices.Equal(k.path, conflictPath(c))
 	}
+
 	return len(k.path) == 0
 }
 
@@ -170,30 +188,39 @@ func (k keep) matches(c *changesetv1.Conflict) bool {
 // settle it, so the server is never asked to guess.
 func resolveConflicts(csID string, conflicts []*changesetv1.Conflict, wanted []keep) ([]*changesetv1.Resolution, error) {
 	var out []*changesetv1.Resolution
+
 	used := make([]bool, len(wanted))
+
 	var open []*changesetv1.Conflict
+
 	for _, c := range conflicts {
 		i := slices.IndexFunc(wanted, func(k keep) bool { return k.matches(c) })
 		if i < 0 {
 			open = append(open, c)
 			continue
 		}
+
 		used[i] = true
+
 		k := wanted[i]
 		if c.GetKind() == changesetv1.Conflict_KIND_REMOVED && k.side != changesetv1.Resolution_KEEP_ENVIRONMENT {
 			return nil, cmderr.Usage("%s was removed from the environment; only --keep-environment %s resolves it", k.component, k.component)
 		}
+
 		out = append(out, &changesetv1.Resolution{Component: c.GetComponent(), Kind: c.GetKind(), Path: c.GetPath(), Keep: k.side})
 	}
+
 	for i, k := range wanted {
 		if !used[i] {
 			return nil, cmderr.UsageHint(conflictList(csID, conflicts), "--%s %s names no conflict", k.flag, k.target())
 		}
 	}
+
 	if len(open) > 0 {
 		return nil, cmderr.UsageHint(conflictList(csID, open),
 			"%s has %d conflict(s) with its environment; resolve each with --keep-changeset or --keep-environment", csID, len(open))
 	}
+
 	return out, nil
 }
 
@@ -202,8 +229,10 @@ func conflictList(csID string, conflicts []*changesetv1.Conflict) string {
 	if len(conflicts) == 0 {
 		return "This changeset has no conflicts; rebase it without --keep flags: 'admiral changeset rebase " + csID + "'."
 	}
+
 	var b strings.Builder
 	b.WriteString("Conflicts:")
+
 	for _, c := range conflicts {
 		target := strings.Join(append([]string{c.GetComponent()}, conflictPath(c)...), ".")
 		switch c.GetKind() {
@@ -218,10 +247,12 @@ func conflictList(csID string, conflicts []*changesetv1.Conflict) string {
 			fmt.Fprintf(&b, "\n  %s: the environment no longer has it", target)
 			fmt.Fprintf(&b, "\n    --keep-environment %s", target)
 		}
+
 		if id := c.GetEnvironmentChangeSetId(); id != "" {
 			fmt.Fprintf(&b, "  (environment side from %s)", id)
 		}
 	}
+
 	return b.String()
 }
 
@@ -229,5 +260,6 @@ func orAbsent(js string) string {
 	if js == "" {
 		return "(absent)"
 	}
+
 	return js
 }

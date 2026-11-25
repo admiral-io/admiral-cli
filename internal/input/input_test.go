@@ -22,6 +22,7 @@ func newCmd(stdin io.Reader) *cobra.Command {
 	cmd.SetIn(stdin)
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
+
 	return cmd
 }
 
@@ -42,11 +43,14 @@ func TestSecret_StdinFlagReadsAllOfAPipe(t *testing.T) {
 // already set.
 func TestSecret_FlagOnANonInteractiveTerminal(t *testing.T) {
 	t.Setenv("ADMIRAL_NO_INPUT", "1")
+
 	cmd := newCmd(strings.NewReader(""))
 	cmd.SetIn(os.Stdin) // a TTY when the test runs in one, a pipe otherwise
+
 	if !iostreams.FromCommand(cmd).IsStdinTTY() {
 		t.Skip("needs a terminal on stdin")
 	}
+
 	_, err := Secret(cmd, "API key", true)
 	require.EqualError(t, err, "cannot prompt for API key when not running interactively; pipe it on stdin")
 	require.Equal(t, cmderr.ExitUsage, cmderr.Code(err))
@@ -111,7 +115,9 @@ func TestReadRawLine_CtrlDOnEmptyIsEOF(t *testing.T) {
 // interactive session reads the secret cooked; the prompt shape is the same.
 func TestPromptLine_InteractiveCooked(t *testing.T) {
 	t.Setenv("ADMIRAL_FORCE_INTERACTIVE", "1")
+
 	var errOut bytes.Buffer
+
 	cmd := newCmd(strings.NewReader("  hunter2  \n"))
 	cmd.SetErr(&errOut)
 

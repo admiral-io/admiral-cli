@@ -27,6 +27,7 @@ func source(r *runv1.Run) string {
 	if r.GetRevisionId() != "" {
 		return r.GetRevisionId()
 	}
+
 	return output.FormatEnumKebab(r.GetDesired().GetMode())
 }
 
@@ -38,12 +39,15 @@ func changeSummary(cs []*agentv1.ComponentPlan) string {
 	if len(cs) == 1 && cs[0].GetDeferred() != nil {
 		return deferredSummary(cs[0])
 	}
+
 	var add, change, replace, destroy, takeOver, orphan int
+
 	for _, c := range cs {
 		if c.GetDeferred() != nil {
 			add++ // it will change something; how much is known at apply
 			continue
 		}
+
 		for _, rc := range c.GetChanges() {
 			switch rc.GetAction() {
 			case agentv1.ResourceChange_ACTION_CREATE:
@@ -61,16 +65,20 @@ func changeSummary(cs []*agentv1.ComponentPlan) string {
 			}
 		}
 	}
+
 	if add+change+replace+destroy+takeOver+orphan == 0 {
 		return ""
 	}
+
 	s := fmt.Sprintf("+%d ~%d ±%d -%d", add, change, replace, destroy)
 	if takeOver > 0 {
 		s += fmt.Sprintf(", %d to take over", takeOver)
 	}
+
 	if orphan > 0 {
 		s += fmt.Sprintf(", %d left in place", orphan)
 	}
+
 	return s
 }
 
@@ -82,10 +90,12 @@ func deferredSummary(c *agentv1.ComponentPlan) string {
 			waits = append(waits, w.GetComponent())
 		}
 	}
+
 	verb := "applies"
 	if len(waits) > 1 {
 		verb = "apply"
 	}
+
 	return "planned after " + strings.Join(waits, " and ") + " " + verb
 }
 
@@ -106,27 +116,33 @@ func ChangeSetLabel(id, title string) string {
 	if title == "" {
 		return id
 	}
+
 	return fmt.Sprintf("%s %q", id, title)
 }
 
 func printRun(p *output.Printer, r *runv1.Run, title string, diff func(w io.Writer)) error {
 	d := output.NewDescribe()
+
 	diffShown := diff != nil
 	if diffShown {
 		d.Trailer(diff)
 	}
+
 	d.Field("ID", r.GetId())
 	d.Field("Environment", r.GetEnvironmentId())
+
 	if r.GetRevisionId() != "" {
 		d.Field("Changeset", ChangeSetLabel(r.GetChangeSetId(), title))
 		d.Field("Revision", r.GetRevisionId())
 	} else {
 		d.Field("Desired", output.FormatEnumKebab(r.GetDesired().GetMode()))
 	}
+
 	d.Field("Status", describeStatus(r))
 	d.Field("Trigger", output.FormatEnumKebab(r.GetTrigger()))
 	d.Field("Created by", output.FormatActorWithID(r.GetCreatedBy()))
 	d.Field("Created", output.FormatDescribeTime(r.GetCreatedAt()))
+
 	if r.GetFinishedAt() != nil {
 		d.Field("Finished", output.FormatDescribeTime(r.GetFinishedAt()))
 	}
@@ -134,66 +150,84 @@ func printRun(p *output.Printer, r *runv1.Run, title string, diff func(w io.Writ
 	if plan := r.GetPlan(); plan != nil {
 		d.Section("Plan", func(b *output.Block) {
 			b.Field("Digest", plan.GetPlanDigest())
+
 			if plan.GetMessage() != "" {
 				b.Field("Message", plan.GetMessage())
 			}
+
 			if len(plan.GetComponents()) > 0 {
 				rows := make([][]string, 0, len(plan.GetComponents()))
 				for _, c := range plan.GetComponents() {
 					rows = append(rows, []string{c.GetComponent(), changeSummary([]*agentv1.ComponentPlan{c})})
 				}
+
 				b.Table([]string{"Component", "Changes"}, rows)
 			}
+
 			jobTable(b, plan.GetJobs())
 		})
 	}
+
 	if len(r.GetApprovals()) > 0 {
 		rows := make([][]string, 0, len(r.GetApprovals()))
 		for _, a := range r.GetApprovals() {
 			rows = append(rows, []string{output.FormatActor(a.GetApprovedBy()), a.GetReason(), output.FormatAge(a.GetApprovedAt())})
 		}
+
 		d.Table("Approvals", []string{"By", "Reason", "Age"}, rows)
 	}
+
 	if apply := r.GetApply(); apply != nil {
 		d.Section("Apply", func(b *output.Block) {
 			b.Field("Applied by", output.FormatActorWithID(apply.GetAppliedBy()))
+
 			if apply.Generation != nil {
 				b.Field("Generation", strconv.FormatInt(apply.GetGeneration(), 10))
 			}
+
 			if apply.GetMessage() != "" {
 				b.Field("Message", apply.GetMessage())
 			}
+
 			if apply.GetAcceptedBy() != nil {
 				b.Field("Accepted by", output.FormatActorWithID(apply.GetAcceptedBy()))
 				b.Field("Accepted reason", apply.GetAcceptedReason())
 			}
+
 			if len(apply.GetComponents()) > 0 {
 				planned := map[string]*agentv1.ComponentPlan{}
 				for _, c := range r.GetPlan().GetComponents() {
 					planned[c.GetComponent()] = c
 				}
+
 				// What the apply planned itself replaces the deferral it was
 				// reviewed as.
 				for _, c := range apply.GetPlanned() {
 					planned[c.GetComponent()] = c
 				}
+
 				rows := make([][]string, 0, len(apply.GetComponents()))
 				for _, c := range apply.GetComponents() {
 					changes := ""
 					if pc := planned[c.GetComponent()]; pc != nil && c.GetStatus() == runv1.ComponentApply_STATUS_SUCCEEDED {
 						changes = changeSummary([]*agentv1.ComponentPlan{pc})
 					}
+
 					rows = append(rows, []string{c.GetComponent(), output.FormatEnumKebab(c.GetStatus()), changes, c.GetMessage()})
 				}
+
 				b.Table([]string{"Component", "Status", "Changes", "Message"}, rows)
 			}
+
 			jobTable(b, apply.GetJobs())
 		})
 	}
+
 	// The counts say how much changes; the diff says what.
 	if !diffShown && changeSummary(r.GetPlan().GetComponents()) != "" {
 		d.Hint("To see the changes, run: admiral run diff " + r.GetId())
 	}
+
 	switch r.GetStatus() {
 	case runv1.Run_STATUS_PLANNED:
 		for _, h := range nextSteps(r) {
@@ -203,6 +237,7 @@ func printRun(p *output.Printer, r *runv1.Run, title string, diff func(w io.Writ
 		if r.GetApply() == nil {
 			d.Hint("To see why the plan failed, run: admiral run diff " + r.GetId())
 		}
+
 		d.Hint("To see the agent's output, run: admiral run logs " + r.GetId())
 	case runv1.Run_STATUS_UNKNOWN:
 		d.Hint("Its apply never reported, so what it changed is unknown.")
@@ -211,6 +246,7 @@ func printRun(p *output.Printer, r *runv1.Run, title string, diff func(w io.Writ
 		d.Hint("It wrote everything and nothing is held, but a component did not become healthy.")
 		d.Hint(UnhealthyHint(r))
 	}
+
 	return p.PrintStatus(r, d)
 }
 
@@ -221,11 +257,13 @@ func nextSteps(r *runv1.Run) []string {
 	if r.GetChangeSetId() != "" {
 		verb, target = "admiral changeset", r.GetChangeSetId()
 	}
+
 	var steps []string
 	if n := requiredApprovals(r.GetRequiredApproval()); n > 0 {
 		steps = append(steps, fmt.Sprintf(
 			"It needs %d approval(s) from someone other than the changeset's author: %s approve %s", n, verb, target))
 	}
+
 	return append(steps, fmt.Sprintf("To apply it, run: %s apply %s", verb, target))
 }
 
@@ -236,6 +274,7 @@ func requiredApprovals(rule *environmentv1.ApprovalRule) int32 {
 	for _, g := range rule.GetGroups() {
 		n = max(n, g.GetApprovals())
 	}
+
 	return n
 }
 
@@ -243,13 +282,16 @@ func jobTable(b *output.Block, jobs []*runv1.RunJob) {
 	if len(jobs) == 0 {
 		return
 	}
+
 	rows := make([][]string, 0, len(jobs))
 	for _, j := range jobs {
 		st := output.FormatEnumKebab(j.GetStatus())
 		if j.GetWaitReason() != 0 {
 			st += " (" + output.FormatEnumKebab(j.GetWaitReason()) + ")"
 		}
+
 		rows = append(rows, []string{j.GetJobId(), j.GetAgentId(), st, fmt.Sprint(len(j.GetComponents()))})
 	}
+
 	b.Table([]string{"Job", "Agent", "Status", "Components"}, rows)
 }

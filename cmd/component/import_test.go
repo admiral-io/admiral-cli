@@ -59,9 +59,11 @@ func TestReportPublishedListsEachFindingOnceAndInfoOnlyWhenVerbose(t *testing.T)
 	report := func(verbose bool) string {
 		cmd := &cobra.Command{}
 		cmd.Flags().Bool("verbose", verbose, "")
+
 		var errOut bytes.Buffer
 		cmd.SetErr(&errOut)
 		reportPublished(cmd, output.NewPrinter(cmd, output.FormatTable), &registryv1.Component{Name: "podinfo"}, ver, false)
+
 		return errOut.String()
 	}
 

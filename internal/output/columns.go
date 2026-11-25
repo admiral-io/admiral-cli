@@ -33,6 +33,7 @@ type Table[T any] []Column[T]
 func (t Table[T]) Render(p *Printer, rows ...T) func(w *tabwriter.Writer) {
 	wide := p.Format == FormatWide
 	tty := p.IO.IsStdoutTTY()
+
 	return func(w *tabwriter.Writer) {
 		t.write(w, wide, tty, rows)
 	}
@@ -46,10 +47,12 @@ func (t Table[T]) Write(w *tabwriter.Writer, p *Printer, rows ...T) {
 
 func (t Table[T]) write(w *tabwriter.Writer, wide, tty bool, rows []T) {
 	cols := t.visible(wide)
+
 	headers := make([]string, len(cols))
 	for i, c := range cols {
 		headers[i] = headerName(c.Header)
 	}
+
 	Writeln(w, strings.Join(headers, "\t"))
 
 	cells := make([]string, len(cols))
@@ -61,8 +64,10 @@ func (t Table[T]) write(w *tabwriter.Writer, wide, tty bool, rows []T) {
 			} else if tty && c.Truncate > 0 {
 				v = Truncate(v, c.Truncate)
 			}
+
 			cells[i] = v
 		}
+
 		Writeln(w, strings.Join(cells, "\t"))
 	}
 }
@@ -73,8 +78,10 @@ func (t Table[T]) visible(wide bool) []Column[T] {
 		if c.Wide && !wide {
 			continue
 		}
+
 		out = append(out, c)
 	}
+
 	return out
 }
 

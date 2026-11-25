@@ -75,6 +75,7 @@ land in the same revision.`,
 			if err != nil {
 				return err
 			}
+
 			return edits(cmd, opts, ref, ifRevision(cmd, ifRev), po, es...)
 		},
 	}
@@ -103,20 +104,24 @@ type setRequest struct {
 // --namespace names a component, then the version change or the values.
 func (r setRequest) edits() ([]*changesetv1.Edit, error) {
 	var es []*changesetv1.Edit
+
 	assignments := r.args
 	if r.namespaceGiven || len(r.extraNamespaces) > 0 {
 		if !r.namespaceGiven {
 			return nil, cmderr.UsageHint(`Pass --namespace as well; --namespace "" means the environment's default.`,
 				"--extra-namespace needs --namespace, since the settings are replaced whole")
 		}
+
 		if len(r.args) == 0 || strings.ContainsAny(r.args[0], ".=") {
 			return nil, cmderr.UsageHint("Name the component first: 'admiral changeset set cs-… api --namespace shop'.",
 				"--namespace takes a component")
 		}
+
 		place, err := placementEdit(r.args[0], r.namespace, r.extraNamespaces)
 		if err != nil {
 			return nil, err
 		}
+
 		es = append(es, place)
 		assignments = r.args[1:]
 	}
@@ -125,13 +130,16 @@ func (r setRequest) edits() ([]*changesetv1.Edit, error) {
 		if len(r.setStrings) > 0 {
 			return nil, cmderr.Usage("--to cannot be combined with --set-string")
 		}
+
 		if len(r.args) != 1 || strings.ContainsAny(r.args[0], ".=") {
 			return nil, cmderr.UsageHint("Change one version per command: 'admiral changeset set cs-… api --to v1.4.0'.",
 				"--to takes exactly one component")
 		}
+
 		if err := componentName(r.args[0]); err != nil {
 			return nil, err
 		}
+
 		return append(es, &changesetv1.Edit{
 			Edit: &changesetv1.Edit_SetVersion{SetVersion: &changesetv1.SetVersion{Component: r.args[0], Reference: r.to}},
 		}), nil
@@ -141,10 +149,12 @@ func (r setRequest) edits() ([]*changesetv1.Edit, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	es = append(es, values...)
 	if len(es) == 0 {
 		return nil, cmderr.UsageHint("Give <component>.<path>=<value>, --set-string, or a component with --to or --namespace.",
 			"nothing to set")
 	}
+
 	return es, nil
 }

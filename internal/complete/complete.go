@@ -66,6 +66,7 @@ func First(f Func) Func {
 		if len(args) != 0 {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
+
 		return f(cmd, args, toComplete)
 	}
 }
@@ -77,6 +78,7 @@ func Second(f Func) Func {
 		if len(args) != 1 {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
+
 		return f(cmd, args, toComplete)
 	}
 }
@@ -87,11 +89,13 @@ func Second(f Func) Func {
 func Static(values ...string) Func {
 	return func(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		var out []string
+
 		for _, v := range values {
 			if strings.HasPrefix(v, toComplete) {
 				out = append(out, v)
 			}
 		}
+
 		return out, cobra.ShellCompDirectiveNoFileComp
 	}
 }
@@ -101,6 +105,7 @@ func Projects(opts *client.Options) Func {
 	return func(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return withClient(cmd, opts, toComplete, func(ctx context.Context, c sdkclient.AdmiralClient) ([]Candidate, error) {
 			var out []Candidate
+
 			err := paged(func(token string) (string, error) {
 				resp, err := c.Project().ListProjects(ctx, &projectv1.ListProjectsRequest{
 					PageSize:  pageSize,
@@ -109,11 +114,14 @@ func Projects(opts *client.Options) Func {
 				if err != nil {
 					return "", err
 				}
+
 				for _, a := range resp.Projects {
 					out = append(out, Candidate{Name: a.Name, Description: a.Description})
 				}
+
 				return resp.NextPageToken, nil
 			}, &out)
+
 			return out, err
 		})
 	}
@@ -134,6 +142,7 @@ func Envs(opts *client.Options) Func {
 				return appPrefixes(cmd, opts, toComplete)
 			}
 		}
+
 		// withClient filters on toComplete, which in the path form is
 		// "shop/pr" against candidates renamed to "shop/prod".
 		return withClient(cmd, opts, toComplete, func(ctx context.Context, c sdkclient.AdmiralClient) ([]Candidate, error) {
@@ -141,11 +150,13 @@ func Envs(opts *client.Options) Func {
 			if err != nil {
 				return nil, err
 			}
+
 			if isPath {
 				for i := range items {
 					items[i].Name = app + "/" + items[i].Name
 				}
 			}
+
 			return items, nil
 		})
 	}
@@ -159,6 +170,7 @@ func NewEnv(opts *client.Options) Func {
 		if strings.Contains(toComplete, "/") || flagValue(cmd, "project") != "" {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
+
 		return appPrefixes(cmd, opts, toComplete)
 	}
 }
@@ -182,20 +194,24 @@ func Refs(opts *client.Options) Func {
 		if strings.Contains(toComplete, "@") {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
+
 		name, _, hasTag := strings.Cut(toComplete, ":")
 		if !hasTag {
 			out, directive := Components(opts)(cmd, nil, toComplete)
 			return withSuffix(out, ":"), noSpace(directive)
 		}
+
 		return withClient(cmd, opts, toComplete, func(ctx context.Context, c sdkclient.AdmiralClient) ([]Candidate, error) {
 			resp, err := c.Registry().GetComponent(ctx, &registryv1.GetComponentRequest{Component: name})
 			if err != nil {
 				return nil, err
 			}
+
 			out := make([]Candidate, 0, len(resp.Component.Tags))
 			for _, t := range resp.Component.Tags {
 				out = append(out, Candidate{Name: name + ":" + t.Name})
 			}
+
 			return out, nil
 		})
 	}
@@ -207,6 +223,7 @@ func Credentials(opts *client.Options) Func {
 	return func(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return withClient(cmd, opts, toComplete, func(ctx context.Context, c sdkclient.AdmiralClient) ([]Candidate, error) {
 			var out []Candidate
+
 			err := paged(func(token string) (string, error) {
 				resp, err := c.Credential().ListCredentials(ctx, &credentialv1.ListCredentialsRequest{
 					PageSize:  pageSize,
@@ -215,11 +232,14 @@ func Credentials(opts *client.Options) Func {
 				if err != nil {
 					return "", err
 				}
+
 				for _, cr := range resp.Credentials {
 					out = append(out, Candidate{Name: cr.Name, Description: cr.Description})
 				}
+
 				return resp.NextPageToken, nil
 			}, &out)
+
 			return out, err
 		})
 	}
@@ -230,6 +250,7 @@ func Sources(opts *client.Options) Func {
 	return func(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return withClient(cmd, opts, toComplete, func(ctx context.Context, c sdkclient.AdmiralClient) ([]Candidate, error) {
 			var out []Candidate
+
 			err := paged(func(token string) (string, error) {
 				resp, err := c.Source().ListSources(ctx, &sourcev1.ListSourcesRequest{
 					PageSize:  pageSize,
@@ -238,11 +259,14 @@ func Sources(opts *client.Options) Func {
 				if err != nil {
 					return "", err
 				}
+
 				for _, s := range resp.Sources {
 					out = append(out, Candidate{Name: s.Name, Description: s.Location})
 				}
+
 				return resp.NextPageToken, nil
 			}, &out)
+
 			return out, err
 		})
 	}
@@ -251,6 +275,7 @@ func Sources(opts *client.Options) Func {
 // components lists every component in the registry.
 func components(ctx context.Context, c sdkclient.AdmiralClient) ([]Candidate, error) {
 	var out []Candidate
+
 	err := paged(func(token string) (string, error) {
 		resp, err := c.Registry().ListComponents(ctx, &registryv1.ListComponentsRequest{
 			PageSize:  pageSize,
@@ -259,11 +284,14 @@ func components(ctx context.Context, c sdkclient.AdmiralClient) ([]Candidate, er
 		if err != nil {
 			return "", err
 		}
+
 		for _, comp := range resp.Components {
 			out = append(out, Candidate{Name: comp.Name, Description: comp.Description})
 		}
+
 		return resp.NextPageToken, nil
 	}, &out)
+
 	return out, err
 }
 
@@ -279,11 +307,13 @@ func appPrefixes(cmd *cobra.Command, opts *client.Options, toComplete string) ([
 func withSuffix(candidates []string, suffix string) []string {
 	for i, s := range candidates {
 		name, desc, _ := strings.Cut(s, "\t")
+
 		candidates[i] = name + suffix
 		if desc != "" {
 			candidates[i] += "\t" + desc
 		}
 	}
+
 	return candidates
 }
 
@@ -293,6 +323,7 @@ func noSpace(directive cobra.ShellCompDirective) cobra.ShellCompDirective {
 	if directive == cobra.ShellCompDirectiveNoFileComp {
 		directive |= cobra.ShellCompDirectiveNoSpace
 	}
+
 	return directive
 }
 
@@ -302,7 +333,9 @@ func envsIn(ctx context.Context, c sdkclient.AdmiralClient, app string) ([]Candi
 	if err != nil {
 		return nil, err
 	}
+
 	var out []Candidate
+
 	err = paged(func(token string) (string, error) {
 		resp, err := c.Environment().ListEnvironments(ctx, &environmentv1.ListEnvironmentsRequest{
 			ProjectId: &appID,
@@ -312,11 +345,14 @@ func envsIn(ctx context.Context, c sdkclient.AdmiralClient, app string) ([]Candi
 		if err != nil {
 			return "", err
 		}
+
 		for _, e := range resp.Environments {
 			out = append(out, Candidate{Name: e.Name, Description: e.Description})
 		}
+
 		return resp.NextPageToken, nil
 	}, &out)
+
 	return out, err
 }
 
@@ -328,6 +364,7 @@ func flagValue(cmd *cobra.Command, name string) string {
 	if f == nil {
 		return ""
 	}
+
 	return f.Value.String()
 }
 
@@ -341,6 +378,7 @@ func withClient(cmd *cobra.Command, opts *client.Options, toComplete string,
 	if ctx == nil {
 		ctx = context.Background()
 	}
+
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -358,6 +396,7 @@ func withClient(cmd *cobra.Command, opts *client.Options, toComplete string,
 		slog.Debug("completion: list failed", "error", err)
 		return nil, cobra.ShellCompDirectiveError
 	}
+
 	return Filter(items, toComplete), cobra.ShellCompDirectiveNoFileComp
 }
 
@@ -365,12 +404,15 @@ func withClient(cmd *cobra.Command, opts *client.Options, toComplete string,
 // more or out holds maxCandidates.
 func paged(next func(token string) (string, error), out *[]Candidate) error {
 	token := ""
+
 	for {
 		var err error
+
 		token, err = next(token)
 		if err != nil {
 			return err
 		}
+
 		if token == "" || len(*out) >= maxCandidates {
 			return nil
 		}
@@ -381,15 +423,18 @@ func paged(next func(token string) (string, error), out *[]Candidate) error {
 // them in cobra's "name\tdescription" form.
 func Filter(items []Candidate, prefix string) []string {
 	var out []string
+
 	for _, it := range items {
 		if !strings.HasPrefix(it.Name, prefix) {
 			continue
 		}
+
 		if it.Description != "" {
 			out = append(out, it.Name+"\t"+it.Description)
 		} else {
 			out = append(out, it.Name)
 		}
 	}
+
 	return out
 }

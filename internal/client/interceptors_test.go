@@ -16,12 +16,15 @@ import (
 // sequence and recording each call's context.
 func invokerFunc(errs ...error) (grpc.UnaryInvoker, *[]context.Context) {
 	var seen []context.Context
+
 	return func(ctx context.Context, _ string, _, _ any, _ *grpc.ClientConn, _ ...grpc.CallOption) error {
 		seen = append(seen, ctx)
+
 		i := len(seen) - 1
 		if i < len(errs) {
 			return errs[i]
 		}
+
 		return nil
 	}, &seen
 }
@@ -39,6 +42,7 @@ func TestDeadlineInterceptor_AddsDeadline(t *testing.T) {
 func TestDeadlineInterceptor_KeepsExistingDeadline(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
 	want, _ := ctx.Deadline()
 
 	inv, seen := invokerFunc(nil)
@@ -58,13 +62,16 @@ func TestIsReadOnly(t *testing.T) {
 
 func fastBackoff(t *testing.T) {
 	t.Helper()
+
 	prev := retryBackoff
 	retryBackoff = []time.Duration{time.Millisecond, time.Millisecond}
+
 	t.Cleanup(func() { retryBackoff = prev })
 }
 
 func TestUnavailableRetry_RetriesReadsThenSucceeds(t *testing.T) {
 	fastBackoff(t)
+
 	unavailable := status.Error(codes.Unavailable, "connection reset")
 	inv, seen := invokerFunc(unavailable, unavailable, nil)
 
@@ -75,6 +82,7 @@ func TestUnavailableRetry_RetriesReadsThenSucceeds(t *testing.T) {
 
 func TestUnavailableRetry_GivesUpAfterBudget(t *testing.T) {
 	fastBackoff(t)
+
 	unavailable := status.Error(codes.Unavailable, "still down")
 	inv, seen := invokerFunc(unavailable, unavailable, unavailable, unavailable)
 
@@ -85,6 +93,7 @@ func TestUnavailableRetry_GivesUpAfterBudget(t *testing.T) {
 
 func TestUnavailableRetry_NeverRetriesMutations(t *testing.T) {
 	fastBackoff(t)
+
 	inv, seen := invokerFunc(status.Error(codes.Unavailable, "connection reset"), nil)
 
 	err := unavailableRetryInterceptor()(context.Background(), "/svc/CreateThing", nil, nil, nil, inv)
@@ -94,6 +103,7 @@ func TestUnavailableRetry_NeverRetriesMutations(t *testing.T) {
 
 func TestUnavailableRetry_OnlyForUnavailable(t *testing.T) {
 	fastBackoff(t)
+
 	inv, seen := invokerFunc(status.Error(codes.NotFound, "no such thing"), nil)
 
 	err := unavailableRetryInterceptor()(context.Background(), "/svc/GetThing", nil, nil, nil, inv)
@@ -104,6 +114,7 @@ func TestUnavailableRetry_OnlyForUnavailable(t *testing.T) {
 func TestUnavailableRetry_StopsOnCancel(t *testing.T) {
 	prev := retryBackoff
 	retryBackoff = []time.Duration{time.Hour}
+
 	t.Cleanup(func() { retryBackoff = prev })
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -112,6 +123,7 @@ func TestUnavailableRetry_StopsOnCancel(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() { done <- unavailableRetryInterceptor()(ctx, "/svc/GetThing", nil, nil, nil, inv) }()
+
 	time.Sleep(20 * time.Millisecond)
 	cancel()
 

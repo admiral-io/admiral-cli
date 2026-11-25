@@ -50,8 +50,10 @@ var runCommand = func(ctx context.Context, name string, args ...string) ([]byte,
 		if msg := strings.TrimSpace(captured.String()); msg != "" {
 			return nil, fmt.Errorf("%s: %s", name, msg)
 		}
+
 		return nil, fmt.Errorf("%s: %w", name, err)
 	}
+
 	return out, nil
 }
 
@@ -84,13 +86,16 @@ func resolve1Password(ctx context.Context, ref string) (string, error) {
 	if _, err := exec.LookPath("op"); err != nil {
 		return "", errors.New("1Password CLI (op) not found in PATH; install it from https://developer.1password.com/docs/cli/")
 	}
+
 	out, err := runCommand(ctx, "op", "read", "--no-newline", ref)
 	if err != nil {
 		return "", fmt.Errorf("reading %s: %w", ref, err)
 	}
+
 	secret := strings.TrimSpace(string(out))
 	if secret == "" {
 		return "", fmt.Errorf("reading %s: empty value", ref)
 	}
+
 	return secret, nil
 }

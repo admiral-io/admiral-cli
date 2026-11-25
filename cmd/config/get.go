@@ -31,6 +31,7 @@ use 'admiral config list' to see the effective value and where it comes from.`,
 			}
 
 			output.Writef(cmd.OutOrStdout(), "%s: %s\n", key, config.DisplayValue(key, s.Get(key)))
+
 			return nil
 		},
 	}

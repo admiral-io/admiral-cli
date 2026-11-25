@@ -44,11 +44,13 @@ component's contract violations.`,
 			if err != nil {
 				return err
 			}
+
 			p := output.NewPrinter(cmd, opts.OutputFormat)
 			if !p.Format.IsMachine() && len(resp.Components) == 0 {
 				output.PrintEmpty(p.Err(), "changes", csID)
 				return nil
 			}
+
 			return p.PrintResource(resp, func(w *tabwriter.Writer) { writeDiff(w, csID, resp) })
 		},
 	}
@@ -65,14 +67,17 @@ var actionMark = map[changesetv1.EntryAction]string{
 
 func writeDiff(w io.Writer, csID string, d *changesetv1.DiffChangeSetResponse) {
 	output.Writef(w, "%s at revision %d\n", csID, d.Revision)
+
 	for _, c := range d.Components {
 		output.Writef(w, "\n%s %s (%s)%s\n", actionMark[c.Action], c.Component,
 			output.FormatEnumKebab(c.Action), versionChange(c.OldVersion, c.NewVersion))
+
 		for _, pd := range c.Paths {
 			for _, l := range output.Leaves(pd.DisplayPath, pd.BeforePresent, pd.BeforeJson, pd.AfterPresent, pd.AfterJson) {
 				output.Writef(w, "    %s: %s -> %s\n", l.Path, l.Before, l.After)
 			}
 		}
+
 		for _, v := range c.Violations {
 			output.Writef(w, "    ! %s: %s\n", v.Path, v.Message)
 		}
@@ -101,6 +106,7 @@ func versionName(v *changesetv1.VersionRef) string {
 	if v.Reference == "" || strings.HasPrefix(v.Reference, "sha256:") {
 		return short
 	}
+
 	return v.Reference + " (" + short + ")"
 }
 
@@ -111,5 +117,6 @@ func shortDigest(d string) string {
 	if len(hex) > 12 {
 		hex = hex[:12]
 	}
+
 	return hex
 }

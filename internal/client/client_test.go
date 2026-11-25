@@ -24,6 +24,7 @@ func TestCreateClient_NotLoggedIn(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when not logged in")
 	}
+
 	if want := "not signed in"; !contains(err.Error(), want) {
 		t.Fatalf("error should contain %q, got %q", want, err.Error())
 	}
@@ -86,15 +87,19 @@ func TestOptions_Defaults(t *testing.T) {
 	if opts.ServerAddr != "" {
 		t.Fatalf("expected empty ServerAddr, got %q", opts.ServerAddr)
 	}
+
 	if opts.Insecure {
 		t.Fatal("expected Insecure to be false")
 	}
+
 	if opts.PlainText {
 		t.Fatal("expected PlainText to be false")
 	}
+
 	if opts.Verbose {
 		t.Fatal("expected Verbose to be false")
 	}
+
 	if opts.OutputFormat != "" {
 		t.Fatalf("expected empty OutputFormat, got %q", opts.OutputFormat)
 	}
@@ -116,5 +121,6 @@ func contains(s, substr string) bool {
 			return true
 		}
 	}
+
 	return false
 }

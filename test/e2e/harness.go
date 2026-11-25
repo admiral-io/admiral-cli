@@ -16,15 +16,19 @@ func buildCLI() (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
 		return "", err
 	}
+
 	cmd := exec.Command("go", "build", "-o", filepath.Join(dir, "admiral"), ".")
+
 	cmd.Dir = repoRoot
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("go build: %s", out)
 	}
+
 	return dir, nil
 }
 
@@ -33,11 +37,13 @@ func buildCLI() (string, error) {
 // scenario adds back exactly what it needs.
 func scrubbedEnv() []string {
 	var env []string
+
 	for _, kv := range os.Environ() {
 		if !strings.HasPrefix(kv, "ADMIRAL_") {
 			env = append(env, kv)
 		}
 	}
+
 	return env
 }
 
@@ -45,9 +51,11 @@ func scrubbedEnv() []string {
 // test when none is configured.
 func serverStack(t *testing.T) (server, apiKey string) {
 	t.Helper()
+
 	server, apiKey = os.Getenv("ADMIRAL_SERVER"), os.Getenv("ADMIRAL_API_KEY")
 	if server == "" || apiKey == "" {
 		t.Skip("set ADMIRAL_SERVER and ADMIRAL_API_KEY to run against a live stack")
 	}
+
 	return server, apiKey
 }

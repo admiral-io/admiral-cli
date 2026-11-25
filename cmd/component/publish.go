@@ -87,10 +87,12 @@ component. This is the form CI runs on every push.`,
 			if err != nil {
 				return err
 			}
+
 			dir := "."
 			if len(args) == 1 {
 				dir = args[0]
 			}
+
 			abs, err := filepath.Abs(dir)
 			if err != nil {
 				return err
@@ -103,29 +105,36 @@ component. This is the form CI runs on every push.`,
 			if manifestPath == "" && manifest.Exists(abs) {
 				manifestPath = filepath.Join(abs, manifest.Filename)
 			}
+
 			if manifestPath != "" {
 				if name != "" || kind != "" {
 					return cmderr.Usage("a repository publish takes its names and kinds from %s; --name and --kind apply to one component", manifest.Filename)
 				}
+
 				if manifestArg != "" && len(args) == 1 {
 					return cmderr.Usage("pass either a directory or --manifest, not both")
 				}
+
 				manifestPath, err = filepath.Abs(manifestPath)
 				if err != nil {
 					return err
 				}
+
 				return publishRepository(cmd, opts, repositoryOptions{
 					manifestPath: manifestPath, tags: tags, labels: labels, description: description,
 				})
 			}
+
 			if name == "" {
 				name = filepath.Base(abs)
 			}
+
 			if !manifest.ValidName(name) {
 				return cmderr.Usage("component name %q must be lowercase letters, digits and hyphens (use --name)", name)
 			}
 
 			p := output.NewPrinter(cmd, opts.OutputFormat)
+
 			packed, err := pack(cmd.Context(), p, abs, dir)
 			if err != nil {
 				return err
@@ -144,8 +153,10 @@ component. This is the form CI runs on every push.`,
 			if err != nil {
 				return err
 			}
+
 			ver := resp.Version
 			ver.Tags = applyTags(cmd.Context(), p, c, resp, packed, afterPublish{})
+
 			return p.PrintOne(ver, resp.Component.Name+"@"+ver.Digest, versionTable.Render(p, ver))
 		},
 	}
@@ -170,9 +181,11 @@ func pack(ctx context.Context, p *output.Printer, abs, display string) (*bundle.
 	if err != nil {
 		return nil, err
 	}
+
 	for _, v := range packed.Vendored {
 		output.Writef(p.Err(), "Vendored %s (from %s) into %s\n", v.Source, displayCaller(v.Caller), v.Into)
 	}
+
 	for _, pin := range packed.Pins {
 		if pin.Constraint != "" {
 			output.Writef(p.Err(), "Pinned %s %s to %s\n", pin.Source, pin.Constraint, pin.Resolved)
@@ -180,10 +193,13 @@ func pack(ctx context.Context, p *output.Printer, abs, display string) (*bundle.
 			output.Writef(p.Err(), "Pinned %s to %s\n", pin.Source, pin.Resolved)
 		}
 	}
+
 	if len(packed.Bytes) > maxBundleBytes {
 		return nil, fmt.Errorf("bundle is %s, over the %s limit", formatSize(int64(len(packed.Bytes))), formatSize(maxBundleBytes))
 	}
+
 	output.Writef(p.Err(), "Packed %s: %d files, %s, %s\n", display, packed.Files, formatSize(int64(len(packed.Bytes))), strings.ToLower(string(packed.Kind)))
+
 	return packed, nil
 }
 
@@ -204,6 +220,7 @@ func publishOne(cmd *cobra.Command, p *output.Printer, c sdkclient.AdmiralClient
 	if prov.Dirty {
 		output.Writef(p.Err(), "Working copy has uncommitted changes; the version records the commit, not them\n")
 	}
+
 	resp, err := c.Registry().PublishComponent(cmd.Context(), &registryv1.PublishComponentRequest{
 		Name:        req.name,
 		Kind:        req.kind,
@@ -222,7 +239,9 @@ func publishOne(cmd *cobra.Command, p *output.Printer, c sdkclient.AdmiralClient
 	if err != nil {
 		return nil, withMoveHint(err, req.name)
 	}
+
 	reportPublished(cmd, p, resp.Component, resp.Version, resp.Unchanged)
+
 	return resp, nil
 }
 
@@ -235,21 +254,27 @@ func reportPublished(cmd *cobra.Command, p *output.Printer, comp *registryv1.Com
 	} else {
 		output.Writef(p.Err(), "Published %s@%s\n", comp.Name, ver.Digest)
 	}
+
 	verbose, _ := cmd.Flags().GetBool("verbose")
 	seen := map[string]bool{}
 	hidden := 0
+
 	for _, f := range ver.Findings {
 		line := fmt.Sprintf("  %s %s: %s\n", output.FormatEnumKebab(f.Severity), f.Source, f.Message)
 		if seen[line] {
 			continue
 		}
+
 		seen[line] = true
+
 		if f.Severity == registryv1.FindingSeverity_FINDING_SEVERITY_INFO && !verbose {
 			hidden++
 			continue
 		}
+
 		output.Writef(p.Err(), "%s", line)
 	}
+
 	if hidden > 0 {
 		output.Writef(p.Err(), "  %d info finding(s); --verbose lists them\n", hidden)
 	}
@@ -272,6 +297,7 @@ func displayCaller(rel string) string {
 	if rel == "." {
 		return "the root"
 	}
+
 	return rel
 }
 
@@ -280,5 +306,6 @@ func dependenciesToProto(pins []bundle.Pin) []*registryv1.Dependency {
 	for _, p := range pins {
 		out = append(out, &registryv1.Dependency{Source: p.Source, Constraint: p.Constraint, Resolved: p.Resolved})
 	}
+
 	return out
 }

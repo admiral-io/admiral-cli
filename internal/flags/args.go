@@ -14,6 +14,7 @@ func ExactArgs(n int) cobra.PositionalArgs {
 		if len(args) == n {
 			return nil
 		}
+
 		return usageError(cmd, n, len(args))
 	}
 }
@@ -24,6 +25,7 @@ func MaximumNArgs(n int) cobra.PositionalArgs {
 		if len(args) <= n {
 			return nil
 		}
+
 		return cmderr.UsageHint(helpHint(cmd), "accepts at most %d arg(s), received %d", n, len(args))
 	}
 }
@@ -35,9 +37,11 @@ func RangeArgs(least, most int) cobra.PositionalArgs {
 		if len(args) < least {
 			return cmderr.UsageHint(helpHint(cmd), "missing argument: %s", cmd.Use)
 		}
+
 		if len(args) > most {
 			return cmderr.UsageHint(helpHint(cmd), "accepts at most %d arg(s), received %d", most, len(args))
 		}
+
 		return nil
 	}
 }
@@ -47,6 +51,7 @@ func NoArgs(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return nil
 	}
+
 	return cmderr.UsageHint(helpHint(cmd), "unknown argument %q", args[0])
 }
 
@@ -54,6 +59,7 @@ func usageError(cmd *cobra.Command, want, got int) error {
 	if got < want {
 		return cmderr.UsageHint(helpHint(cmd), "missing argument: %s", cmd.Use)
 	}
+
 	return cmderr.UsageHint(helpHint(cmd), "accepts %d arg(s), received %d", want, got)
 }
 
@@ -71,6 +77,7 @@ func Group(cmd *cobra.Command) {
 		if len(args) == 0 {
 			return nil
 		}
+
 		return cmderr.UsageHint(helpHint(cmd), "unknown command %q for %q", args[0], cmd.CommandPath())
 	}
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error { return cmd.Help() }

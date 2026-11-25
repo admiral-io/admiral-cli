@@ -39,15 +39,18 @@ func TestHangHelper(t *testing.T) {
 	if os.Getenv(hangHelperEnv) == "" {
 		t.Skip("helper for TestSecondInterruptKills")
 	}
+
 	root, err := newRootCmd(version.GetVersion(), os.Exit)
 	if err != nil {
 		panic(err)
 	}
+
 	root.cmd.AddCommand(&cobra.Command{
 		Use: "hang",
 		RunE: func(*cobra.Command, []string) error {
 			os.Stdout.WriteString("ready\n") //nolint:errcheck // test helper
 			time.Sleep(30 * time.Second)
+
 			return errors.New("hang was not interrupted")
 		},
 	})
@@ -63,6 +66,7 @@ func TestSecondInterruptKills(t *testing.T) {
 	}
 
 	child := exec.Command(os.Args[0], "-test.run=^TestHangHelper$")
+
 	child.Env = append(os.Environ(), hangHelperEnv+"=1")
 	child.Stderr = os.Stderr
 	stdout, err := child.StdoutPipe()
@@ -80,6 +84,7 @@ func TestSecondInterruptKills(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() { done <- child.Wait() }()
+
 	select {
 	case err := <-done:
 		var exitErr *exec.ExitError
@@ -90,6 +95,7 @@ func TestSecondInterruptKills(t *testing.T) {
 		require.Equal(t, syscall.SIGINT, ws.Signal())
 	case <-time.After(5 * time.Second):
 		_ = child.Process.Kill()
+
 		t.Fatal("the child survived a second SIGINT")
 	}
 }
@@ -101,9 +107,11 @@ func TestSecondInterruptKills(t *testing.T) {
 // sets them.
 func runRoot(t *testing.T, args []string, env map[string]string) (root *rootCmd, stdout, stderr string, code int) {
 	t.Helper()
+
 	for _, k := range []string{envServer, envAuthServer, envClientID, envTimeout, "ADMIRAL_NO_INPUT"} {
 		t.Setenv(k, "")
 	}
+
 	for k, v := range env {
 		t.Setenv(k, v)
 	}
@@ -111,10 +119,12 @@ func runRoot(t *testing.T, args []string, env map[string]string) (root *rootCmd,
 	code = -1
 	root, err := newRootCmd(version.GetVersion(), func(c int) { code = c })
 	require.NoError(t, err)
+
 	var out, errOut bytes.Buffer
 	root.cmd.SetOut(&out)
 	root.cmd.SetErr(&errOut)
 	root.Execute(append([]string{"--config-dir", t.TempDir()}, args...))
+
 	return root, out.String(), errOut.String(), code
 }
 
@@ -122,9 +132,11 @@ func runRoot(t *testing.T, args []string, env map[string]string) (root *rootCmd,
 // Execute's error reporting with a known error.
 func runRootWith(t *testing.T, fail error) (stderr string, code int) {
 	t.Helper()
+
 	for _, k := range []string{envServer, envAuthServer, envClientID, envTimeout, "ADMIRAL_NO_INPUT"} {
 		t.Setenv(k, "")
 	}
+
 	code = -1
 	root, err := newRootCmd(version.GetVersion(), func(c int) { code = c })
 	require.NoError(t, err)
@@ -132,15 +144,19 @@ func runRootWith(t *testing.T, fail error) (stderr string, code int) {
 		Use:  "probe",
 		RunE: func(*cobra.Command, []string) error { return fail },
 	})
+
 	var errOut bytes.Buffer
+
 	root.cmd.SetOut(io.Discard)
 	root.cmd.SetErr(&errOut)
 	root.Execute([]string{"--config-dir", t.TempDir(), "probe"})
+
 	return errOut.String(), code
 }
 
 func writeConfig(t *testing.T, dir string, settings map[string]string) {
 	t.Helper()
+
 	data, err := json.Marshal(settings)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "config.json"), data, 0600))
@@ -165,10 +181,12 @@ func TestRoot_ServerPrecedence(t *testing.T) {
 			if tc.config != "" {
 				writeConfig(t, dir, map[string]string{"server": tc.config})
 			}
+
 			args := []string{"--config-dir", dir, "version"}
 			if tc.flag != "" {
 				args = append([]string{"--server", tc.flag}, args...)
 			}
+
 			// runRoot prepends its own --config-dir; the later one wins.
 			root, _, stderr, code := runRoot(t, args, map[string]string{envServer: tc.env})
 			require.Equal(t, -1, code, stderr)
@@ -326,6 +344,7 @@ func TestRoot_ExitCodes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			stderr, code := runRootWith(t, tc.err)
 			require.Equal(t, tc.code, code, stderr)
+
 			for _, s := range tc.contains {
 				require.Contains(t, stderr, s)
 			}
@@ -376,6 +395,7 @@ func TestRoot_WarnsWhenConfigWeakensTLS(t *testing.T) {
 			writeConfig(t, dir, map[string]string{tc.key: "true", "server": tc.server})
 			_, _, stderr, code := runRoot(t, []string{"--config-dir", dir, "version"}, nil)
 			require.Equal(t, -1, code)
+
 			if tc.warn {
 				require.Contains(t, stderr, "config.json sets "+tc.key+"=true")
 				require.Contains(t, stderr, "admiral config unset "+tc.key)
@@ -403,7 +423,9 @@ func TestRoot_NoInputDoesNotTouchEnvironment(t *testing.T) {
 	probe := func(args ...string) *iostreams.Streams {
 		root, err := newRootCmd(version.GetVersion(), func(int) {})
 		require.NoError(t, err)
+
 		var seen *iostreams.Streams
+
 		root.cmd.AddCommand(&cobra.Command{
 			Use: "probe",
 			RunE: func(cmd *cobra.Command, _ []string) error {
@@ -415,6 +437,7 @@ func TestRoot_NoInputDoesNotTouchEnvironment(t *testing.T) {
 		root.cmd.SetErr(io.Discard)
 		root.Execute(append([]string{"--config-dir", t.TempDir()}, append(args, "probe")...))
 		require.NotNil(t, seen)
+
 		return seen
 	}
 
