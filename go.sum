@@ -147,8 +147,8 @@ github.com/zclconf/go-cty-debug v0.0.0-20240509010212-0d6042c53940 h1:4r45xpDWB6
 github.com/zclconf/go-cty-debug v0.0.0-20240509010212-0d6042c53940/go.mod h1:CmBdvvj3nqzfzJ6nTCIwDTPZ56aVGvDrmztiO5g3qrM=
 go.admiral.io/bundle v1.7.0 h1:/UMVCcYKXP75ki4Erz5DkHX1hM23aEwR0mcvlgcA+oo=
 go.admiral.io/bundle v1.7.0/go.mod h1:uEkFaH5aDKceO3OxzwvfHk6bI4hYAyNG6cdQ/dGslGs=
-go.admiral.io/sdk v1.65.0 h1:MQ+WFZfNt3RHx1E4o7047XpnizfEhuv67weQ0TyjWLs=
-go.admiral.io/sdk v1.65.0/go.mod h1:qlc5GQLJi4rC7eXSv/Y47bWZNt82UE5J1r+bl1dcj3o=
+go.admiral.io/sdk v1.66.0 h1:nYABblpaXC5fxFMP5pzz6/oMmfKgKbB790OFd9UeWBE=
+go.admiral.io/sdk v1.66.0/go.mod h1:qlc5GQLJi4rC7eXSv/Y47bWZNt82UE5J1r+bl1dcj3o=
 go.yaml.in/yaml/v3 v3.0.4/go.mod h1:DhzuOOF2ATzADvBadXxruRBLzYTpT36CKvDb3+aBEFg=
 go.yaml.in/yaml/v3 v3.0.5 h1:N6y/pJk8buWs9NY5ERU2HSMfm+IuD/OtfdAnq6kESPw=
 go.yaml.in/yaml/v3 v3.0.5/go.mod h1:HVTZu1O7/Vkt2N+BFy8Zza+lnLsABggaTM2ZpNIGuKg=
